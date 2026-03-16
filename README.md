@@ -1,6 +1,6 @@
 # SSMT4-Alpha
 
-SSMT4 Alpha测试版发布地址
+SSMT4 Alpha测试版仅在QQ群1007813216群文件测试
 
 # 说明
 - SSMT4仅用于探索最新技术架构和设计方案，追求稳定请使用SSMT3(https://github.com/StarBobis/SSMT)
