@@ -3,8 +3,9 @@
 SSMT4 Alpha Test Version.
 
 # Notice
-- SSMT4 only for test, for stable please use SSMT3(https://github.com/StarBobis/SSMT)
+- SSMT4 only for test, for stable usage try SSMT3(https://github.com/StarBobis/SSMT)
 - There is only English version available and will not add any i18n support.
+- This is a fully closed source program only used by me and my friends, if you don't like it, please don't use it and ignore it.
 
 # Related
 - Blender Plugin TheHerta4：https://github.com/StarBobis/TheHerta4
