@@ -1,3 +1,6 @@
+![GitHub Releases (by Release)](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/latest/total?style=for-the-badge&logo=github&color=green)
+![Downloads](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/total?style=flat-square&logo=github)
+
 # SSMT4-Alpha
 
 SSMT4 Alpha Test Version.
