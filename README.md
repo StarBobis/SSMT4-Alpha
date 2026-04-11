@@ -1,5 +1,5 @@
 
-# SSMT4-Alpha ![Downloads](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/total?style=flat-square&logo=github)
+# SSMT4-Alpha ![Downloads](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/total?style=flat-square&logo=github)  ![Coffee](https://img.shields.io/badge/Fuel-Coffee-6F4E37?style=for-the-badge&logo=coffee)
 
 SSMT4 Alpha Test Version.
 
