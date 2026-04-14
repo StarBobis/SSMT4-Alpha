@@ -6,11 +6,7 @@ SSMT4 Alpha Test Version.
 ![GitHub Releases (by Release)](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/latest/total?style=for-the-badge&logo=github&color=green)
 
 
-# Notice
-- SSMT4 only for test, for stable usage try SSMT3(https://github.com/StarBobis/SSMT)
-- This is a fully closed source program only used by me and my friends, if you don't like it, please don't use it and ignore it.
-
-# Related
-- Blender Plugin TheHerta4：https://github.com/StarBobis/TheHerta4 (It's under dev and not ready to work so you must use https://github.com/xuhuan9102/TheHerta3)
+- Blender Plugin：https://github.com/StarBobis/TheHerta4
+- Blender Plugin With More Blueprint Features: https://github.com/xuhuan9102/TheHerta4
 - SSMT4 Documents Source Code：https://starbobis.github.io/SSMT4-Documents/
 - SSMT4 Documents：https://github.com/StarBobis/SSMT4-Documents
