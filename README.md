@@ -17,5 +17,5 @@ Join our QQ Group or discord server to send feedback or ask for help:
 
 # Support Development:
 
-<a href="https://afdian.com/a/NicoMico666">< img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png" alt=""></a >
+<a href="https://afdian.com/a/NicoMico666"><img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png" alt=""></a>
 
