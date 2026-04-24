@@ -1,4 +1,4 @@
-# SSMT4 Alpha Test Version  ![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/latest/total?color=blue&label=最新版本下载量)
+# SSMT4 Alpha Test Version  ![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/StarBobis/SSMT4-Alpha/latest/total?color=blue&label=latest downloads)
 
 - Blender Plugin：https://github.com/StarBobis/TheHerta4
 - Blender Plugin With More Blueprint Features: https://github.com/xuhuan9102/TheHerta4
