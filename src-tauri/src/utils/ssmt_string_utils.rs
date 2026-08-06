@@ -164,39 +164,4 @@ impl SSMTStringUtils {
 
         String::new()
     }
-    /// Extract the DXGI format string from a 3Dmigoto deduped texture filename.
-    ///
-    /// Handles both raw deduped names such as `04abec99-BC7_UNORM.dds` and the
-    /// prefixed form `<texture_unique_hash>_<8hash>-<FORMAT>.dds` used when
-    /// the name is stored in metadata.
-    pub fn extract_texture_format_from_deduped_file_name(deduped_file_name: &str) -> String {
-        let normalized = deduped_file_name.trim();
-        if normalized.is_empty() {
-            return String::new();
-        }
-
-        // Strip the optional `<texture_unique_hash>_` prefix added by SSMT.
-        let body = normalized
-            .split_once('_')
-            .map(|(_, rest)| rest)
-            .unwrap_or(normalized);
-
-        // Expected body: `<8-hex-hash>-<DXGI_FORMAT>.dds`
-        let Some(dash_pos) = body.find('-') else {
-            return String::new();
-        };
-        let hash_part = &body[..dash_pos];
-        if hash_part.len() != 8 || !hash_part.chars().all(|c| c.is_ascii_hexdigit()) {
-            return String::new();
-        }
-
-        let Some(dot_pos) = body.rfind('.') else {
-            return String::new();
-        };
-        if dot_pos <= dash_pos {
-            return String::new();
-        }
-
-        body[dash_pos + 1..dot_pos].to_string()
-    }
 }

@@ -174,8 +174,8 @@ impl GIMINewExtractor {
     fn collect_match_first_index_ib_map(
         &self,
         trianglelist_index_list: &[String],
-    ) -> Result<BTreeMap<u64, (String, Vec<String>)>, String> {
-        let mut result: BTreeMap<u64, (String, Vec<String>)> = BTreeMap::new();
+    ) -> Result<BTreeMap<u64, String>, String> {
+        let mut result: BTreeMap<u64, String> = BTreeMap::new();
         for trianglelist_index in trianglelist_index_list {
             let ib_file_name = self
                 .fa
@@ -191,19 +191,7 @@ impl GIMINewExtractor {
             }
             let ib_txt_file = IndexBufferTxtFile::new(&ib_file_path, false)?;
             let match_first_index = ib_txt_file.first_index.parse::<u64>().unwrap_or(0);
-            let entry = result
-                .entry(match_first_index)
-                .or_insert_with(|| (ib_file_name.clone(), Vec::new()));
-            // Keep the same representative IB filename that the old BTreeMap
-            // insertion produced for a shared FirstIndex, while retaining all
-            // matching draw-call indexes as optional metadata.
-            entry.0 = ib_file_name;
-            if !entry.1.contains(trianglelist_index) {
-                entry.1.push(trianglelist_index.clone());
-            }
-        }
-        for (_, draw_call_indexes) in result.values_mut() {
-            draw_call_indexes.sort();
+            result.insert(match_first_index, ib_file_name);
         }
         Ok(result)
     }
@@ -221,7 +209,7 @@ impl GIMINewExtractor {
         }
         let match_first_index_ib_txt_file_name_dict =
             self.collect_match_first_index_ib_map(trianglelist_index_list)?;
-        for (match_first_index, (ib_file_name, _)) in &match_first_index_ib_txt_file_name_dict {
+        for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
             println!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
@@ -229,9 +217,7 @@ impl GIMINewExtractor {
         }
         for d3d11_game_type in possible_d3d11_game_type_list {
             let game_type_folder_name = format!("TYPE_{}", d3d11_game_type.game_type_name);
-            for (_match_first_index, (ib_txt_file_name, draw_call_indexes)) in
-                &match_first_index_ib_txt_file_name_dict
-            {
+            for ib_txt_file_name in match_first_index_ib_txt_file_name_dict.values() {
                 // Extract the per-submesh draw index (first 6 chars of the IB file name)
                 let per_ib_trianglelist_index: String = ib_txt_file_name.chars().take(6).collect();
                 let vertex_limit_vb = self.build_vertex_limit_vb(&per_ib_trianglelist_index);
@@ -303,12 +289,6 @@ impl GIMINewExtractor {
                 submesh_json.vertex_limit_vb = vertex_limit_vb.clone();
                 submesh_json.work_game_type = d3d11_game_type.game_type_name.clone();
                 submesh_json.gpu_pre_skinning = d3d11_game_type.gpu_pre_skinning;
-                // Do not populate VertexOffset/VertexCount for GIMI. Its submeshes
-                // share global GPU vertex buffers and their referenced vertices are
-                // not guaranteed to form a contiguous range. The Blender importer
-                // treats non-zero values as a slicing instruction, so only the
-                // draw-call identity is persisted here.
-                submesh_json.draw_call_index_list = draw_call_indexes.clone();
                 submesh_json.index_buffer_list.push(SubMeshIndexBuffer {
                     dxgi_format: "DXGI_FORMAT_R32_UINT".to_string(),
                     file_name: format!("{}.ib", name_prefix),

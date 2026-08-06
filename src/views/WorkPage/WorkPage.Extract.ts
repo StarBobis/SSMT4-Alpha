@@ -148,6 +148,7 @@ export const runExtractModels = async (
 	workspaceName: string,
 	currentGameName: string,
 	activeTabId: string,
+	convertRgbaChannelTextures: boolean,
 	textureMarkStylePreference: MarkStyle,
 	setIsExtracting: (value: boolean) => void,
 	openPath: (path: string | undefined, emptyMsg: string) => Promise<void>
@@ -178,6 +179,7 @@ export const runExtractModels = async (
 			gamePreset: invokeArgs.gamePreset,
 			workspaceRootPath: invokeArgs.workspaceRootPath,
 			lodName: invokeArgs.lodName,
+			convertRgbaChannelTextures,
 		});
 		ElMessage.success(t('workPage.messages.modelExtractionAndDedupedCompleted'));
 		await tryAutoApplyTextureMarksAfterExtract({
@@ -206,7 +208,8 @@ export const runExtractModels = async (
 		getWorkspaceBaseDir: () => Promise<string | undefined>,
 		workspaceName: string,
 		currentGameName: string,
-	activeTabId: string,
+		activeTabId: string,
+		convertRgbaChannelTextures: boolean,
 		textureMarkStylePreference: MarkStyle,
 		setIsExtracting: (value: boolean) => void,
 		openPath: (path: string | undefined, emptyMsg: string) => Promise<void>
@@ -230,6 +233,7 @@ export const runExtractModels = async (
 				workspaceRootPath: invokeArgs.workspaceRootPath,
 				lodName: invokeArgs.lodName,
 				dataTypeFilter,
+				convertRgbaChannelTextures,
 			});
 			ElMessage.success(t('workPage.messages.fullExtractionTriggered'));
 			await tryAutoApplyTextureMarksAfterExtract({

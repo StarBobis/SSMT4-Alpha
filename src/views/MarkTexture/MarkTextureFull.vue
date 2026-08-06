@@ -1,12 +1,12 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
-import { exists, mkdir, readDir, readFile, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readDir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { openPath as openExternal, revealItemInDir } from '@tauri-apps/plugin-opener';
 import { moveFileToRecycleBin } from '../../utils/RecycleBin';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Close, Delete, Grid, View } from '@element-plus/icons-vue';
+import { Delete, Grid, View } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { AppStateManager } from '../../store/AppStateManager';
 import { GlobalConfig } from '../../store/GlobalConfig';
@@ -38,8 +38,6 @@ import {
 	getMarkTextureTrianglelistJsonPath,
 	hasExistingSubMeshTextureMarks,
 	readAppliedSubMeshTextureMarks,
-	readDrawCallIndexesMatchedByPersistedSubMeshMarks,
-	readPersistedSubMeshDrawCallIndexes,
 	updateCurrentSubMeshTextureMarkupStyle,
 } from './MarkTextureFull';
 
@@ -50,6 +48,7 @@ type TextureChannelKey = 'R' | 'G' | 'B' | 'A';
 type TextureChannelPreview = {
 	key: TextureChannelKey;
 	label: TextureChannelKey;
+	preview: string;
 };
 
 type TextureItem = {
@@ -61,9 +60,7 @@ type TextureItem = {
 	render: boolean;
 	suffix: string;
 	size: string;
-	format?: string;
 	preview: string;
-	previewPath: string;
 	channelPreviews: TextureChannelPreview[];
 	markName: string;
 	markStyle: MarkStyle;
@@ -74,14 +71,6 @@ type PreviewTextureOption = {
 	label: string;
 	url: string;
 	markName: string;
-};
-
-type PreviewSubMeshTarget = {
-	id: string;
-	workspacePath: string;
-	subMeshName: string;
-	diffuseUrl?: string;
-	normalUrl?: string;
 };
 
 type SubMeshMarkedTextureSummary = {
@@ -109,7 +98,6 @@ type SubMeshDrawerItem = {
 type TrianglelistDedupedTextureProperty = {
 	FALogDedupedFileName?: string;
 	FADataDedupedFileName?: string;
-	Format?: string;
 };
 
 type TrianglelistDedupedFileNameJson = Record<string, TrianglelistDedupedTextureProperty>;
@@ -158,10 +146,6 @@ const drawCallOptions = ref<string[]>([]);
 
 const selectedSubMesh = ref('');
 const selectedDrawCall = ref('');
-const previewSyncSelectedSubMesh = ref(false);
-const mutedPreviewSubMeshMap = ref<Record<string, boolean>>({});
-const soloPreviewSubMeshMap = ref<Record<string, boolean>>({});
-const previewReviewSubMeshMap = ref<Record<string, boolean>>({});
 
 const markStyleOptions: MarkStyle[] = ['Hash', 'Slot', 'SharedSlot'];
 const textureChannelKeys: TextureChannelKey[] = ['R', 'G', 'B', 'A'];
@@ -199,7 +183,6 @@ let textureMemorySaveTimer: ReturnType<typeof setTimeout> | undefined;
 let selectionMemorySaveTimer: ReturnType<typeof setTimeout> | undefined;
 let workspaceUiConfigSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let rgbaPreviewResizeCleanup: (() => void) | undefined;
-let channelPreviewRenderToken = 0;
 let textureListLoadToken = 0;
 let markedTexturePreviewCacheSeed = 0;
 let lastValidSubMeshSelection = '';
@@ -208,9 +191,6 @@ let lastValidDrawCallSelection = '';
 const RGBA_PREVIEW_CARD_MIN_SIZE = 220;
 const RGBA_PREVIEW_CARD_INITIAL_RATIO = 0.6;
 const RGBA_PREVIEW_CARD_VIEWPORT_MARGIN = 32;
-const RGBA_PREVIEW_MODAL_HEADER_HEIGHT = 44;
-const RGBA_PREVIEW_RENDER_MAX_DIMENSION = 1024;
-const channelPreviewCanvases = new Map<TextureChannelKey, HTMLCanvasElement>();
 
 const currentGameName = computed(() => appSettings.CurrentGameName || 'Default');
 
@@ -241,10 +221,7 @@ const getRgbaPreviewCardMaxSize = (): number => {
 
 	return Math.max(
 		RGBA_PREVIEW_CARD_MIN_SIZE,
-		Math.min(
-			window.innerWidth - RGBA_PREVIEW_CARD_VIEWPORT_MARGIN,
-			window.innerHeight - RGBA_PREVIEW_CARD_VIEWPORT_MARGIN - RGBA_PREVIEW_MODAL_HEADER_HEIGHT
-		)
+		Math.min(window.innerWidth, window.innerHeight) - RGBA_PREVIEW_CARD_VIEWPORT_MARGIN
 	);
 };
 
@@ -276,7 +253,7 @@ const rgbaPreviewCardStyle = computed(() => {
 	ensureRgbaPreviewCardSize();
 	return {
 		width: `${rgbaPreviewCardSize.value}px`,
-		height: `${rgbaPreviewCardSize.value + RGBA_PREVIEW_MODAL_HEADER_HEIGHT}px`,
+		height: `${rgbaPreviewCardSize.value}px`,
 	};
 });
 
@@ -594,40 +571,6 @@ const subMeshDrawerItems = computed<SubMeshDrawerItem[]>(() => {
 	});
 });
 
-const previewSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
-	const selectedOnly = previewSyncSelectedSubMesh.value
-		? subMeshDrawerItems.value.filter(item => item.value === selectedSubMesh.value)
-		: (() => {
-			const soloItems = subMeshDrawerItems.value.filter(item => soloPreviewSubMeshMap.value[item.value]);
-			return soloItems.length > 0
-				? soloItems
-				: subMeshDrawerItems.value.filter(item => !mutedPreviewSubMeshMap.value[item.value]);
-		})();
-
-	return selectedOnly.flatMap(item => {
-		const parsed = parseSubMeshSelection(item.value);
-		const source = parsed
-			? workspaceSources.value.find(candidate => candidate.tabId === parsed.tabId)
-			: undefined;
-		if (!parsed || !source) {
-			return [];
-		}
-		const markedTextures = subMeshMarkedTextureMap.value[item.value] ?? [];
-		const findMarkedPreview = (markName: string): string | undefined => {
-			return markedTextures.find(summary => (
-				summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.preview
-			))?.preview;
-		};
-		return [{
-			id: item.value,
-			workspacePath: source.workspacePath,
-			subMeshName: parsed.subMeshName,
-			diffuseUrl: findMarkedPreview('DiffuseMap'),
-			normalUrl: findMarkedPreview('NormalMap'),
-		}];
-	});
-});
-
 const previewTextureOptions = computed<PreviewTextureOption[]>(() => {
 	const options = new Map<string, PreviewTextureOption>();
 	const appliedOrPendingMarks = subMeshMarkedTextureMap.value[selectedSubMesh.value] ?? [];
@@ -744,11 +687,6 @@ const loadWorkspaceMarkTextureSource = async (
 	const drawIBComponentJsonPath = await getMarkTextureDrawIBComponentJsonPath(workspacePath);
 
 	try {
-		// Repair mappings produced by older builds from the extracted folders.
-		// This is intentionally independent of Blender's Import.json selections.
-		await invoke('regenerate_draw_ib_component_json', { lodWorkspacePath: workspacePath })
-			.catch(error => console.warn(`${logPrefix} failed to rebuild component map`, error));
-
 		const [componentContent, trianglelistContent, drawIBConfigEntries] = await Promise.all([
 			readTextFile(componentJsonPath),
 			readTextFile(trianglelistJsonPath),
@@ -757,17 +695,21 @@ const loadWorkspaceMarkTextureSource = async (
 
 		const parsedComponent = JSON.parse(componentContent) as Record<string, unknown>;
 		const parsedTrianglelist = JSON.parse(trianglelistContent) as TrianglelistDedupedFileNameJson;
-		const rawSubMeshDrawCallMap: Record<string, string[]> = {};
+		const subMeshDrawCallMap: Record<string, string[]> = {};
 
 		for (const [subMeshName, drawCalls] of Object.entries(parsedComponent)) {
 			if (!subMeshName.trim() || !Array.isArray(drawCalls)) {
 				continue;
 			}
 
-			rawSubMeshDrawCallMap[subMeshName] = drawCalls
+			subMeshDrawCallMap[subMeshName] = drawCalls
 				.filter((item): item is string => typeof item === 'string')
 				.map(item => item.trim())
 				.filter(item => item.length > 0);
+		}
+
+		if (Object.keys(subMeshDrawCallMap).length === 0) {
+			return undefined;
 		}
 
 		const drawIBAliasMap: Record<string, string> = {};
@@ -786,9 +728,7 @@ const loadWorkspaceMarkTextureSource = async (
 			drawIBAliasMap[drawIB] = alias;
 		}
 
-		// DrawIB-Component.json is the complete extracted-component mapping.
-		// Import.json belongs to Blender's selected data-type state and must not
-		// control the post-process list or the importable component set.
+		// 读取 DrawIB-Component.json 构建反向映射：submeshFolderName → { drawIB, componentIndex }
 		const drawIBComponentMap: Record<string, { drawIB: string; componentIndex: string }> = {};
 		try {
 			if (await exists(drawIBComponentJsonPath)) {
@@ -808,40 +748,6 @@ const loadWorkspaceMarkTextureSource = async (
 			}
 		} catch {
 			// DrawIB-Component.json missing or invalid — leave map empty, fall back to legacy labels
-		}
-
-		const subMeshDrawCallMap: Record<string, string[]> = {};
-		if (Object.keys(drawIBComponentMap).length > 0) {
-			const persistedDrawCallLists = await Promise.all(
-				Object.keys(drawIBComponentMap).map(async subMeshName => [
-					subMeshName,
-					await readPersistedSubMeshDrawCallIndexes({ workspacePath, subMesh: subMeshName }),
-				] as const)
-			);
-			for (const [subMeshName, persistedDrawCalls] of persistedDrawCallLists) {
-				// New extraction results persist the component's own draw-call list
-				// directly beside its geometry.  Prefer it over the legacy aggregate
-				// file, which can become stale after component selection changes.
-				const directLegacyDrawCalls = rawSubMeshDrawCallMap[subMeshName] ?? [];
-				const drawCallsMatchedByPersistedMarks = persistedDrawCalls.length === 0 && directLegacyDrawCalls.length === 0
-					? await readDrawCallIndexesMatchedByPersistedSubMeshMarks({
-						workspacePath,
-						subMesh: subMeshName,
-						trianglelistDedupedDict: parsedTrianglelist,
-					})
-					: [];
-				subMeshDrawCallMap[subMeshName] = persistedDrawCalls.length > 0
-					? persistedDrawCalls
-					: directLegacyDrawCalls.length > 0
-						? directLegacyDrawCalls
-						: drawCallsMatchedByPersistedMarks;
-			}
-		} else {
-			Object.assign(subMeshDrawCallMap, rawSubMeshDrawCallMap);
-		}
-
-		if (Object.keys(subMeshDrawCallMap).length === 0) {
-			return undefined;
 		}
 
 		return {
@@ -993,16 +899,6 @@ const loadSubMeshOptions = async () => {
 			});
 
 		subMeshOptions.value = nextSubMeshOptions;
-		const validSubMeshSelections = new Set(nextSubMeshOptions);
-		mutedPreviewSubMeshMap.value = Object.fromEntries(
-			Object.entries(mutedPreviewSubMeshMap.value).filter(([selectionValue]) => validSubMeshSelections.has(selectionValue))
-		);
-		soloPreviewSubMeshMap.value = Object.fromEntries(
-			Object.entries(soloPreviewSubMeshMap.value).filter(([selectionValue]) => validSubMeshSelections.has(selectionValue))
-		);
-		previewReviewSubMeshMap.value = Object.fromEntries(
-			Object.entries(previewReviewSubMeshMap.value).filter(([selectionValue]) => validSubMeshSelections.has(selectionValue))
-		);
 
 		if (
 			pendingRestoreSubMesh.value &&
@@ -1084,30 +980,23 @@ const buildTexturePreviewUrl = async (
 	fileName: string,
 	cacheBustToken: number
 ): Promise<string> => {
-	const filePath = await findTexturePreviewPath(workspacePath, fileName);
-	return filePath ? `${convertFileSrc(filePath)}?t=${cacheBustToken}` : '';
-};
-
-const findTexturePreviewPath = async (workspacePath: string, fileName: string): Promise<string> => {
 	if (!fileName) {
 		return '';
 	}
 
-	const fileBaseName = fileName.replace(/\.(?:jpg|png)$/i, '');
-	for (const candidateFileName of [`${fileBaseName}.png`, `${fileBaseName}.jpg`]) {
-		const filePath = await join(workspacePath, 'DedupedTextures_jpg', candidateFileName);
-		if (await exists(filePath)) {
-			return filePath;
-		}
+	const filePath = await join(workspacePath, 'DedupedTextures_jpg', fileName);
+	if (!(await exists(filePath))) {
+		return '';
 	}
 
-	return '';
+	return `${convertFileSrc(filePath)}?t=${cacheBustToken}`;
 };
 
 const createEmptyChannelPreviews = (): TextureChannelPreview[] => {
 	return textureChannelKeys.map(key => ({
 		key,
 		label: key,
+		preview: '',
 	}));
 };
 
@@ -1528,179 +1417,6 @@ const closeChannelPreviewCard = () => {
 	activeChannelPreviewItem.value = null;
 };
 
-const setChannelPreviewCanvas = (key: TextureChannelKey, element: unknown) => {
-	if (element instanceof HTMLCanvasElement) {
-		channelPreviewCanvases.set(key, element);
-		return;
-	}
-	channelPreviewCanvases.delete(key);
-};
-
-const renderChannelPreviewWithCanvas = (canvas: HTMLCanvasElement, image: ImageBitmap, key: TextureChannelKey) => {
-	const sourceWidth = image.width;
-	const sourceHeight = image.height;
-	if (sourceWidth <= 0 || sourceHeight <= 0) {
-		return;
-	}
-
-	const scale = Math.min(1, RGBA_PREVIEW_RENDER_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
-	const width = Math.max(1, Math.round(sourceWidth * scale));
-	const height = Math.max(1, Math.round(sourceHeight * scale));
-	canvas.width = width;
-	canvas.height = height;
-
-	const context = canvas.getContext('2d', { willReadFrequently: true });
-	if (!context) {
-		return;
-	}
-	context.drawImage(image, 0, 0, width, height);
-	const imageData = context.getImageData(0, 0, width, height);
-	const channelOffset = key === 'R' ? 0 : key === 'G' ? 1 : key === 'B' ? 2 : 3;
-	for (let index = 0; index < imageData.data.length; index += 4) {
-		const intensity = imageData.data[index + channelOffset];
-		imageData.data[index] = intensity;
-		imageData.data[index + 1] = intensity;
-		imageData.data[index + 2] = intensity;
-		imageData.data[index + 3] = 255;
-	}
-	context.putImageData(imageData, 0, 0);
-};
-
-const compileChannelPreviewShader = (
-	context: WebGLRenderingContext,
-	type: number,
-	source: string
-): WebGLShader | undefined => {
-	const shader = context.createShader(type);
-	if (!shader) {
-		return undefined;
-	}
-	context.shaderSource(shader, source);
-	context.compileShader(shader);
-	if (context.getShaderParameter(shader, context.COMPILE_STATUS)) {
-		return shader;
-	}
-	context.deleteShader(shader);
-	return undefined;
-};
-
-const renderChannelPreview = (canvas: HTMLCanvasElement, image: ImageBitmap, key: TextureChannelKey) => {
-	const sourceWidth = image.width;
-	const sourceHeight = image.height;
-	if (sourceWidth <= 0 || sourceHeight <= 0) {
-		return;
-	}
-
-	const scale = Math.min(1, RGBA_PREVIEW_RENDER_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
-	const width = Math.max(1, Math.round(sourceWidth * scale));
-	const height = Math.max(1, Math.round(sourceHeight * scale));
-	canvas.width = width;
-	canvas.height = height;
-
-	const context = canvas.getContext('webgl', { alpha: false, premultipliedAlpha: false });
-	if (!context) {
-		renderChannelPreviewWithCanvas(canvas, image, key);
-		return;
-	}
-
-	const vertexShader = compileChannelPreviewShader(
-		context,
-		context.VERTEX_SHADER,
-		'attribute vec2 position; varying vec2 uv; void main() { uv = (position + 1.0) * 0.5; gl_Position = vec4(position, 0.0, 1.0); }'
-	);
-	const fragmentShader = compileChannelPreviewShader(
-		context,
-		context.FRAGMENT_SHADER,
-		'precision mediump float; varying vec2 uv; uniform sampler2D sourceTexture; uniform vec4 channelMask; void main() { float intensity = dot(texture2D(sourceTexture, uv), channelMask); gl_FragColor = vec4(vec3(intensity), 1.0); }'
-	);
-	if (!vertexShader || !fragmentShader) {
-		renderChannelPreviewWithCanvas(canvas, image, key);
-		return;
-	}
-
-	const program = context.createProgram();
-	const buffer = context.createBuffer();
-	const texture = context.createTexture();
-	if (!program || !buffer || !texture) {
-		context.deleteShader(vertexShader);
-		context.deleteShader(fragmentShader);
-		renderChannelPreviewWithCanvas(canvas, image, key);
-		return;
-	}
-
-	context.attachShader(program, vertexShader);
-	context.attachShader(program, fragmentShader);
-	context.linkProgram(program);
-	if (!context.getProgramParameter(program, context.LINK_STATUS)) {
-		context.deleteTexture(texture);
-		context.deleteBuffer(buffer);
-		context.deleteProgram(program);
-		context.deleteShader(vertexShader);
-		context.deleteShader(fragmentShader);
-		renderChannelPreviewWithCanvas(canvas, image, key);
-		return;
-	}
-
-	context.useProgram(program);
-	context.bindBuffer(context.ARRAY_BUFFER, buffer);
-	context.bufferData(context.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), context.STATIC_DRAW);
-	const positionLocation = context.getAttribLocation(program, 'position');
-	context.enableVertexAttribArray(positionLocation);
-	context.vertexAttribPointer(positionLocation, 2, context.FLOAT, false, 0, 0);
-	context.activeTexture(context.TEXTURE0);
-	context.bindTexture(context.TEXTURE_2D, texture);
-	context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-	context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
-	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.LINEAR);
-	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MAG_FILTER, context.LINEAR);
-	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_S, context.CLAMP_TO_EDGE);
-	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_T, context.CLAMP_TO_EDGE);
-	context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, context.RGBA, context.UNSIGNED_BYTE, image);
-	context.uniform1i(context.getUniformLocation(program, 'sourceTexture'), 0);
-	const channelMask = key === 'R' ? [1, 0, 0, 0] : key === 'G' ? [0, 1, 0, 0] : key === 'B' ? [0, 0, 1, 0] : [0, 0, 0, 1];
-	context.uniform4fv(context.getUniformLocation(program, 'channelMask'), channelMask);
-	context.viewport(0, 0, width, height);
-	context.drawArrays(context.TRIANGLES, 0, 6);
-	context.deleteTexture(texture);
-	context.deleteBuffer(buffer);
-	context.deleteProgram(program);
-	context.deleteShader(vertexShader);
-	context.deleteShader(fragmentShader);
-};
-
-const renderActiveChannelPreviews = async () => {
-	const item = activeChannelPreviewItem.value;
-	const renderToken = ++channelPreviewRenderToken;
-	if (!item?.preview) {
-		return;
-	}
-
-	if (!item.previewPath) {
-		return;
-	}
-	let image: ImageBitmap | undefined;
-	try {
-		image = await createImageBitmap(new Blob([await readFile(item.previewPath)]), {
-			premultiplyAlpha: 'none',
-			colorSpaceConversion: 'none',
-		});
-	} catch {
-		return;
-	}
-	if (renderToken !== channelPreviewRenderToken || activeChannelPreviewItem.value?.id !== item.id) {
-		image.close();
-		return;
-	}
-
-	for (const channel of item.channelPreviews) {
-		const canvas = channelPreviewCanvases.get(channel.key);
-		if (canvas) {
-			renderChannelPreview(canvas, image, channel.key);
-		}
-	}
-	image.close();
-};
-
 const stopRgbaPreviewResize = () => {
 	rgbaPreviewResizeCleanup?.();
 	rgbaPreviewResizeCleanup = undefined;
@@ -1888,15 +1604,25 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 					: '';
 
 				let preview = '';
-				let previewPath = '';
 				let size = '-';
-				const channelPreviews = createEmptyChannelPreviews();
+				let channelPreviews = createEmptyChannelPreviews();
 				if (dedupedBaseName) {
-					previewPath = await findTexturePreviewPath(
+					preview = await buildTexturePreviewUrl(
 						source.workspacePath,
-						`${dedupedBaseName}.png`
+						`${dedupedBaseName}.jpg`,
+						previewCacheBustToken
 					);
-					preview = previewPath ? `${convertFileSrc(previewPath)}?t=${previewCacheBustToken}` : '';
+					channelPreviews = await Promise.all(
+						textureChannelKeys.map(async key => ({
+							key,
+							label: key,
+							preview: await buildTexturePreviewUrl(
+								source.workspacePath,
+								`${dedupedBaseName}_${key}.jpg`,
+								previewCacheBustToken
+							),
+						}))
+					);
 					size = await getImageSize(preview);
 				}
 
@@ -1909,9 +1635,7 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 					render,
 					suffix: getTextureSuffixFromFileName(textureFileName),
 					size,
-					format: textureProperty?.Format,
 					preview,
-					previewPath,
 					channelPreviews,
 					markName: '',
 					markStyle: defaultMarkStyle,
@@ -2043,32 +1767,6 @@ const switchDrawCallByWheel = (event: WheelEvent) => {
 const selectSubMeshFromDrawer = (selectionValue: string) => {
 	rememberCurrentDrawCallSelection();
 	selectedSubMesh.value = selectionValue;
-};
-
-const togglePreviewSubMeshMuted = (selectionValue: string) => {
-	if (previewSyncSelectedSubMesh.value) {
-		return;
-	}
-	mutedPreviewSubMeshMap.value = {
-		...mutedPreviewSubMeshMap.value,
-		[selectionValue]: !mutedPreviewSubMeshMap.value[selectionValue],
-	};
-};
-
-const togglePreviewSubMeshSolo = (selectionValue: string) => {
-	if (previewSyncSelectedSubMesh.value) {
-		return;
-	}
-	soloPreviewSubMeshMap.value = {
-		...soloPreviewSubMeshMap.value,
-		[selectionValue]: !soloPreviewSubMeshMap.value[selectionValue],
-	};
-};
-
-const updatePreviewReviewSubMeshes = (targetIds: string[]) => {
-	previewReviewSubMeshMap.value = Object.fromEntries(
-		targetIds.map(targetId => [targetId, true])
-	);
 };
 
 const selectMarkedTextureSummary = (
@@ -2610,14 +2308,6 @@ watch(
 	}
 );
 
-watch(activeChannelPreviewItem, (item) => {
-	if (!item) {
-		channelPreviewRenderToken += 1;
-		return;
-	}
-	void nextTick(renderActiveChannelPreviews);
-});
-
 </script>
 
 <template>
@@ -2684,6 +2374,13 @@ watch(activeChannelPreviewItem, (item) => {
 							</section>
 						</nav>
 
+						<SubmeshPostProcessPreview
+							:key="selectedSubMesh"
+							:workspace-path="getSelectedWorkspaceSource()?.workspacePath || ''"
+							:sub-mesh-name="getSelectedSubMeshName()"
+							:texture-options="previewTextureOptions"
+							@data-type-changed="refreshSubMeshMarkedTextureSummary(selectedSubMesh)"
+						/>
 					</div>
 
 					<div class="texture-editor-pane">
@@ -2759,7 +2456,7 @@ watch(activeChannelPreviewItem, (item) => {
 
 									<div class="meta-row">
 										<span class="label">{{ t('markTexture.ui.slotSize') }}</span>
-										<span class="value">{{ item.slot }} / {{ item.format || '-' }} / {{ item.size }} / {{ t('markTexture.ui.render') }}: {{ item.render }}</span>
+										<span class="value">{{ item.slot }} / {{ item.size }} / {{ t('markTexture.ui.render') }}: {{ item.render }}</span>
 									</div>
 
 									<div class="meta-row select-row">
@@ -2858,17 +2555,14 @@ watch(activeChannelPreviewItem, (item) => {
 					@click.stop
 					@wheel.prevent="handleRgbaPreviewWheel"
 				>
-					<header class="channel-preview-modal-header">
-						<h3>{{ t('markTexture.ui.rgbaChannelPreview') }}</h3>
-						<button
-							class="channel-preview-close-btn"
-							type="button"
-							:aria-label="t('markTexture.common.close')"
-							@click="closeChannelPreviewCard"
-						>
-							<el-icon><Close /></el-icon>
-						</button>
-					</header>
+					<button
+						class="channel-preview-close-btn"
+						type="button"
+						aria-label="Close RGBA preview"
+						@click="closeChannelPreviewCard"
+					>
+						x
+					</button>
 
 					<div class="channel-preview-modal-grid">
 						<div
@@ -2878,9 +2572,12 @@ watch(activeChannelPreviewItem, (item) => {
 						>
 							<div class="channel-modal-card-label">{{ channel.label.toUpperCase() }}</div>
 							<div class="channel-modal-card-preview">
-								<canvas
-									:ref="element => setChannelPreviewCanvas(channel.key, element)"
-									:aria-label="channel.key"
+								<img
+									:src="channel.preview"
+									:alt="channel.key"
+									:style="{ opacity: channel.preview ? 1 : 0 }"
+									@load="handlePreviewImageLoad"
+									@error="handlePreviewImageError"
 								/>
 							</div>
 						</div>
@@ -2981,61 +2678,6 @@ watch(activeChannelPreviewItem, (item) => {
 							SharedSlot
 						</el-button>
 					</div>
-
-					<div class="right-preview-area">
-						<nav class="preview-visibility-matrix" :aria-label="t('markTexture.preview.visibilityControls')">
-							<button
-								type="button"
-								class="preview-visibility-sync"
-								:class="{ 'is-active': previewSyncSelectedSubMesh }"
-								:title="t('markTexture.preview.syncVisibility')"
-								:aria-label="t('markTexture.preview.syncVisibility')"
-								@click="previewSyncSelectedSubMesh = !previewSyncSelectedSubMesh"
-							>
-								⇆
-							</button>
-							<template v-for="subMesh in subMeshDrawerItems" :key="subMesh.value">
-								<button
-									type="button"
-									class="preview-visibility-button preview-visibility-mute"
-									:class="{
-										'is-active': mutedPreviewSubMeshMap[subMesh.value],
-										'is-current': subMesh.isSelected,
-										'needs-review': previewReviewSubMeshMap[subMesh.value],
-									}"
-									:disabled="previewSyncSelectedSubMesh"
-									:title="`${t('markTexture.preview.muteSubmesh')}: ${subMesh.label}`"
-									:aria-label="`${t('markTexture.preview.muteSubmesh')}: ${subMesh.label}`"
-									@click="togglePreviewSubMeshMuted(subMesh.value)"
-								>
-									M
-								</button>
-								<button
-									type="button"
-									class="preview-visibility-button preview-visibility-solo"
-									:class="{
-										'is-active': soloPreviewSubMeshMap[subMesh.value],
-										'is-current': subMesh.isSelected,
-										'needs-review': previewReviewSubMeshMap[subMesh.value],
-									}"
-									:disabled="previewSyncSelectedSubMesh"
-									:title="`${t('markTexture.preview.soloSubmesh')}: ${subMesh.label}`"
-									:aria-label="`${t('markTexture.preview.soloSubmesh')}: ${subMesh.label}`"
-									@click="togglePreviewSubMeshSolo(subMesh.value)"
-								>
-									S
-								</button>
-							</template>
-						</nav>
-						<SubmeshPostProcessPreview
-							:workspace-path="getSelectedWorkspaceSource()?.workspacePath || ''"
-							:sub-mesh-name="getSelectedSubMeshName()"
-							:visible-sub-mesh-targets="previewSubMeshTargets"
-							:texture-options="previewTextureOptions"
-							@data-type-changed="refreshSubMeshMarkedTextureSummary(selectedSubMesh)"
-							@review-targets-changed="updatePreviewReviewSubMeshes"
-						/>
-					</div>
 				</div>
 			</aside>
 		</div>
@@ -3055,19 +2697,14 @@ watch(activeChannelPreviewItem, (item) => {
 
 .mark-layout {
 	height: 100%;
-	max-height: 100%;
 	display: flex;
 	gap: 16px;
 	align-items: stretch;
 	min-height: 0;
-	overflow: hidden;
 }
 
 .left-card,
 .right-card {
-	box-sizing: border-box;
-	height: 100%;
-	align-self: stretch;
 	background:
 		linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)),
 		rgba(255, 255, 255, 0.035);
@@ -3090,26 +2727,24 @@ watch(activeChannelPreviewItem, (item) => {
 
 .left-workspace {
 	flex: 1;
-	height: 100%;
 	min-height: 0;
 	min-width: 0;
 	display: grid;
-	grid-template-columns: minmax(270px, 34%) minmax(0, 1fr);
+	grid-template-columns: minmax(220px, 30%) minmax(0, 1fr);
 	gap: 14px;
 }
 
 .submesh-side-column {
 	min-width: 0;
 	min-height: 0;
-	display: flex;
+	display: grid;
+	grid-template-rows: minmax(150px, 1fr) minmax(560px, 68%);
+	gap: 14px;
 }
 
 .submesh-drawer-list {
-	flex: 1;
 	min-height: 0;
 	min-width: 0;
-	/* Keep the outer post-processing page fixed, while the potentially long
-	 * Submesh list remains independently scrollable. */
 	overflow-y: auto;
 	overflow-x: hidden;
 	display: flex;
@@ -3351,10 +2986,11 @@ watch(activeChannelPreviewItem, (item) => {
 }
 
 .right-card {
-	flex: 3;
-	min-width: 360px;
-	display: flex;
-	flex-direction: column;
+	flex: 2;
+	min-width: 180px;
+	align-self: flex-start;
+	position: sticky;
+	top: 0;
 	padding: 16px;
 	max-height: 100%;
 	min-height: 0;
@@ -3453,8 +3089,8 @@ watch(activeChannelPreviewItem, (item) => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 16px;
-	background: rgba(5, 9, 16, 0.42);
+	padding: 24px;
+	background: rgba(0, 0, 0, 0.34);
 	backdrop-filter: blur(6px);
 	-webkit-backdrop-filter: blur(6px);
 }
@@ -3465,54 +3101,43 @@ watch(activeChannelPreviewItem, (item) => {
 	max-height: calc(100vh - 32px);
 	overflow: hidden;
 	display: flex;
-	flex-direction: column;
-	border: var(--t-card-dark-border);
-	border-radius: 14px;
-	background: var(--t-card-dark-bg);
-	box-shadow: var(--t-card-dark-shadow);
-	backdrop-filter: blur(12px) saturate(1.15);
-	-webkit-backdrop-filter: blur(12px) saturate(1.15);
+	align-items: stretch;
+	justify-content: stretch;
+	padding: 12px;
+	border-radius: 20px;
+  border: var(--t-material-border);
+  background: var(--t-material-bg);
+  box-shadow: var(--t-material-shadow);
+	backdrop-filter: blur(18px) saturate(1.35);
+	-webkit-backdrop-filter: blur(18px) saturate(1.35);
 	user-select: none;
 }
 
-.channel-preview-modal-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	min-height: 44px;
-	padding: 0 10px 0 14px;
-	border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
-	background: rgba(var(--theme-surface-tint-rgb), 0.035);
-}
-
-.channel-preview-modal-header h3 {
-	margin: 0;
-	color: rgba(var(--theme-text-primary-rgb), 0.94);
-	font-size: 13px;
-	font-weight: 650;
-	line-height: 1.2;
-}
-
 .channel-preview-close-btn {
-	width: 28px;
-	height: 28px;
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	z-index: 3;
+	width: 30px;
+	height: 30px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: 0;
-	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
-	border-radius: 6px;
-	background: rgba(255, 255, 255, 0.045);
-	color: rgba(var(--theme-text-primary-rgb), 0.8);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.04);
+	color: rgba(244, 247, 255, 0.88);
+	font-size: 14px;
+	font-weight: 700;
+	pointer-events: auto;
 	cursor: pointer;
-	transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+	transition: all 0.2s ease;
 }
 
 .channel-preview-close-btn:hover {
-	background: rgba(239, 68, 68, 0.16);
-	border-color: rgba(239, 68, 68, 0.4);
-	color: rgba(var(--theme-text-primary-rgb), 0.98);
+	background: rgba(255, 120, 120, 0.16);
+	border-color: rgba(255, 160, 160, 0.38);
+	color: #ffffff;
 }
 
 .channel-preview-close-btn:focus-visible {
@@ -3524,26 +3149,18 @@ watch(activeChannelPreviewItem, (item) => {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	grid-template-rows: repeat(2, minmax(0, 1fr));
-	gap: 8px;
-	aspect-ratio: 1 / 1;
-	box-sizing: border-box;
-	flex: 0 0 auto;
+	gap: 10px;
+	min-height: 0;
+	height: 100%;
 	width: 100%;
-	padding: 10px;
 	position: relative;
 	z-index: 1;
 }
 
 .channel-modal-card {
 	position: relative;
-	min-width: 0;
-	min-height: 0;
-	aspect-ratio: 1 / 1;
-	overflow: hidden;
-	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
-	border-radius: 8px;
-	background: rgba(0, 0, 0, 0.14);
-	box-shadow: inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.025);
+	width: 100%;
+	height: 100%;
 }
 
 .channel-modal-card-label {
@@ -3551,8 +3168,8 @@ watch(activeChannelPreviewItem, (item) => {
 	top: 10px;
 	left: 10px;
 	z-index: 2;
-	padding: 4px 7px;
-	border-radius: 5px;
+	padding: 4px 9px;
+	border-radius: 999px;
 	background: rgba(var(--theme-surface-tint-rgb), 0.12);
 	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.20);
 	color: rgba(244, 247, 255, 0.92);
@@ -3565,8 +3182,15 @@ watch(activeChannelPreviewItem, (item) => {
 }
 
 .channel-modal-card-preview {
-	position: absolute;
-	inset: 0;
+	width: 100%;
+	height: 100%;
+	border-radius: 14px;
+	overflow: hidden;
+	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.10);
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+		linear-gradient(135deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(10, 12, 18, 0.72));
+	box-shadow: inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.025);
 }
 
 .channel-preview-resize-handle {
@@ -3589,12 +3213,13 @@ watch(activeChannelPreviewItem, (item) => {
 	border-color: rgba(117, 214, 187, 0.82);
 }
 
-.channel-modal-card-preview canvas {
-	position: absolute;
-	inset: 0;
+.channel-modal-card-preview img {
 	width: 100%;
 	height: 100%;
+	object-fit: contain;
 	display: block;
+	background: rgba(0, 0, 0, 0.18);
+	transition: opacity 0.18s ease;
 }
 
 .preview-wrap {
@@ -3827,94 +3452,8 @@ watch(activeChannelPreviewItem, (item) => {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	flex: 1;
-	min-height: 0;
-	min-width: 0;
-	overflow: hidden;
-}
-
-.right-preview-area {
-	flex: 1;
-	min-height: 0;
-	display: grid;
-	grid-template-columns: 54px minmax(0, 1fr);
-	gap: 8px;
-	margin-top: 4px;
-}
-
-.right-preview-area :deep(.submesh-preview-panel) {
-	min-width: 0;
-	min-height: 0;
 	height: 100%;
-}
-
-.preview-visibility-matrix {
-	min-height: 0;
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	grid-auto-rows: 29px;
-	align-content: start;
-	overflow-y: auto;
-	overflow-x: hidden;
-	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.2);
-	border-radius: 9px;
-	background: rgba(var(--theme-surface-tint-rgb), 0.045);
-	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.018);
-	scrollbar-width: thin;
-	scrollbar-color: rgba(var(--theme-surface-tint-rgb), 0.32) transparent;
-}
-
-.preview-visibility-matrix button {
 	min-width: 0;
-	margin: 0;
-	border: 0;
-	border-right: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
-	border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
-	color: rgba(237, 242, 252, 0.7);
-	background: transparent;
-	font-size: 10px;
-	font-weight: 800;
-	line-height: 1;
-	cursor: pointer;
-	transition: color 0.14s ease, background 0.14s ease;
-}
-
-.preview-visibility-solo {
-	border-right: 0 !important;
-}
-
-.preview-visibility-matrix button:hover:not(:disabled) {
-	color: rgba(255, 255, 255, 0.96);
-	background: rgba(var(--theme-surface-tint-rgb), 0.12);
-}
-
-.preview-visibility-matrix button.is-active {
-	color: rgba(184, 239, 255, 1);
-	background: rgba(var(--theme-surface-tint-rgb), 0.2);
-}
-
-.preview-visibility-matrix button.is-current {
-	box-shadow: inset 0 0 0 2px rgba(var(--theme-surface-tint-rgb), 0.68);
-}
-
-.preview-visibility-matrix button.needs-review {
-	color: rgba(255, 234, 234, 0.96);
-	background: rgba(239, 68, 68, 0.5);
-}
-
-.preview-visibility-matrix button.needs-review:hover:not(:disabled) {
-	background: rgba(239, 68, 68, 0.66);
-}
-
-.preview-visibility-matrix button:disabled {
-	color: rgba(232, 236, 245, 0.3);
-	cursor: default;
-}
-
-.preview-visibility-sync {
-	grid-column: 1 / -1;
-	border-right: 0 !important;
-	font-size: 16px !important;
 }
 
 .menu-stack > div,
@@ -4187,12 +3726,12 @@ watch(activeChannelPreviewItem, (item) => {
 		grid-template-columns: 1fr;
 	}
 
-	.submesh-drawer-list {
-		max-height: 360px;
+	.submesh-side-column {
+		grid-template-rows: minmax(180px, auto) minmax(560px, auto);
 	}
 
-	.right-preview-area {
-		min-height: 460px;
+	.submesh-drawer-list {
+		max-height: 360px;
 	}
 
 	.texture-editor-toolbar {

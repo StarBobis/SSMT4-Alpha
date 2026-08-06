@@ -1,6 +1,7 @@
 use crate::common::frame_analysis::frameanalysis::FrameAnalysis;
 use crate::config::drawib_config::DrawIBConfig;
 use crate::helper::mark_texture_helper::MarkTextureHelper;
+use crate::helper::texture_convert_helper::TextureConvertHelper;
 use crate::utils::ssmt_file_utils::SSMTFileUtils;
 use crate::utils::ssmt_string_utils::SSMTStringUtils;
 use std::path::{Path, PathBuf};
@@ -67,6 +68,7 @@ impl ExtractNewService {
         lod_workspace_path: &str,
         data_type_filter: FullExtractDataTypeFilter,
         is_full_extract: bool,
+        convert_rgba_channel_textures: bool,
     ) -> Result<(), String> {
         println!("[ZZMIDX12][Service] Start DX12 extract flow");
         println!(
@@ -78,6 +80,10 @@ impl ExtractNewService {
             lod_workspace_path
         );
         println!("[ZZMIDX12][Service] Full extract: {}", is_full_extract);
+        println!(
+            "[ZZMIDX12][Service] Convert RGBA channel textures: {}",
+            convert_rgba_channel_textures
+        );
         if is_full_extract {
             println!(
                 "[ZZMIDX12][Service] Data type filter: {}",
@@ -90,12 +96,21 @@ impl ExtractNewService {
         } else {
             FullExtractDataTypeFilter::All
         };
+        let previous_rgba_channel_export_setting =
+            TextureConvertHelper::set_rgba_channel_texture_export_enabled(
+                convert_rgba_channel_textures,
+            );
+
         let mut extractor = ZZMIDX12NewExtractor::new_dx12(
             &frame_analysis_folder.to_string(),
             &lod_workspace_path.to_string(),
             is_full_extract,
         )?;
         let result = extractor.run_extract(effective_filter);
+
+        TextureConvertHelper::set_rgba_channel_texture_export_enabled(
+            previous_rgba_channel_export_setting,
+        );
 
         if result.is_ok() {
             MarkTextureHelper::generate_draw_ib_component_json(lod_workspace_path);
@@ -238,12 +253,14 @@ impl ExtractNewService {
         lod_workspace_path: &str,
         data_type_filter: FullExtractDataTypeFilter,
         is_full_extract: bool,
+        convert_rgba_channel_textures: bool,
     ) -> Result<(), String> {
         println!("开始新提取流程:");
         println!("FrameAnalysis 文件夹路径: {}", fa.folder_path);
         println!("当前游戏预设: {}", game_preset);
         println!("当前LOD工作空间路径: {}", lod_workspace_path);
         println!("是否全量提取: {}", is_full_extract);
+        println!("是否转换RGBA通道贴图: {}", convert_rgba_channel_textures);
         if is_full_extract {
             println!("数据类型筛选: {}", data_type_filter.description());
         }
@@ -254,6 +271,11 @@ impl ExtractNewService {
         } else {
             FullExtractDataTypeFilter::All
         };
+        let previous_rgba_channel_export_setting =
+            TextureConvertHelper::set_rgba_channel_texture_export_enabled(
+                convert_rgba_channel_textures,
+            );
+
         let result: Result<(), String> = match game_preset {
             "GIMI" => {
                 let mut extractor = GIMINewExtractor::new(
@@ -404,6 +426,10 @@ impl ExtractNewService {
                 }
             }
         };
+
+        TextureConvertHelper::set_rgba_channel_texture_export_enabled(
+            previous_rgba_channel_export_setting,
+        );
 
         if result.is_ok() {
             MarkTextureHelper::generate_draw_ib_component_json(lod_workspace_path);

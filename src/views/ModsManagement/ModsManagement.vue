@@ -71,14 +71,10 @@ const appSettings = AppStateManager.appSettings;
 const { t } = useI18n();
 
 const isNsfwMod = (mod: ModInfo): boolean => {
-    const taggedGroups = [mod.group, ...getGroupAncestors(mod.group)]
-        .filter((groupId, index, values) => !!groupId && values.indexOf(groupId) === index)
-        .flatMap((groupId) => getTagsForGroup({ id: groupId, name: groupId, path: groupId, enabled: true } as GroupInfo).map((tag) => tag.name));
     const text = [
         mod.name,
         mod.group,
         ...getTagsForMod(mod).map((tag) => tag.name),
-        ...taggedGroups,
     ].join(' ').toLowerCase();
     return /\bnsfw\b|\br[- ]?18\b|\b18\+|\badult\b|\bhentai\b|\bnud(?:e|ity)\b|\bnaked\b|\bsex(?:ual)?\b|成人|色情|裸露|无码/.test(text);
 };
@@ -2262,9 +2258,6 @@ const {
     openModTagDialog,
     saveModTagAssignments,
     getTagsForGroup,
-    isNsfwTag,
-    toggleModNsfw,
-    toggleGroupNsfw,
     openGroupTagDialog,
     saveGroupTagAssignments,
 } = useModsManagementTags({
@@ -2284,26 +2277,6 @@ const openGroupTagDialogWrapped = (group: GroupInfo) => {
 const openModTagDialogWrapped = (mod: ModInfo) => {
     currentTagTargetIsGroup.value = false;
     openModTagDialog(mod);
-};
-
-const isNsfwGroupMarked = (group: GroupInfo) => getTagsForGroup(group).some(isNsfwTag);
-
-const toggleModNsfwMarked = async (mod: ModInfo) => {
-    try {
-        const isNowMarked = await toggleModNsfw(mod);
-        ElMessage.success(t(isNowMarked ? 'modsManagement.messages.nsfwMarked' : 'modsManagement.messages.nsfwUnmarked'));
-    } catch (error) {
-        ElMessage.error(t('modsManagement.messages.nsfwMarkFailed', { error: String(error) }));
-    }
-};
-
-const toggleGroupNsfwMarked = async (group: GroupInfo) => {
-    try {
-        const isNowMarked = await toggleGroupNsfw(group);
-        ElMessage.success(t(isNowMarked ? 'modsManagement.messages.nsfwMarked' : 'modsManagement.messages.nsfwUnmarked'));
-    } catch (error) {
-        ElMessage.error(t('modsManagement.messages.nsfwMarkFailed', { error: String(error) }));
-    }
 };
 
 const saveTagAssignmentsForCurrentTarget = async () => {
@@ -4036,7 +4009,6 @@ const {
       :y="contextMenu.y"
       :target="contextMenu.target"
       :groups="groups"
-      :is-nsfw="contextMenu.target ? getTagsForMod(contextMenu.target).some(isNsfwTag) : false"
       @close="closeContextMenu"
       @open-mod-folder="(path: string) => { closeContextMenu(); openModFolder(path); }"
       @move-mod-to-group="(mod: ModInfo, groupId: string) => { closeContextMenu(); moveModToGroup(mod, groupId); }"
@@ -4044,7 +4016,6 @@ const {
       @rename-mod="(mod: ModInfo) => { closeContextMenu(); renameMod(mod); }"
       @export-mod-archive="(mod: ModInfo) => { closeContextMenu(); openExportArchiveDialog(mod); }"
       @open-mod-tag-dialog="(mod: ModInfo) => { closeContextMenu(); openModTagDialogWrapped(mod); }"
-      @toggle-nsfw="(mod: ModInfo) => { closeContextMenu(); void toggleModNsfwMarked(mod); }"
       @add-preview-images="(mod: ModInfo) => { closeContextMenu(); addPreviewImages(mod); }"
       @paste-clipboard-preview-image="(mod: ModInfo) => { closeContextMenu(); pasteClipboardPreviewImage(mod); }"
       @enable-mod-solo="(mod: ModInfo) => { closeContextMenu(); enableModSolo(mod); }"
@@ -4057,7 +4028,6 @@ const {
       :x="groupContextMenu.x"
       :y="groupContextMenu.y"
       :target="groupContextMenu.target"
-      :is-nsfw="groupContextMenu.target ? isNsfwGroupMarked(groupContextMenu.target) : false"
       @close="closeGroupContextMenu"
       @toggle-group="(group: GroupInfo) => { closeGroupContextMenu(); toggleGroup(group); }"
       @open-mod-group-folder="(group: GroupInfo) => { closeGroupContextMenu(); openModGroupFolder(group); }"
@@ -4066,7 +4036,6 @@ const {
       @rename-group="(group: GroupInfo) => { closeGroupContextMenu(); renameGroup(group); }"
       @delete-group="(group: GroupInfo) => { closeGroupContextMenu(); deleteGroup(group); }"
       @edit-group-tags="(group: GroupInfo) => { closeGroupContextMenu(); openGroupTagDialogWrapped(group); }"
-      @toggle-nsfw="(group: GroupInfo) => { closeGroupContextMenu(); void toggleGroupNsfwMarked(group); }"
       @convert-group-to-mod="(group: GroupInfo) => { closeGroupContextMenu(); convertGroupToMod(group); }"
     />
 

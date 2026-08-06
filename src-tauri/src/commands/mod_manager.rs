@@ -1086,22 +1086,18 @@ fn backup_existing_install_dir(dest_dir: &Path) -> Result<PathBuf, String> {
     Err("Failed to allocate a unique backup directory name".to_string())
 }
 
-fn is_allowed_remote_preview_url(url: &reqwest::Url, source: &str) -> bool {
+fn is_allowed_gamebanana_preview_url(url: &reqwest::Url) -> bool {
     matches!(url.scheme(), "http" | "https")
         && url
             .host_str()
             .map(|host| {
                 let host = host.to_ascii_lowercase();
-                match source {
-                    "gamebanana" => host == "gamebanana.com" || host.ends_with(".gamebanana.com"),
-                    "nexusmods" => host == "nexusmods.com" || host.ends_with(".nexusmods.com"),
-                    _ => false,
-                }
+                host == "gamebanana.com" || host.ends_with(".gamebanana.com")
             })
             .unwrap_or(false)
 }
 
-fn remote_preview_extension(path: &str, content_type: Option<&str>) -> String {
+fn gamebanana_preview_extension(path: &str, content_type: Option<&str>) -> String {
     let by_path = Path::new(path)
         .extension()
         .and_then(OsStr::to_str)
@@ -1135,8 +1131,8 @@ fn remote_preview_extension(path: &str, content_type: Option<&str>) -> String {
     "jpg".to_string()
 }
 
-fn next_remote_preview_path(mod_dir: &Path, source: &str, ordinal: usize, extension: &str) -> PathBuf {
-    let stem = format!("00_preview_{source}_{ordinal:03}");
+fn next_gamebanana_preview_path(mod_dir: &Path, ordinal: usize, extension: &str) -> PathBuf {
+    let stem = format!("00_preview_gamebanana_{ordinal:03}");
     let initial = mod_dir.join(format!("{stem}.{extension}"));
     if !initial.exists() {
         return initial;
@@ -1152,16 +1148,16 @@ fn next_remote_preview_path(mod_dir: &Path, source: &str, ordinal: usize, extens
     mod_dir.join(format!("{stem}-{}.{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_millis()).unwrap_or(0), extension))
 }
 
-async fn save_remote_previews(mod_dir: PathBuf, preview_urls: Vec<String>, source: &str) -> Result<(usize, Vec<String>), String> {
+async fn save_gamebanana_previews(mod_dir: PathBuf, preview_urls: Vec<String>) -> Result<(usize, Vec<String>), String> {
     if preview_urls.is_empty() {
         return Ok((0, Vec::new()));
     }
 
     let client = reqwest::Client::builder()
-        .user_agent(format!("SSMT4 {source} preview downloader"))
+        .user_agent("SSMT4 GameBanana preview downloader")
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
-        .map_err(|error| format!("Failed to configure {source} preview downloader: {error}"))?;
+        .map_err(|error| format!("Failed to configure GameBanana preview downloader: {error}"))?;
     let mut seen = HashSet::new();
     let mut saved_count = 0usize;
     let mut warnings = Vec::new();
@@ -1173,7 +1169,7 @@ async fn save_remote_previews(mod_dir: PathBuf, preview_urls: Vec<String>, sourc
         }
 
         let parsed_url = match reqwest::Url::parse(preview_url) {
-            Ok(url) if is_allowed_remote_preview_url(&url, source) => url,
+            Ok(url) if is_allowed_gamebanana_preview_url(&url) => url,
             Ok(url) => {
                 warnings.push(format!("Skipped preview from an unsupported host: {url}"));
                 continue;
@@ -1213,8 +1209,8 @@ async fn save_remote_previews(mod_dir: PathBuf, preview_urls: Vec<String>, sourc
             }
         };
 
-        let extension = remote_preview_extension(parsed_url.path(), content_type.as_deref());
-        let target = next_remote_preview_path(&mod_dir, source, saved_count + 1, &extension);
+        let extension = gamebanana_preview_extension(parsed_url.path(), content_type.as_deref());
+        let target = next_gamebanana_preview_path(&mod_dir, saved_count + 1, &extension);
         if let Err(error) = tokio::fs::write(&target, bytes).await {
             warnings.push(format!("Failed to save preview {}: {}", target.display(), error));
             continue;
@@ -1231,7 +1227,7 @@ fn spawn_gamebanana_preview_fetch(mod_dir: PathBuf, preview_urls: Vec<String>) {
     }
 
     tauri::async_runtime::spawn(async move {
-        match save_remote_previews(mod_dir.clone(), preview_urls, "gamebanana").await {
+        match save_gamebanana_previews(mod_dir.clone(), preview_urls).await {
             Ok((saved_count, warnings)) if warnings.is_empty() => {
                 println!(
                     "[GameBanana] Saved {} preview image(s) for {}",
@@ -1253,26 +1249,6 @@ fn spawn_gamebanana_preview_fetch(mod_dir: PathBuf, preview_urls: Vec<String>) {
                     mod_dir.display(),
                     error
                 );
-            }
-        }
-    });
-}
-
-fn spawn_nexusmods_preview_fetch(mod_dir: PathBuf, preview_urls: Vec<String>) {
-    if preview_urls.is_empty() {
-        return;
-    }
-
-    tauri::async_runtime::spawn(async move {
-        match save_remote_previews(mod_dir.clone(), preview_urls, "nexusmods").await {
-            Ok((saved_count, warnings)) if warnings.is_empty() => {
-                println!("[NexusMods] Saved {} preview image(s) for {}", saved_count, mod_dir.display());
-            }
-            Ok((saved_count, warnings)) => {
-                eprintln!("[NexusMods] Saved {} preview image(s) for {} with warnings: {}", saved_count, mod_dir.display(), warnings.join(" | "));
-            }
-            Err(error) => {
-                eprintln!("[NexusMods] Failed to save preview images for {}: {}", mod_dir.display(), error);
             }
         }
     });
@@ -1553,7 +1529,6 @@ pub async fn gamebanana_download_and_install_mod(
     target_group: String,
     password: Option<String>,
     preview_urls: Option<Vec<String>>,
-    expected_size_bytes: Option<u64>,
 ) -> Result<(), String> {
     let cancellation_guard = GamebananaDownloadCancellationGuard::begin(&game_name, &target_name);
     let cancellation_key = cancellation_guard.key.clone();
@@ -1615,18 +1590,6 @@ pub async fn gamebanana_download_and_install_mod(
         if !response.status().is_success() {
             return Err(format!("GameBanana download returned HTTP {}", response.status()));
         }
-        let content_type = response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if content_type.contains("text/html") || content_type.contains("application/json") {
-            return Err(format!(
-                "Mod download returned an unexpected response ({}) instead of an archive",
-                content_type,
-            ));
-        }
 
         let total = response.content_length().unwrap_or(0);
         let mut output = tokio::fs::File::create(&archive_path)
@@ -1673,18 +1636,6 @@ pub async fn gamebanana_download_and_install_mod(
             .flush()
             .await
             .map_err(|error| format!("Failed to finalize GameBanana download: {}", error))?;
-        if let Some(expected_size) = expected_size_bytes.filter(|value| *value > 0) {
-            // A CDN error page can still arrive with HTTP 200.  Prevent a few
-            // kilobytes of HTML from being installed in place of a real archive.
-            let minimum_expected_size = expected_size.saturating_mul(80) / 100;
-            if downloaded < minimum_expected_size {
-                return Err(format!(
-                    "Downloaded archive is unexpectedly small ({} bytes; expected about {} bytes)",
-                    downloaded,
-                    expected_size,
-                ));
-            }
-        }
         emit_gamebanana_install_progress(
             &app,
             GamebananaInstallProgressPayload {
@@ -1751,64 +1702,6 @@ pub fn cancel_gamebanana_download_and_install_mod(
     };
     *cancelled = true;
     Ok(true)
-}
-
-/// Nexus Mods supplies short-lived CDN download URLs.  The archive handling,
-/// backup convention, and streamed installation path are shared with the
-/// GameBanana installer, while the fixed source group and preview naming keep
-/// the resulting local Mod tree independent at `Mods/NexusMods`.
-#[tauri::command]
-pub async fn nexusmods_download_and_install_mod(
-    app: AppHandle,
-    game_name: String,
-    install_dir: String,
-    download_url: String,
-    archive_name: String,
-    target_name: String,
-    target_group: String,
-    password: Option<String>,
-    expected_size_bytes: Option<u64>,
-    preview_urls: Option<Vec<String>>,
-) -> Result<(), String> {
-    if !target_group.trim().eq_ignore_ascii_case("NexusMods") {
-        return Err("Nexus Mods installs must target the NexusMods group".to_string());
-    }
-
-    let preview_target = {
-        let mods_dir = mods_root(&install_dir);
-        let target_name_path = normalize_install_relative_path(&target_name, "Mod name", false, false)?;
-        resolve_physical_install_group_path(&mods_dir, Path::new("NexusMods")).join(target_name_path)
-    };
-
-    match gamebanana_download_and_install_mod(
-        app,
-        game_name,
-        install_dir,
-        download_url,
-        archive_name,
-        target_name,
-        "NexusMods".to_string(),
-        password,
-        None,
-        expected_size_bytes,
-    )
-    .await
-    {
-        Ok(()) => {
-            spawn_nexusmods_preview_fetch(preview_target, preview_urls.unwrap_or_default());
-            Ok(())
-        }
-        Err(error) if error == GAMEBANANA_DOWNLOAD_CANCELLED => Err("Nexus Mods download cancelled".to_string()),
-        Err(error) => Err(error),
-    }
-}
-
-#[tauri::command]
-pub fn cancel_nexusmods_download_and_install_mod(
-    game_name: String,
-    target_name: String,
-) -> Result<bool, String> {
-    cancel_gamebanana_download_and_install_mod(game_name, target_name)
 }
 
 #[tauri::command]

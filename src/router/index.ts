@@ -13,7 +13,6 @@ const WorkPage = () => import('../views/WorkPage/WorkPage.vue')
 const ModsManagement = () => import('../views/ModsManagement/ModsManagement.vue')
 const GameBanana = () => import('../views/GameBanana/GameBanana.vue')
 const GameBananaAuthor = () => import('../views/GameBanana/GameBananaAuthor.vue')
-const NexusMods = () => import('../views/NexusMods/NexusMods.vue')
 const MarkTextureFull = () => import('../views/MarkTexture/MarkTextureFull.vue')
 const Settings = () => import('../views/Settings/Settings.vue')
 
@@ -23,7 +22,6 @@ const routes = [
   { path: '/mods', name: 'ModsManagement', component: ModsManagement, meta: { title: 'Mods Management', requiresGame: true } },
   { path: '/gamebanana', name: 'GameBanana', component: GameBanana, meta: { title: 'GameBanana', requiresGame: false } },
   { path: '/gamebanana/author/:authorId', name: 'GameBananaAuthor', component: GameBananaAuthor, meta: { title: 'GameBanana Author', requiresGame: false } },
-  { path: '/nexusmods', name: 'NexusMods', component: NexusMods, meta: { title: 'Nexus Mods', requiresGame: false } },
   { path: '/work', name: 'WorkPage', component: WorkPage, meta: { title: 'Work Page', requiresGame: true } },
   { path: '/mark-texture-full', name: 'MarkTextureFull', component: MarkTextureFull, meta: { title: 'Extraction Postprocess', requiresGame: true } },
   { path: '/settings', name: 'Settings', component: Settings, meta: { title: 'Settings', requiresGame: false } },

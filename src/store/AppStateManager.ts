@@ -1,7 +1,7 @@
 ﻿import { reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { currentMonitor, getCurrentWindow, LogicalSize, primaryMonitor } from '@tauri-apps/api/window'
 import { getVersion } from '@tauri-apps/api/app'
 import { AppSettings, BGType, SSMTLocale } from './AppSettings'
@@ -188,7 +188,6 @@ export const useAppStateStore = defineStore('appState', () => {
       Object.assign(appSettings, loaded)
       appSettings.VersionNumber = AppSettings.getCurrentVersionNumber()
       applyAppThemeColors()
-      syncShowWindowShortcut()
       
       void registerWindowSizeListener()
       setTimeout(() => {
@@ -201,14 +200,6 @@ export const useAppStateStore = defineStore('appState', () => {
         type: 'error'
       })
     }
-  }
-
-  function syncShowWindowShortcut() {
-    void invoke('set_show_window_shortcut_enabled', {
-      enabled: appSettings.showWindowShortcutEnabled,
-    }).catch((error) => {
-      console.warn('Failed to sync show-window shortcut state:', error)
-    })
   }
 
   async function loadGames() {
@@ -375,10 +366,6 @@ export const useAppStateStore = defineStore('appState', () => {
     console.log('Saving settings:', newVal)
     scheduleSettingsSave(new AppSettings({ ...newVal }))
   }, { deep: true })
-
-  watch(() => appSettings.showWindowShortcutEnabled, () => {
-    syncShowWindowShortcut()
-  })
 
   return {
     setSidebarGameOrder,

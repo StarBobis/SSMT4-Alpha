@@ -1216,10 +1216,7 @@ impl ZZMIDX12NewExtractor {
                         Self::dx12_texture_virtual_file_name(binding),
                         TrianglelistDedupedTextureProperty {
                             fa_log_deduped_file_name: target_file_name.clone(),
-                            fa_data_deduped_file_name: target_file_name.clone(),
-                            format: SSMTStringUtils::extract_texture_format_from_deduped_file_name(
-                                &target_file_name,
-                            ),
+                            fa_data_deduped_file_name: target_file_name,
                         },
                     );
                 }
@@ -2275,11 +2272,8 @@ impl ZZMIDX12NewExtractor {
             trianglelist_deduped_map.insert(
                 trianglelist_texture_file_name,
                 TrianglelistDedupedTextureProperty {
-                    fa_log_deduped_file_name: fa_log_deduped_filename.clone(),
+                    fa_log_deduped_file_name: fa_log_deduped_filename,
                     fa_data_deduped_file_name: fa_data_deduped_filename,
-                    format: SSMTStringUtils::extract_texture_format_from_deduped_file_name(
-                        &fa_log_deduped_filename,
-                    ),
                 },
             );
         }

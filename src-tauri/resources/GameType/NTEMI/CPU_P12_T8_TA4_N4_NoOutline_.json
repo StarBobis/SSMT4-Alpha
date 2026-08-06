@@ -1,0 +1,67 @@
+{
+  "D3D11ElementList": [
+    {
+      "SemanticName": "POSITION",
+      "Format": "R32G32B32_FLOAT",
+      "ExtractSlot": "vb0",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Position",
+      "DrawCategory": "Position",
+      "ByteWidth": "12"
+    },
+    {
+      "SemanticName": "TEXCOORD",
+      "Format": "R16G16_FLOAT",
+      "ExtractSlot": "vb1",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Texcoord",
+      "DrawCategory": "Texcoord",
+      "ByteWidth": "4"
+    },
+    {
+      "SemanticName": "TEXCOORD",
+      "Format": "R16G16_FLOAT",
+      "ExtractSlot": "vb1",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Texcoord",
+      "DrawCategory": "Texcoord",
+      "ByteWidth": "4"
+    },
+    {
+      "SemanticName": "TEXCOORD",
+      "Format": "R16G16_FLOAT",
+      "ExtractSlot": "vb1",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Texcoord",
+      "DrawCategory": "Texcoord",
+      "ByteWidth": "4"
+    },
+    {
+      "SemanticName": "TEXCOORD",
+      "Format": "R16G16_FLOAT",
+      "ExtractSlot": "vb1",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Texcoord",
+      "DrawCategory": "Texcoord",
+      "ByteWidth": "4"
+    },
+    {
+      "SemanticName": "TANGENT",
+      "Format": "R8G8B8A8_SNORM",
+      "ExtractSlot": "vs-t7",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Normal",
+      "DrawCategory": "Normal",
+      "ByteWidth": "4"
+    },
+    {
+      "SemanticName": "NORMAL",
+      "Format": "R8G8B8A8_SNORM",
+      "ExtractSlot": "vs-t7",
+      "ExtractTechnique": "trianglelist",
+      "Category": "Normal",
+      "DrawCategory": "Normal",
+      "ByteWidth": "4"
+    }
+  ]
+}

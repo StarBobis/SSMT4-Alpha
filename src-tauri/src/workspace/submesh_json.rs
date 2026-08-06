@@ -73,15 +73,6 @@ pub struct SubMeshJson {
     #[serde(rename = "IndexCount")]
     pub index_count: i64,
 
-    /// 生成此 submesh 的实际 FrameAnalysis draw-call 编号。
-    /// 将其随 submesh 一起持久化，避免后续依赖易过期的全局组件映射。
-    #[serde(
-        rename = "DrawCallIndexList",
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub draw_call_index_list: Vec<String>,
-
     /// 此 submesh 使用的顶点组数量（导出的 Blend local VG 数量）
     #[serde(rename = "VGCount")]
     pub vg_count: i32,

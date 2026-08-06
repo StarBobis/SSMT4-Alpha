@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { fetch } from '@tauri-apps/plugin-http';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { invoke } from '@tauri-apps/api/core';
@@ -179,9 +179,8 @@ const API_BASE = 'https://gamebanana.com/apiv11';
 const PAGE_SIZE_OPTIONS = [12, 24, 36, 48];
 const GAMEBANANA_ICON_CACHE_FOLDER = 'gamebanana-category-icons';
 
-const gameId = ref<number | null>(DEFAULT_GAMEBANANA_ID);
+const gameId = ref(DEFAULT_GAMEBANANA_ID);
 const gameTargetLabel = ref('');
-const showGameIdInput = ref(false);
 const searchQuery = ref('');
 const pageSize = ref(24);
 const currentPage = ref(1);
@@ -264,9 +263,7 @@ const visibleMods = computed(() => appSettings.gamebananaNsfwMode === 'hide'
   : mods.value);
 const visibleCountText = computed(() => `${visibleMods.value.length}${appSettings.gamebananaNsfwMode === 'hide' && mods.value.length !== visibleMods.value.length ? ` / ${mods.value.length}` : ''}`);
 const currentGameName = computed(() => appSettings.CurrentGameName?.trim() || '');
-const gameUrl = computed(() => gameId.value && gameId.value > 0
-  ? `https://gamebanana.com/games/${gameId.value}`
-  : 'https://gamebanana.com/games');
+const gameUrl = computed(() => `https://gamebanana.com/games/${gameId.value}`);
 const isInstalling = computed(() => installingFileId.value !== null);
 
 const asString = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
@@ -573,7 +570,6 @@ const loadCategoryChildren = async (node: GbCategoryNode) => {
 };
 
 const loadCategories = async () => {
-  if (!gameId.value || gameId.value <= 0) return;
   const requestId = ++categoriesRequestId;
   loadingCategories.value = true;
   try {
@@ -600,7 +596,6 @@ const loadCategories = async () => {
 };
 
 const loadMods = async (requestedPage = 1) => {
-  if (!gameId.value || gameId.value <= 0) return;
   const requestId = ++modsRequestId;
   loadingMods.value = true;
   errorMessage.value = '';
@@ -721,15 +716,6 @@ const selectMod = async (mod: GbModCard) => {
 const applyTarget = async () => {
   currentPage.value = 1;
   selectedCategoryId.value = null;
-  if (!gameId.value || gameId.value <= 0) {
-    categoryTree.value = [];
-    mods.value = [];
-    detail.value = null;
-    selectedModId.value = null;
-    totalRecords.value = 0;
-    hasMore.value = false;
-    return;
-  }
   await Promise.all([loadCategories(), loadMods(1)]);
 };
 
@@ -1526,8 +1512,6 @@ const syncGameTarget = async () => {
   const storedKey = `gamebanana:game-id:${gameName || 'default'}`;
   const storedId = Number(localStorage.getItem(storedKey));
   gameTargetLabel.value = gameName || t('gameBanana.noGameSelected');
-  showGameIdInput.value = true;
-  gameId.value = Number.isInteger(storedId) && storedId > 0 ? storedId : null;
 
   if (gameName && gameName !== 'Default') {
     try {
@@ -1536,21 +1520,22 @@ const syncGameTarget = async () => {
       const presetGameId = GAMEBANANA_ID_BY_PRESET[preset];
       if (presetGameId) {
         gameId.value = presetGameId;
-        showGameIdInput.value = false;
         gameTargetLabel.value = `${gameName} · ${preset}`;
+      } else if (Number.isInteger(storedId) && storedId > 0) {
+        gameId.value = storedId;
       }
     } catch (error) {
       console.warn('Unable to load the current game configuration for GameBanana:', error);
     }
+  } else if (Number.isInteger(storedId) && storedId > 0) {
+    gameId.value = storedId;
   }
 
   await applyTarget();
 };
 
 watch(gameId, (value) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return;
-  const normalized = Math.floor(parsed);
+  const normalized = Math.max(1, Math.floor(Number(value) || DEFAULT_GAMEBANANA_ID));
   if (value !== normalized) {
     gameId.value = normalized;
     return;
@@ -1580,133 +1565,8 @@ watch(showTranslationSettings, (visible) => {
   if (visible) void fetchTranslationModels();
 });
 
-type GbResizablePanel = 'categories' | 'detail';
-
-const GB_COLUMN_WIDTHS_STORAGE = 'gamebanana-column-widths-v1';
-const GB_DEFAULT_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 230, detail: 360 };
-const GB_MIN_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 160, detail: 270 };
-const GB_MAX_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 420, detail: 620 };
-const GB_MIN_RESULTS_WIDTH = 310;
-const GB_COLUMN_RESIZERS_WIDTH = 20;
-
-const clampGbPanelWidth = (panel: GbResizablePanel, value: unknown) => {
-  const parsed = Number(value);
-  const fallback = GB_DEFAULT_PANEL_WIDTHS[panel];
-  return Math.round(Math.min(GB_MAX_PANEL_WIDTHS[panel], Math.max(GB_MIN_PANEL_WIDTHS[panel], Number.isFinite(parsed) ? parsed : fallback)));
-};
-
-const loadGbPanelWidths = (): Record<GbResizablePanel, number> => {
-  try {
-    const stored = JSON.parse(localStorage.getItem(GB_COLUMN_WIDTHS_STORAGE) || '{}') as Partial<Record<GbResizablePanel, number>>;
-    return {
-      categories: clampGbPanelWidth('categories', stored.categories),
-      detail: clampGbPanelWidth('detail', stored.detail),
-    };
-  } catch {
-    return { ...GB_DEFAULT_PANEL_WIDTHS };
-  }
-};
-
-const gbLayoutRef = ref<HTMLElement | null>(null);
-const gbPanelWidths = reactive(loadGbPanelWidths());
-const activeGbPanelResize = ref<GbResizablePanel | null>(null);
-const gbLayoutColumnStyle = computed(() => ({
-  '--gb-categories-width': `${gbPanelWidths.categories}px`,
-  '--gb-detail-width': `${gbPanelWidths.detail}px`,
-}));
-
-let gbPanelResizeObserver: ResizeObserver | null = null;
-let gbPanelResizePointerId: number | null = null;
-let gbPanelResizeStartX = 0;
-let gbPanelResizeStartWidth = 0;
-
-const getGbAvailableSidePanelWidth = () => {
-  const layoutWidth = gbLayoutRef.value?.clientWidth || window.innerWidth;
-  return Math.max(
-    GB_MIN_PANEL_WIDTHS.categories + GB_MIN_PANEL_WIDTHS.detail,
-    layoutWidth - GB_COLUMN_RESIZERS_WIDTH - GB_MIN_RESULTS_WIDTH,
-  );
-};
-
-const constrainGbPanelWidths = () => {
-  if (window.innerWidth <= 1040) return;
-
-  gbPanelWidths.categories = clampGbPanelWidth('categories', gbPanelWidths.categories);
-  gbPanelWidths.detail = clampGbPanelWidth('detail', gbPanelWidths.detail);
-
-  const available = getGbAvailableSidePanelWidth();
-  const currentTotal = gbPanelWidths.categories + gbPanelWidths.detail;
-  if (currentTotal <= available) return;
-
-  const categoriesExtra = gbPanelWidths.categories - GB_MIN_PANEL_WIDTHS.categories;
-  const detailExtra = gbPanelWidths.detail - GB_MIN_PANEL_WIDTHS.detail;
-  const availableExtra = Math.max(0, available - GB_MIN_PANEL_WIDTHS.categories - GB_MIN_PANEL_WIDTHS.detail);
-  const extraTotal = categoriesExtra + detailExtra;
-  const scale = extraTotal > 0 ? Math.min(1, availableExtra / extraTotal) : 0;
-  gbPanelWidths.categories = Math.round(GB_MIN_PANEL_WIDTHS.categories + categoriesExtra * scale);
-  gbPanelWidths.detail = Math.round(GB_MIN_PANEL_WIDTHS.detail + detailExtra * scale);
-};
-
-const persistGbPanelWidths = () => {
-  localStorage.setItem(GB_COLUMN_WIDTHS_STORAGE, JSON.stringify({
-    categories: gbPanelWidths.categories,
-    detail: gbPanelWidths.detail,
-  }));
-};
-
-const setGbPanelWidth = (panel: GbResizablePanel, requestedWidth: number) => {
-  const otherPanel: GbResizablePanel = panel === 'categories' ? 'detail' : 'categories';
-  const availableForPanel = Math.max(GB_MIN_PANEL_WIDTHS[panel], getGbAvailableSidePanelWidth() - gbPanelWidths[otherPanel]);
-  gbPanelWidths[panel] = Math.min(clampGbPanelWidth(panel, requestedWidth), availableForPanel);
-};
-
-const startGbPanelResize = (panel: GbResizablePanel, event: PointerEvent) => {
-  if (event.button !== 0 || window.innerWidth <= 1040) return;
-  event.preventDefault();
-  activeGbPanelResize.value = panel;
-  gbPanelResizePointerId = event.pointerId;
-  gbPanelResizeStartX = event.clientX;
-  gbPanelResizeStartWidth = gbPanelWidths[panel];
-  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-};
-
-const moveGbPanelResize = (event: PointerEvent) => {
-  const panel = activeGbPanelResize.value;
-  if (!panel || event.pointerId !== gbPanelResizePointerId) return;
-  const pointerDelta = event.clientX - gbPanelResizeStartX;
-  setGbPanelWidth(panel, gbPanelResizeStartWidth + (panel === 'categories' ? pointerDelta : -pointerDelta));
-};
-
-const stopGbPanelResize = (event?: PointerEvent) => {
-  if (!activeGbPanelResize.value) return;
-  const target = event?.currentTarget as HTMLElement | undefined;
-  const pointerId = gbPanelResizePointerId;
-  activeGbPanelResize.value = null;
-  gbPanelResizePointerId = null;
-  if (target && pointerId !== null && target.hasPointerCapture(pointerId)) {
-    target.releasePointerCapture(pointerId);
-  }
-  persistGbPanelWidths();
-};
-
-const resetGbPanelWidth = (panel: GbResizablePanel) => {
-  setGbPanelWidth(panel, GB_DEFAULT_PANEL_WIDTHS[panel]);
-  persistGbPanelWidths();
-};
-
-const onGbPanelResizeKeydown = (panel: GbResizablePanel, event: KeyboardEvent) => {
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-  event.preventDefault();
-  const direction = event.key === 'ArrowRight' ? 1 : -1;
-  setGbPanelWidth(panel, gbPanelWidths[panel] + direction * (panel === 'categories' ? 16 : -16));
-  persistGbPanelWidths();
-};
-
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown);
-  gbPanelResizeObserver = new ResizeObserver(constrainGbPanelWidths);
-  if (gbLayoutRef.value) gbPanelResizeObserver.observe(gbLayoutRef.value);
-  constrainGbPanelWidths();
   void listenForInstallProgress();
   void syncGameTarget();
   if (appSettings.gamebananaTranslationApiKey.trim() && appSettings.gamebananaTranslationApiUrl.trim()) {
@@ -1718,9 +1578,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown);
   unlistenDownloadProgress?.();
   unlistenInstallProgress?.();
-  gbPanelResizeObserver?.disconnect();
-  gbPanelResizeObserver = null;
-  stopGbPanelResize();
   clearTranslations();
 });
 </script>
@@ -1736,12 +1593,9 @@ onBeforeUnmount(() => {
         <span>{{ t('gameBanana.search') }}</span>
         <input v-model="searchQuery" type="search" :placeholder="t('gameBanana.searchPlaceholder')" @keyup.enter="loadMods(1)" />
       </label>
-      <button type="button" class="gb-button gb-button--primary" :disabled="loadingMods" @click="loadMods(1)">
-        {{ loadingMods ? t('gameBanana.loading') : t('gameBanana.searchAction') }}
-      </button>
-      <label v-if="showGameIdInput" class="gb-field gb-id-field">
+      <label class="gb-field gb-id-field">
         <span>{{ t('gameBanana.gameId') }}</span>
-        <input v-model.number="gameId" type="number" min="1" :placeholder="t('gameBanana.gameId')" @keyup.enter="applyTarget" />
+        <input v-model.number="gameId" type="number" min="1" @keyup.enter="applyTarget" />
       </label>
       <label class="gb-field gb-size-field">
         <span>{{ t('gameBanana.perPage') }}</span>
@@ -1749,14 +1603,14 @@ onBeforeUnmount(() => {
           <el-option v-for="size in PAGE_SIZE_OPTIONS" :key="size" :label="String(size)" :value="size" />
         </el-select>
       </label>
-      <label class="gb-field gb-nsfw-field" :title="t('gameBanana.nsfwShown')">
-        <span>{{ t('gameBanana.nsfwShown') }}</span>
-        <el-radio-group v-model="appSettings.gamebananaNsfwMode" class="gb-nsfw-mode">
-          <el-radio-button value="show">{{ t('gameBanana.nsfwShow') }}</el-radio-button>
-          <el-radio-button value="blur">{{ t('gameBanana.nsfwBlur') }}</el-radio-button>
-          <el-radio-button value="hide">{{ t('gameBanana.nsfwHide') }}</el-radio-button>
-        </el-radio-group>
-      </label>
+      <el-radio-group v-model="appSettings.gamebananaNsfwMode" class="gb-nsfw-mode" size="small">
+        <el-radio-button value="show">{{ t('gameBanana.nsfwShow') }}</el-radio-button>
+        <el-radio-button value="blur">{{ t('gameBanana.nsfwBlur') }}</el-radio-button>
+        <el-radio-button value="hide">{{ t('gameBanana.nsfwHide') }}</el-radio-button>
+      </el-radio-group>
+      <button type="button" class="gb-button gb-button--primary" :disabled="loadingMods" @click="loadMods(1)">
+        {{ loadingMods ? t('gameBanana.loading') : t('gameBanana.searchAction') }}
+      </button>
       <button type="button" class="gb-button" :disabled="loadingCategories || loadingMods" @click="applyTarget">
         {{ t('gameBanana.refresh') }}
       </button>
@@ -1834,12 +1688,7 @@ onBeforeUnmount(() => {
 
     <p v-if="errorMessage" class="gb-error">{{ errorMessage }}</p>
 
-    <main
-      ref="gbLayoutRef"
-      class="gb-layout"
-      :class="{ 'is-resizing-columns': activeGbPanelResize }"
-      :style="gbLayoutColumnStyle"
-    >
+    <main class="gb-layout">
       <aside class="gb-panel gb-categories glass-panel">
         <div class="gb-panel-title">
           <span>{{ t('gameBanana.categories') }}</span>
@@ -1872,25 +1721,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </aside>
-
-      <div
-        class="gb-column-resizer gb-categories-resizer"
-        :class="{ active: activeGbPanelResize === 'categories' }"
-        role="separator"
-        tabindex="0"
-        aria-orientation="vertical"
-        :aria-label="`${t('gameBanana.categories')} / ${t('gameBanana.results')}`"
-        :aria-valuemin="GB_MIN_PANEL_WIDTHS.categories"
-        :aria-valuemax="GB_MAX_PANEL_WIDTHS.categories"
-        :aria-valuenow="gbPanelWidths.categories"
-        @pointerdown.stop="startGbPanelResize('categories', $event)"
-        @pointermove.stop="moveGbPanelResize"
-        @pointerup.stop="stopGbPanelResize"
-        @pointercancel.stop="stopGbPanelResize"
-        @lostpointercapture.stop="stopGbPanelResize"
-        @dblclick.stop="resetGbPanelWidth('categories')"
-        @keydown="onGbPanelResizeKeydown('categories', $event)"
-      ></div>
 
       <section class="gb-panel gb-results glass-panel">
         <div class="gb-panel-title gb-results-title">
@@ -1941,25 +1771,6 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </section>
-
-      <div
-        class="gb-column-resizer gb-detail-resizer"
-        :class="{ active: activeGbPanelResize === 'detail' }"
-        role="separator"
-        tabindex="0"
-        aria-orientation="vertical"
-        :aria-label="`${t('gameBanana.results')} / ${t('gameBanana.detail')}`"
-        :aria-valuemin="GB_MIN_PANEL_WIDTHS.detail"
-        :aria-valuemax="GB_MAX_PANEL_WIDTHS.detail"
-        :aria-valuenow="gbPanelWidths.detail"
-        @pointerdown.stop="startGbPanelResize('detail', $event)"
-        @pointermove.stop="moveGbPanelResize"
-        @pointerup.stop="stopGbPanelResize"
-        @pointercancel.stop="stopGbPanelResize"
-        @lostpointercapture.stop="stopGbPanelResize"
-        @dblclick.stop="resetGbPanelWidth('detail')"
-        @keydown="onGbPanelResizeKeydown('detail', $event)"
-      ></div>
 
       <aside class="gb-panel gb-detail glass-panel">
         <div v-if="loadingDetail" class="gb-empty">{{ t('gameBanana.loading') }}</div>
@@ -2074,9 +1885,9 @@ onBeforeUnmount(() => {
 }
 
 .glass-panel {
-  background: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)), rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.035);
+  background: linear-gradient(145deg, rgba(18, 21, 31, 0.76), rgba(9, 11, 17, 0.64));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.16), inset 0 1px rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -2132,10 +1943,10 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   min-height: 30px;
   padding: 0 9px;
-  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 7px;
   outline: none;
-  background: rgba(var(--theme-surface-tint-rgb), 0.055);
+  background: rgba(0,0,0,0.2);
   color: rgba(var(--theme-text-primary-rgb), 0.92);
   font: inherit;
   font-size: 12px;
@@ -2146,29 +1957,9 @@ onBeforeUnmount(() => {
 .gb-field :deep(.el-select) { width: 100%; }
 .gb-field :deep(.el-select__selected-item),
 .gb-field :deep(.el-select__placeholder) { color: rgba(var(--theme-text-primary-rgb), .92); font-size: 12px; }
-.gb-nsfw-field { min-width: 188px; }
-.gb-nsfw-mode { display: flex; min-height: 30px; }
-.gb-nsfw-mode :deep(.el-radio-button) { flex: 1 1 0; }
-.gb-nsfw-mode :deep(.el-radio-button__inner) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 30px;
-  padding: 0 10px;
-  border-color: rgba(255,255,255,.13);
-  background: rgba(255,255,255,.055);
-  color: rgba(var(--theme-text-primary-rgb),.86);
-  font: inherit;
-  font-size: 12px;
-  line-height: 1;
-  box-shadow: none;
-  transition: background .16s ease, border-color .16s ease, color .16s ease;
-}
-.gb-nsfw-mode :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius: 7px 0 0 7px; }
-.gb-nsfw-mode :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius: 0 7px 7px 0; }
-.gb-nsfw-mode :deep(.el-radio-button__inner:hover) { background: rgba(var(--theme-surface-tint-rgb),.16); border-color: rgba(var(--theme-surface-tint-rgb),.38); color: rgba(var(--theme-text-primary-rgb),.96); }
-.gb-nsfw-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background: rgba(var(--theme-surface-tint-rgb),.20); border-color: rgba(var(--theme-surface-tint-rgb),.42); color: rgba(var(--theme-text-primary-rgb),.98); box-shadow: -1px 0 0 0 rgba(var(--theme-surface-tint-rgb),.42); }
+.gb-nsfw-mode { flex: 0 0 auto; margin-bottom: 1px; }
+.gb-nsfw-mode :deep(.el-radio-button__inner) { padding: 7px 8px; border-color: rgba(255,255,255,.14); background: rgba(0,0,0,.16); color: rgba(var(--theme-text-primary-rgb),.7); font-size: 11px; box-shadow: none; }
+.gb-nsfw-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background: rgba(var(--theme-surface-tint-rgb),.19); border-color: rgba(var(--theme-surface-tint-rgb),.48); color: rgba(var(--theme-text-primary-rgb),.95); box-shadow: -1px 0 0 0 rgba(var(--theme-surface-tint-rgb),.45); }
 
 .gb-translation-settings { display: grid; grid-template-columns: 1.15fr 1fr 1fr .8fr .8fr .8fr; align-items: end; gap: 9px; padding: 10px 12px 12px; border-radius: 12px; }
 .gb-translation-settings-head { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; color: rgba(var(--theme-text-primary-rgb),.88); font-size: 12px; }
@@ -2200,56 +1991,15 @@ onBeforeUnmount(() => {
 .gb-layout {
   flex: 1;
   display: grid;
-  grid-template-areas: "categories categories-resizer results detail-resizer detail";
-  grid-template-columns: var(--gb-categories-width, 230px) 10px minmax(310px, 1fr) 10px var(--gb-detail-width, 360px);
-  column-gap: 0;
+  grid-template-columns: minmax(160px, 0.72fr) minmax(310px, 1.45fr) minmax(270px, 1fr);
+  gap: 12px;
   overflow: hidden;
 }
 
 .gb-panel { border-radius: 12px; overflow: hidden; }
-.gb-categories { grid-area: categories; }
-.gb-results { grid-area: results; }
-.gb-detail { grid-area: detail; }
 .gb-categories,
 .gb-results,
 .gb-detail { display: flex; flex-direction: column; }
-
-.gb-column-resizer {
-  position: relative;
-  z-index: 8;
-  width: 10px;
-  min-width: 10px;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  cursor: col-resize;
-  touch-action: none;
-}
-.gb-categories-resizer { grid-area: categories-resizer; }
-.gb-detail-resizer { grid-area: detail-resizer; }
-.gb-column-resizer::before {
-  content: '';
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 4px;
-  width: 2px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.10);
-  transition: background .16s ease, box-shadow .16s ease, transform .16s ease;
-}
-.gb-column-resizer:hover::before,
-.gb-column-resizer:focus-visible::before,
-.gb-column-resizer.active::before {
-  background: rgba(var(--theme-surface-tint-rgb),.78);
-  box-shadow: 0 0 10px rgba(var(--theme-surface-tint-rgb),.42);
-  transform: scaleX(1.5);
-}
-.gb-column-resizer:focus-visible { border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb),.48); }
-.gb-layout.is-resizing-columns,
-.gb-layout.is-resizing-columns * { cursor: col-resize !important; user-select: none !important; }
 
 .gb-panel-title {
   display: flex;
@@ -2322,8 +2072,6 @@ onBeforeUnmount(() => {
 .gb-mod-card:hover .gb-mod-thumb img { transform: scale(1.04); }
 .gb-mod-thumb.is-nsfw-blurred img { filter: blur(18px) saturate(.75); transform: scale(1.16); }
 .gb-mod-thumb.is-nsfw-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: rgba(8, 9, 14, .24); color: rgba(255,255,255,.9); font-size: 11px; letter-spacing: .16em; text-shadow: 0 1px 7px rgba(0,0,0,.95); }
-.gb-mod-thumb.is-nsfw-blurred:hover img { filter: none; transform: scale(1.04); }
-.gb-mod-thumb.is-nsfw-blurred:hover::after { opacity: 0; }
 .gb-nsfw-badge { position: absolute; top: 5px; right: 5px; padding: 2px 5px; border-radius: 4px; background: rgba(138, 27, 58, 0.84); color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .06em; }
 .gb-mod-copy { min-width: 0; display: grid; align-content: start; gap: 2px; }
 .gb-mod-copy strong { overflow: hidden; color: rgba(var(--theme-text-primary-rgb), 0.9); font-size: 13px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
@@ -2345,8 +2093,6 @@ onBeforeUnmount(() => {
 .gb-screenshots button:hover img { transform: scale(1.05); }
 .gb-screenshots button.is-nsfw-blurred img { filter: blur(18px) saturate(.75); transform: scale(1.16); }
 .gb-screenshots button.is-nsfw-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: rgba(8,9,14,.26); color: rgba(255,255,255,.9); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
-.gb-screenshots button.is-nsfw-blurred:hover img { filter: none; transform: scale(1.05); }
-.gb-screenshots button.is-nsfw-blurred:hover::after { opacity: 0; }
 .gb-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gb-stats span { display: grid; gap: 3px; padding: 7px; border-radius: 6px; background: rgba(255,255,255,0.045); color: rgba(var(--theme-text-secondary-rgb), 0.6); font-size: 10px; }
 .gb-stats strong { color: rgba(var(--theme-text-primary-rgb), 0.9); font-size: 13px; }
@@ -2406,9 +2152,8 @@ onBeforeUnmount(() => {
 :global(.gamebanana-select-popper .el-select-dropdown__empty) { color: rgba(255,255,255,.52); }
 
 @media (max-width: 1040px) {
-  .gb-layout { grid-template-areas: "categories results" "detail detail"; grid-template-columns: minmax(145px, .7fr) minmax(330px, 1.45fr); overflow: auto; }
-  .gb-column-resizer { display: none; }
-  .gb-detail { min-height: 390px; }
+  .gb-layout { grid-template-columns: minmax(145px, .7fr) minmax(330px, 1.45fr); overflow: auto; }
+  .gb-detail { min-height: 390px; grid-column: 1 / -1; }
 }
 
 @media (max-width: 720px) {

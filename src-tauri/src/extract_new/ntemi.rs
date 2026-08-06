@@ -1319,19 +1319,15 @@ impl NTEMINewExtractor {
             let hash = SSMTStringUtils::get_file_hash_from_file_name(&tex_name);
             let fa_log_deduped = self.fa.log.get_deduped_filename(&tex_name);
             let fa_data_deduped = String::new(); // simplified: lookup via hash in root
-            let fa_log_deduped_file_name = if fa_log_deduped.trim().is_empty() {
-                String::new()
-            } else {
-                format!("{}_{}", hash, fa_log_deduped)
-            };
             trianglelist_deduped_map.insert(
                 tex_name,
                 crate::helper::mark_texture_helper::TrianglelistDedupedTextureProperty {
-                    fa_log_deduped_file_name: fa_log_deduped_file_name.clone(),
+                    fa_log_deduped_file_name: if fa_log_deduped.trim().is_empty() {
+                        String::new()
+                    } else {
+                        format!("{}_{}", hash, fa_log_deduped)
+                    },
                     fa_data_deduped_file_name: fa_data_deduped,
-                    format: SSMTStringUtils::extract_texture_format_from_deduped_file_name(
-                        &fa_log_deduped_file_name,
-                    ),
                 },
             );
         }

@@ -52,8 +52,6 @@ pub struct TrianglelistDedupedTextureProperty {
     pub fa_log_deduped_file_name: String,
     #[serde(rename = "FADataDedupedFileName")]
     pub fa_data_deduped_file_name: String,
-    #[serde(default, rename = "Format")]
-    pub format: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -224,11 +222,8 @@ impl MarkTextureHelper {
                 trianglelist_deduped_map.insert(
                     trianglelist_texture_file_name,
                     TrianglelistDedupedTextureProperty {
-                        fa_log_deduped_file_name: fa_log_deduped_filename.clone(),
+                        fa_log_deduped_file_name: fa_log_deduped_filename,
                         fa_data_deduped_file_name: fa_data_deduped_filename,
-                        format: SSMTStringUtils::extract_texture_format_from_deduped_file_name(
-                            &fa_log_deduped_filename,
-                        ),
                     },
                 );
             }
@@ -314,7 +309,7 @@ impl MarkTextureHelper {
             return;
         }
 
-        // Sort each DrawIB's submeshes by FirstIndex, assign component numbers.
+        // Sort each DrawIB's submeshes by FirstIndex, assign component numbers
         let mut component_map: HashMap<String, BTreeMap<String, String>> = HashMap::new();
         for (draw_ib, mut submesh_list) in draw_ib_submesh_map {
             submesh_list.sort_by_key(|(_, first_index)| *first_index);
@@ -341,99 +336,5 @@ impl MarkTextureHelper {
         } else {
             println!("Generated {}", json_path.to_string_lossy());
         }
-    }
-
-    /// Restore the GIMI import representation written by builds that mistook
-    /// an IB's unique-vertex set for a contiguous VB slice.  GIMI components
-    /// share their GPU vertex buffers, so the importer must receive the full
-    /// buffer (the baseline representation uses zero range values).
-    ///
-    /// The migration is deliberately restricted to JSON files carrying the
-    /// new DrawCallIndexList metadata, which identifies the affected builds.
-    /// It does not alter Blender's Import.json data-type selections.
-    pub fn reset_gimi_vertex_ranges_for_import(lod_workspace_path: &str) -> Result<usize, String> {
-        let lod_path = Path::new(lod_workspace_path);
-        let submesh_entries = fs::read_dir(lod_path).map_err(|error| {
-            format!(
-                "Failed to read LOD workspace directory {}: {}",
-                lod_workspace_path, error
-            )
-        })?;
-
-        let mut repaired_count = 0usize;
-        for submesh_entry in submesh_entries.flatten() {
-            if !submesh_entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
-                continue;
-            }
-
-            let data_type_entries = match fs::read_dir(submesh_entry.path()) {
-                Ok(entries) => entries,
-                Err(_) => continue,
-            };
-            for data_type_entry in data_type_entries.flatten() {
-                if !data_type_entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
-                    continue;
-                }
-                if !data_type_entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("TYPE_")
-                {
-                    continue;
-                }
-
-                let json_entries = match fs::read_dir(data_type_entry.path()) {
-                    Ok(entries) => entries,
-                    Err(_) => continue,
-                };
-                for json_entry in json_entries.flatten() {
-                    let json_path = json_entry.path();
-                    if !json_entry.file_type().map(|kind| kind.is_file()).unwrap_or(false)
-                        || json_path.extension().and_then(|extension| extension.to_str()) != Some("json")
-                    {
-                        continue;
-                    }
-
-                    let content = match fs::read_to_string(&json_path) {
-                        Ok(content) => content,
-                        Err(_) => continue,
-                    };
-                    let mut value: serde_json::Value = match serde_json::from_str(&content) {
-                        Ok(value) => value,
-                        Err(_) => continue,
-                    };
-                    let Some(object) = value.as_object_mut() else {
-                        continue;
-                    };
-                    let is_gimi = object
-                        .get("GamePreset")
-                        .and_then(|item| item.as_str())
-                        .is_some_and(|preset| preset.eq_ignore_ascii_case("GIMI"));
-                    if !is_gimi || !object.contains_key("DrawCallIndexList") {
-                        continue;
-                    }
-
-                    let has_nonzero_range = ["VertexOffset", "VertexCount", "IndexOffset", "IndexCount"]
-                        .iter()
-                        .any(|key| object.get(*key).and_then(|item| item.as_i64()).unwrap_or_default() != 0);
-                    if !has_nonzero_range {
-                        continue;
-                    }
-
-                    for key in ["VertexOffset", "VertexCount", "IndexOffset", "IndexCount"] {
-                        object.insert(key.to_string(), serde_json::Value::from(0));
-                    }
-                    let content = serde_json::to_string_pretty(&value).map_err(|error| {
-                        format!("Failed to serialize {}: {}", json_path.to_string_lossy(), error)
-                    })?;
-                    fs::write(&json_path, content).map_err(|error| {
-                        format!("Failed to write {}: {}", json_path.to_string_lossy(), error)
-                    })?;
-                    repaired_count += 1;
-                }
-            }
-        }
-
-        Ok(repaired_count)
     }
 }

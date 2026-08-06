@@ -14,11 +14,6 @@ use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const SHOW_WINDOW_SHORTCUT_LABEL: &str = "Alt+F";
-const APP_SETTINGS_RELATIVE_PATH: &str = "SSMT4GlobalConfigs/settings.json";
-
-fn show_window_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::ALT), Code::KeyF)
-}
 
 fn reveal_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
@@ -34,63 +29,6 @@ fn reveal_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
     if let Err(error) = window.set_focus() {
         eprintln!("[GlobalShortcut] Failed to focus main window: {error}");
-    }
-}
-
-fn handle_show_window_shortcut<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let focused = app
-        .get_webview_window("main")
-        .and_then(|window| window.is_focused().ok())
-        .unwrap_or(false);
-
-    if focused {
-        if let Some(window) = app.get_webview_window("main") {
-            if let Err(error) = window.minimize() {
-                eprintln!("[GlobalShortcut] Failed to minimize main window: {error}");
-            }
-        }
-        return;
-    }
-
-    reveal_main_window(app);
-}
-
-fn register_show_window_shortcut<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-) -> Result<(), tauri_plugin_global_shortcut::Error> {
-    app.global_shortcut().on_shortcut(show_window_shortcut(), |app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            handle_show_window_shortcut(app);
-        }
-    })
-}
-
-fn show_window_shortcut_enabled_on_launch(app: &tauri::App) -> bool {
-    let Ok(settings_path) = app
-        .path()
-        .resolve(APP_SETTINGS_RELATIVE_PATH, tauri::path::BaseDirectory::LocalData)
-    else {
-        return true;
-    };
-
-    let Ok(raw) = std::fs::read_to_string(settings_path) else {
-        return true;
-    };
-
-    serde_json::from_str::<serde_json::Value>(&raw)
-        .ok()
-        .and_then(|settings| settings.get("showWindowShortcutEnabled")?.as_bool())
-        .unwrap_or(true)
-}
-
-#[tauri::command]
-fn set_show_window_shortcut_enabled(app: tauri::AppHandle, enabled: bool) {
-    if enabled {
-        if let Err(error) = register_show_window_shortcut(&app) {
-            eprintln!("[GlobalShortcut] Failed to register {SHOW_WINDOW_SHORTCUT_LABEL}: {error}");
-        }
-    } else if let Err(error) = app.global_shortcut().unregister(show_window_shortcut()) {
-        eprintln!("[GlobalShortcut] Failed to unregister {SHOW_WINDOW_SHORTCUT_LABEL}: {error}");
     }
 }
 
@@ -115,20 +53,24 @@ pub fn run() {
             app.manage(commands::mod_manager::ModWatcher(Mutex::new(None)));
             app.manage(commands::mod_library::ModLibraryWatcher(Mutex::new(None)));
 
-            if show_window_shortcut_enabled_on_launch(app) {
-                if let Err(error) = register_show_window_shortcut(app.handle()) {
-                    // A shortcut collision must not prevent SSMT from starting.
-                    eprintln!(
-                        "[GlobalShortcut] Failed to register {SHOW_WINDOW_SHORTCUT_LABEL}: {error}"
-                    );
-                }
+            if let Err(error) = app.global_shortcut().on_shortcut(
+                Shortcut::new(Some(Modifiers::ALT), Code::KeyF),
+                |app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        reveal_main_window(app);
+                    }
+                },
+            ) {
+                // A shortcut collision must not prevent SSMT from starting.
+                eprintln!(
+                    "[GlobalShortcut] Failed to register {SHOW_WINDOW_SHORTCUT_LABEL}: {error}"
+                );
             }
 
             Ok(())
         })
         // 从各个子模块中注册命令
         .invoke_handler(tauri::generate_handler![
-            set_show_window_shortcut_enabled,
             commands::game_launcher::configure_zzmi_launch_settings,
             commands::game_launcher::configure_wwmi_launch_settings,
             commands::game_launcher::execute_external_program,
@@ -141,8 +83,6 @@ pub fn run() {
             commands::mod_manager::install_mod_archive,
             commands::mod_manager::gamebanana_download_and_install_mod,
             commands::mod_manager::cancel_gamebanana_download_and_install_mod,
-            commands::mod_manager::nexusmods_download_and_install_mod,
-            commands::mod_manager::cancel_nexusmods_download_and_install_mod,
             commands::mod_manager::export_mod_archive,
             commands::mod_manager::scan_directory,
             commands::mod_manager::get_mod_key_list,
@@ -157,7 +97,6 @@ pub fn run() {
             commands::extract_model::extract_models_new,
             commands::extract_model::full_extract,
             commands::extract_model::analyze_draw_ib_submeshes,
-            commands::extract_model::regenerate_draw_ib_component_json,
             commands::vscheck::update_vscheck,
             commands::vscheck::generate_vscheck,
             commands::extract_textures::extract_deduped_textures,

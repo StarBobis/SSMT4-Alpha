@@ -156,6 +156,7 @@ export class AppSettings {
 	CurrentWorkSpace: string = 'Default'
 	CurrentWorkSpaceByGame: Record<string, string> = {}
 	sidebarGameOrder: string[] = []
+	convertRgbaChannelTextures: boolean = true
 	modsManagementBlurNsfw: boolean = true
 	gamebananaNsfwMode: GameBananaNsfwMode = 'blur'
 	gamebananaTranslationEnabled: boolean = true
@@ -166,11 +167,6 @@ export class AppSettings {
 	gamebananaTranslationModel: string = 'gpt-4o-mini'
 	gamebananaTranslationTargetLanguage: string = '简体中文'
 	gamebananaTranslationShortcut: string = 'Ctrl'
-	showWindowShortcutEnabled: boolean = true
-	// Nexus Mods uses a per-user API key and a game URL-domain (for example,
-	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
-	nexusModsApiKey: string = ''
-	nexusModsGameDomain: string = ''
 
 	constructor(init?: Partial<AppSettings>) {
 		if (init) {
@@ -211,6 +207,7 @@ export class AppSettings {
 		this.CurrentWorkSpace = init?.CurrentWorkSpace ?? this.CurrentWorkSpace
 		this.CurrentWorkSpaceByGame = normalizeWorkspaceByGame(init?.CurrentWorkSpaceByGame)
 		this.sidebarGameOrder = normalizeSidebarGameOrder(init?.sidebarGameOrder)
+		this.convertRgbaChannelTextures = init?.convertRgbaChannelTextures ?? this.convertRgbaChannelTextures
 		this.modsManagementBlurNsfw = init?.modsManagementBlurNsfw ?? this.modsManagementBlurNsfw
 		this.gamebananaNsfwMode = normalizeGameBananaNsfwMode(init?.gamebananaNsfwMode)
 		this.gamebananaTranslationEnabled = init?.gamebananaTranslationEnabled ?? this.gamebananaTranslationEnabled
@@ -224,9 +221,6 @@ export class AppSettings {
 		this.gamebananaTranslationShortcut = !savedTranslationShortcut || savedTranslationShortcut.toLowerCase() === 'ctrl+shift+t'
 			? 'Ctrl'
 			: savedTranslationShortcut
-		this.showWindowShortcutEnabled = init?.showWindowShortcutEnabled ?? this.showWindowShortcutEnabled
-		this.nexusModsApiKey = init?.nexusModsApiKey ?? this.nexusModsApiKey
-		this.nexusModsGameDomain = init?.nexusModsGameDomain?.trim().toLowerCase() ?? this.nexusModsGameDomain
 		// VersionNumber is always controlled by current app code version,
 		// not by persisted settings.json.
 		this.VersionNumber = AppSettings.CURRENT_VERSION
@@ -274,6 +268,7 @@ export class AppSettings {
 			CurrentWorkSpace: this.CurrentWorkSpace,
 			CurrentWorkSpaceByGame: this.CurrentWorkSpaceByGame,
 			sidebarGameOrder: this.sidebarGameOrder,
+			convertRgbaChannelTextures: this.convertRgbaChannelTextures,
 			modsManagementBlurNsfw: this.modsManagementBlurNsfw,
 			gamebananaNsfwMode: this.gamebananaNsfwMode,
 			gamebananaTranslationEnabled: this.gamebananaTranslationEnabled,
@@ -284,9 +279,6 @@ export class AppSettings {
 			gamebananaTranslationModel: this.gamebananaTranslationModel,
 			gamebananaTranslationTargetLanguage: this.gamebananaTranslationTargetLanguage,
 			gamebananaTranslationShortcut: this.gamebananaTranslationShortcut,
-			showWindowShortcutEnabled: this.showWindowShortcutEnabled,
-			nexusModsApiKey: this.nexusModsApiKey,
-			nexusModsGameDomain: this.nexusModsGameDomain,
 		}
 	}
 }

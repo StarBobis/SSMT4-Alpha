@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue';
-import { Folder, Edit, Plus, Delete, View, Hide, Picture, WarningFilled } from '@element-plus/icons-vue';
+import { Folder, Edit, Plus, Delete, View, Hide, Picture } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { calculateContextMenuPosition } from '../../utils/ContextMenuPosition';
 import type { GroupInfo } from './ModsManagement.types';
@@ -10,7 +10,6 @@ const props = defineProps<{
   x: number;
   y: number;
   target: GroupInfo | null;
-  isNsfw?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -23,7 +22,6 @@ const emit = defineEmits<{
   'delete-group': [group: GroupInfo];
   'edit-group-tags': [group: GroupInfo];
   'convert-group-to-mod': [group: GroupInfo];
-  'toggle-nsfw': [group: GroupInfo];
 }>();
 
 const { t } = useI18n();
@@ -92,10 +90,6 @@ watch(() => props.visible, (newVal) => {
       <div class="menu-item" @click="emit('close'); emit('edit-group-tags', target)">
         <el-icon><Plus /></el-icon>
         <span>{{ t('modsManagement.actions.editModTags') }}</span>
-      </div>
-      <div class="menu-item" @click="emit('close'); emit('toggle-nsfw', target)">
-        <el-icon><WarningFilled /></el-icon>
-        <span>{{ t(props.isNsfw ? 'modsManagement.actions.unmarkNsfw' : 'modsManagement.actions.markNsfw') }}</span>
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="emit('close'); emit('convert-group-to-mod', target)">

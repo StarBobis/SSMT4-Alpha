@@ -1,12 +1,32 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::utils::ssmt_command_utils::SSMTCommandUtils;
 use crate::utils::ssmt_file_utils::SSMTFileUtils;
 
 pub struct TextureConvertHelper;
 
+const JPG_CHANNEL_EXPORTS: [(&str, &str); 4] = [
+    ("_R", "rrr1"),
+    ("_G", "ggg1"),
+    ("_B", "bbb1"),
+    ("_A", "aaa1"),
+];
+
+const RGBA_CHANNEL_PREVIEW_SIZE: u32 = 256;
+
+static RGBA_CHANNEL_TEXTURE_EXPORT_ENABLED: AtomicBool = AtomicBool::new(true);
+
 impl TextureConvertHelper {
+    pub fn set_rgba_channel_texture_export_enabled(enabled: bool) -> bool {
+        RGBA_CHANNEL_TEXTURE_EXPORT_ENABLED.swap(enabled, Ordering::SeqCst)
+    }
+
+    pub fn is_rgba_channel_texture_export_enabled() -> bool {
+        RGBA_CHANNEL_TEXTURE_EXPORT_ENABLED.load(Ordering::SeqCst)
+    }
+
     pub fn collect_texture_files_recursive(folder: &Path, output: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(folder) else {
             return;
@@ -78,7 +98,7 @@ impl TextureConvertHelper {
                 }
 
                 if let Err(err) =
-                    Self::convert_texture_to_png(&file_path_str, &target_folder_path)
+                    Self::convert_texture_to_jpg_with_channels(&file_path_str, &target_folder_path)
                 {
                     // Texconv failure should not break overall extraction progress.
                     println!(
@@ -107,11 +127,33 @@ impl TextureConvertHelper {
         Ok(())
     }
 
-    fn convert_texture_to_png(
+    fn convert_texture_to_jpg_with_channels(
         input_file_path: &str,
         output_texture_path: &str,
     ) -> Result<(), String> {
-        Self::convert_texture_to_target_fmt(input_file_path, output_texture_path, "png")
+        Self::convert_texture_to_target_fmt(input_file_path, output_texture_path, "jpg")?;
+
+        if !Self::is_rgba_channel_texture_export_enabled() {
+            return Ok(());
+        }
+
+        for (suffix, swizzle) in JPG_CHANNEL_EXPORTS {
+            if let Err(err) = Self::convert_texture_to_target_fmt_with_options(
+                input_file_path,
+                output_texture_path,
+                "jpg",
+                Some(suffix),
+                Some(swizzle),
+                Some((RGBA_CHANNEL_PREVIEW_SIZE, RGBA_CHANNEL_PREVIEW_SIZE)),
+            ) {
+                println!(
+                    "[TextureConvert] texconv channel failed, skip derived file: {}{}.jpg\nreason: {}",
+                    input_file_path, suffix, err
+                );
+            }
+        }
+
+        Ok(())
     }
 
     pub fn convert_texture_to_target_fmt(

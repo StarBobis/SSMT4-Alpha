@@ -13,7 +13,6 @@ import {
   Coffee,
   Document,
   FolderOpened,
-  Key,
   Link,
   Lock,
   Monitor,
@@ -120,22 +119,6 @@ const openUsageDocs = async () => {
                     :placeholder="t('settings.general.githubTokenPlaceholder')"
                     type="password"
                     show-password
-                  />
-                </div>
-              </div>
-
-              <div class="setting-row">
-                <div class="setting-identity">
-                  <span class="setting-icon"><el-icon><Key /></el-icon></span>
-                  <div>
-                    <div class="setting-label">{{ t('settings.general.showWindowShortcut') }}</div>
-                    <div class="setting-description">{{ t('settings.hints.showWindowShortcut') }}</div>
-                  </div>
-                </div>
-                <div class="setting-control compact-control">
-                  <el-switch
-                    v-model="appSettings.showWindowShortcutEnabled"
-                    :aria-label="t('settings.general.showWindowShortcut')"
                   />
                 </div>
               </div>

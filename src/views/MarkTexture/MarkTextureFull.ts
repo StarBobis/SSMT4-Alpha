@@ -16,7 +16,6 @@ export type TextureItemForApply = {
 type TrianglelistDedupedTextureProperty = {
 	FALogDedupedFileName?: string
 	FADataDedupedFileName?: string
-	Format?: string
 }
 
 type TrianglelistDedupedFileNameJson = Record<string, TrianglelistDedupedTextureProperty>
@@ -346,35 +345,6 @@ export const readAppliedSubMeshTextureMarks = async (args: {
 	return result
 }
 
-type DrawIBComponentJson = Record<string, Record<string, string>>
-
-export const readPersistedSubMeshDrawCallIndexes = async (args: {
-	workspacePath: string
-	subMesh: string
-}): Promise<string[]> => {
-	const { workspacePath, subMesh } = args
-	if (!workspacePath || !subMesh) {
-		return []
-	}
-
-	const targetEntries = await getSubMeshTargetEntries(workspacePath, subMesh)
-	const drawCalls = new Set<string>()
-	for (const entry of targetEntries) {
-		const parsed = await readSubMeshJsonFile(entry.jsonPath)
-		const values = parsed?.DrawCallIndexList
-		if (!Array.isArray(values)) {
-			continue
-		}
-		for (const value of values) {
-			if (typeof value === 'string' && value.trim()) {
-				drawCalls.add(value.trim())
-			}
-		}
-	}
-
-	return [...drawCalls].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
-}
-
 const getPixelSlotFromTextureFileName = (textureFileName: string): string => {
 	const startPos = textureFileName.indexOf('-')
 	const endPos = textureFileName.indexOf('=')
@@ -391,58 +361,6 @@ const getPixelSlotFromTextureFileName = (textureFileName: string): string => {
 	}
 
 	return pixelSlot
-}
-
-const getDrawCallIndexFromTextureFileName = (textureFileName: string): string => {
-	const match = /^(\d{6})-ps-t/i.exec(textureFileName.trim())
-	return match?.[1] || ''
-}
-
-/**
- * Compatibility path for workspaces produced before per-submesh draw-call
- * metadata existed.  A stored mark carries the original deduped texture name;
- * resolve that identity back through TrianglelistDedupedFileName.json instead
- * of borrowing another component's draw-call list.
- */
-export const readDrawCallIndexesMatchedByPersistedSubMeshMarks = async (args: {
-	workspacePath: string
-	subMesh: string
-	trianglelistDedupedDict: TrianglelistDedupedFileNameJson
-}): Promise<string[]> => {
-	const { workspacePath, subMesh, trianglelistDedupedDict } = args
-	if (!workspacePath || !subMesh) {
-		return []
-	}
-
-	const marks = await readAppliedSubMeshTextureMarks({ workspacePath, subMesh })
-	if (marks.length === 0) {
-		return []
-	}
-
-	const drawCalls = new Set<string>()
-	for (const mark of marks) {
-		const markDedupedFileName = mark.markDedupedFileName.trim().toLowerCase()
-		const markHash = mark.markHash.trim().toLowerCase()
-		const markSlot = mark.markSlot.trim().toLowerCase()
-
-		for (const [textureFileName, textureProperty] of Object.entries(trianglelistDedupedDict)) {
-			const dedupedFileName = (textureProperty?.FALogDedupedFileName || '').trim().toLowerCase()
-			const textureHash = SSMTStringUtils.getFileHashFromFileName(textureFileName).trim().toLowerCase()
-			const textureSlot = getPixelSlotFromTextureFileName(textureFileName).trim().toLowerCase()
-			const matchedByDedupedFileName = !!markDedupedFileName && dedupedFileName === markDedupedFileName
-			const matchedByHashAndSlot = !!markHash && textureHash === markHash && (!markSlot || textureSlot === markSlot)
-			if (!matchedByDedupedFileName && !matchedByHashAndSlot) {
-				continue
-			}
-
-			const drawCall = getDrawCallIndexFromTextureFileName(textureFileName)
-			if (drawCall) {
-				drawCalls.add(drawCall)
-			}
-		}
-	}
-
-	return [...drawCalls].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
 }
 
 const getTextureSuffixFromFileName = (textureFileName: string): string => {
@@ -480,34 +398,6 @@ const readComponentDrawCallMap = async (
 	}
 
 	return result
-}
-
-const readMappedSubMeshNames = async (workspacePath: string): Promise<string[]> => {
-	const drawIBComponentJsonPath = await getMarkTextureDrawIBComponentJsonPath(workspacePath)
-	if (!(await exists(drawIBComponentJsonPath))) {
-		return []
-	}
-
-	try {
-		const drawIBComponentContent = await readTextFile(drawIBComponentJsonPath)
-		const parsed = JSON.parse(drawIBComponentContent) as DrawIBComponentJson
-		const subMeshes: string[] = []
-
-		for (const componentMap of Object.values(parsed)) {
-			if (!componentMap || typeof componentMap !== 'object') {
-				continue
-			}
-			for (const subMesh of Object.values(componentMap)) {
-				if (typeof subMesh === 'string' && subMesh.trim()) {
-					subMeshes.push(subMesh.trim())
-				}
-			}
-		}
-
-		return [...new Set(subMeshes)].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
-	} catch {
-		return []
-	}
 }
 
 const buildTextureListForDrawCall = (
@@ -550,32 +440,10 @@ export const autoApplyTextureMarksFromHistoryForTab = async (args: {
 		return result
 	}
 
-	const [legacyComponentDrawCallMap, trianglelistDedupedDict, mappedSubMeshNames] = await Promise.all([
+	const [componentDrawCallMap, trianglelistDedupedDict] = await Promise.all([
 		readComponentDrawCallMap(workspacePath),
 		readTrianglelistDedupedDict(workspacePath),
-		readMappedSubMeshNames(workspacePath),
 	])
-
-	const componentDrawCallMap: Record<string, string[]> = {}
-	const subMeshNamesToResolve = mappedSubMeshNames.length > 0
-		? mappedSubMeshNames
-		: Object.keys(legacyComponentDrawCallMap)
-	for (const subMesh of subMeshNamesToResolve) {
-		const persistedDrawCalls = await readPersistedSubMeshDrawCallIndexes({ workspacePath, subMesh })
-		const directLegacyDrawCalls = legacyComponentDrawCallMap[subMesh] ?? []
-		const drawCallsFromPersistedMarks = persistedDrawCalls.length === 0 && directLegacyDrawCalls.length === 0
-			? await readDrawCallIndexesMatchedByPersistedSubMeshMarks({
-				workspacePath,
-				subMesh,
-				trianglelistDedupedDict,
-			})
-			: []
-		componentDrawCallMap[subMesh] = persistedDrawCalls.length > 0
-			? persistedDrawCalls
-			: directLegacyDrawCalls.length > 0
-				? directLegacyDrawCalls
-				: drawCallsFromPersistedMarks
-	}
 
 	const subMeshNames = Object.keys(componentDrawCallMap).sort((a, b) => a.localeCompare(b))
 

@@ -55,7 +55,6 @@ export const useModsManagementTags = (options: UseModsManagementTagsOptions) => 
     const resetTagState = () => {
         tagDefinitions.value = [];
         modTagMappings.value = {};
-        groupTagMappings.value = {};
         tagIconPathMap.value = {};
         activeTagIds.value = [];
         allModsCatalog.value = [];
@@ -108,7 +107,6 @@ export const useModsManagementTags = (options: UseModsManagementTagsOptions) => 
             const snapshot = await ModTagStore.pruneMappings(options.selectedGame.value, result.mods.map((mod) => mod.relativePath));
             tagDefinitions.value = snapshot.tags;
             modTagMappings.value = snapshot.modMappings;
-            groupTagMappings.value = snapshot.groupMappings;
             await syncTagIconPathMap(options.selectedGame.value, snapshot.tags);
         } finally {
             if (!scanSignal.isCancelled()) {
@@ -287,49 +285,6 @@ export const useModsManagementTags = (options: UseModsManagementTagsOptions) => 
         .map((tagId) => tagMap.value.get(tagId))
         .filter((tag): tag is ModTagDefinition => !!tag);
 
-    const isNsfwTag = (tag: ModTagDefinition) => tag.name.trim().toLowerCase() === 'nsfw';
-
-    const ensureNsfwTag = async () => {
-        const existing = tagDefinitions.value.find(isNsfwTag);
-        if (existing) return existing;
-
-        options.suppressFsRefresh(1400);
-        await ModTagStore.upsertTag(options.selectedGame.value, {
-            name: 'NSFW',
-            color: '#C33B53',
-        });
-        await loadTagState(options.selectedGame.value);
-        const created = tagDefinitions.value.find(isNsfwTag);
-        if (!created) throw new Error('Unable to create NSFW tag');
-        return created;
-    };
-
-    const toggleNsfwAssignment = async (targetId: string, scope: 'mod' | 'group') => {
-        if (!options.selectedGame.value || !targetId) return false;
-
-        const tagIds = scope === 'mod'
-            ? getTagIdsForMod(targetId)
-            : getTagIdsForGroup(targetId);
-        const existingNsfwTag = tagDefinitions.value.find(isNsfwTag);
-        const isMarked = !!existingNsfwTag && tagIds.includes(existingNsfwTag.id);
-        const nsfwTag = existingNsfwTag || await ensureNsfwTag();
-        const nextTagIds = isMarked
-            ? tagIds.filter((tagId) => tagId !== nsfwTag.id)
-            : Array.from(new Set([...tagIds, nsfwTag.id]));
-
-        options.suppressFsRefresh(1400);
-        if (scope === 'mod') {
-            await ModTagStore.setModTags(options.selectedGame.value, targetId, nextTagIds);
-        } else {
-            await ModTagStore.setGroupTags(options.selectedGame.value, targetId, nextTagIds);
-        }
-        await syncTagStateAfterMutation({ reloadAllMods: hasActiveTagFilter.value });
-        return !isMarked;
-    };
-
-    const toggleModNsfw = (mod: ModInfo) => toggleNsfwAssignment(mod.relativePath, 'mod');
-    const toggleGroupNsfw = (group: GroupInfo) => toggleNsfwAssignment(group.id, 'group');
-
     const openGroupTagDialog = (group: GroupInfo) => {
         modTagDialog.visible = true;
         modTagDialog.modId = group.id;
@@ -406,9 +361,6 @@ export const useModsManagementTags = (options: UseModsManagementTagsOptions) => 
         saveModTagAssignments,
         getTagIdsForGroup,
         getTagsForGroup,
-        isNsfwTag,
-        toggleModNsfw,
-        toggleGroupNsfw,
         openGroupTagDialog,
         saveGroupTagAssignments,
     };

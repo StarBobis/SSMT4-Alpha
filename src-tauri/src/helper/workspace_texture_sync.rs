@@ -333,11 +333,8 @@ pub fn sync_yysls_workspace_deduped_textures_and_json(
                     trianglelist_deduped_map
                         .entry(ps_texture_filename)
                         .or_insert_with(|| TrianglelistDedupedTextureProperty {
-                            fa_log_deduped_file_name: fa_log_deduped_filename.clone(),
+                            fa_log_deduped_file_name: fa_log_deduped_filename,
                             fa_data_deduped_file_name: fa_data_deduped_filename,
-                            format: SSMTStringUtils::extract_texture_format_from_deduped_file_name(
-                                &fa_log_deduped_filename,
-                            ),
                         });
                 }
             }
@@ -562,11 +559,8 @@ pub fn sync_workspace_deduped_textures_and_json(
         trianglelist_deduped_map.insert(
             trianglelist_texture_file_name,
             TrianglelistDedupedTextureProperty {
-                fa_log_deduped_file_name: fa_log_deduped_filename.clone(),
+                fa_log_deduped_file_name: fa_log_deduped_filename,
                 fa_data_deduped_file_name: fa_data_deduped_filename,
-                format: SSMTStringUtils::extract_texture_format_from_deduped_file_name(
-                    &fa_log_deduped_filename,
-                ),
             },
         );
     }

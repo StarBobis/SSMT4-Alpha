@@ -74,7 +74,7 @@ impl D3D11GameType {
             return Err(format!("GameType json not found: {}", path_ref.display()));
         }
 
-        let game_type_name = path_ref
+        let fallback_game_type_name = path_ref
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
@@ -83,11 +83,20 @@ impl D3D11GameType {
 
         #[derive(Deserialize)]
         struct Wrapper {
+            #[serde(rename = "GameTypeName", default)]
+            game_type_name: Option<String>,
             #[serde(rename = "D3D11ElementList")]
             d3d11_element_list: Vec<D3D11Element>,
         }
-        println!("Parsing D3D11GameType JSON content for: {}", game_type_name);
+        println!(
+            "Parsing D3D11GameType JSON content for: {}",
+            fallback_game_type_name
+        );
         let wrapper: Wrapper = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        let game_type_name = wrapper
+            .game_type_name
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(fallback_game_type_name);
         println!(
             "Parsed {} D3D11Element entries for GameType: {}",
             wrapper.d3d11_element_list.len(),

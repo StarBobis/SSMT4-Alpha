@@ -10,6 +10,7 @@ const selectedFrameAnalysis = defineModel<string>('selectedFrameAnalysis', { def
 const frameAnalysisFolderPath = defineModel<string>('frameAnalysisFolderPath', { default: '' });
 const extractPanelTab = defineModel<string>('extractPanelTab', { default: 'drawib' });
 const modelRows = defineModel<ModelRow[]>('modelRows', { required: true });
+const convertRgbaChannelTextures = defineModel<boolean>('convertRgbaChannelTextures', { default: true });
 const fullExtractDataTypeFilter = defineModel<FullExtractDataTypeFilter>('fullExtractDataTypeFilter', { default: 'all' });
 
 defineProps<{
@@ -143,6 +144,11 @@ const emit = defineEmits<{
           </el-table>
         </div>
 
+        <div class="extract-option-row">
+          <el-checkbox v-model="convertRgbaChannelTextures">
+            {{ t('workPage.actions.convertRgbaChannelTextures') }}
+          </el-checkbox>
+        </div>
         <div class="controls-row">
           <el-button type="primary" :loading="isExtracting" @click="emit('extractModels')">
             <el-icon><Download /></el-icon>
@@ -162,6 +168,11 @@ const emit = defineEmits<{
               :value="option.value"
             />
           </el-select>
+        </div>
+        <div class="extract-option-row">
+          <el-checkbox v-model="convertRgbaChannelTextures">
+            {{ t('workPage.actions.convertRgbaChannelTextures') }}
+          </el-checkbox>
         </div>
         <div class="controls-row full-extract-row">
           <el-button type="primary" :loading="isExtracting" @click="emit('fullExtract')">

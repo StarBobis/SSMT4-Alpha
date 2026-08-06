@@ -362,12 +362,14 @@ watch([() => props.tagManagementDialog.editingId, () => props.tagManagementDialo
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.045);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    rgba(10,14,20,0.65);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 20px 56px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.04) inset;
 }
 
 /* ---- Header ---- */
