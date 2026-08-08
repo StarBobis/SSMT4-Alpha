@@ -247,6 +247,9 @@
   },
   "xianzun": {
     "nav": "小尊小尊",
+    "nsfwBlur": "NSFW 屏蔽",
+    "revealImage": "点击显示图片",
+    "hideImage": "点击遮住图片",
     "online": "在线",
     "offline": "未配置 API Key",
     "streaming": "生成中…",

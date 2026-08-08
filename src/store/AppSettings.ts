@@ -220,6 +220,7 @@ export class AppSettings {
 	xianzunSystemPrompt: string = ''
 	xianzunReasoningEffort: XianZunReasoningEffort = 'auto'
 	xianzunApprovalMode: XianZunApprovalMode = 'manual'
+	xianzunNsfwBlur: boolean = true
 
 	constructor(init?: Partial<AppSettings>) {
 		if (init) {
@@ -291,6 +292,7 @@ export class AppSettings {
 		this.xianzunSystemPrompt = init?.xianzunSystemPrompt ?? this.xianzunSystemPrompt
 		this.xianzunReasoningEffort = normalizeReasoningEffort(init?.xianzunReasoningEffort)
 		this.xianzunApprovalMode = normalizeXianZunApprovalMode(init?.xianzunApprovalMode)
+		this.xianzunNsfwBlur = init?.xianzunNsfwBlur ?? this.xianzunNsfwBlur
 		// VersionNumber is always controlled by current app code version,
 		// not by persisted settings.json.
 		this.VersionNumber = AppSettings.CURRENT_VERSION
@@ -358,6 +360,7 @@ export class AppSettings {
 			xianzunSystemPrompt: this.xianzunSystemPrompt,
 			xianzunReasoningEffort: this.xianzunReasoningEffort,
 			xianzunApprovalMode: this.xianzunApprovalMode,
+			xianzunNsfwBlur: this.xianzunNsfwBlur,
 		}
 	}
 }

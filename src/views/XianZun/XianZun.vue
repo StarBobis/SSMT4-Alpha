@@ -8,6 +8,7 @@ import {
   CopyDocument,
   Delete,
   Document,
+  Hide,
   Link as LinkIcon,
   List,
   MagicStick,
@@ -15,6 +16,7 @@ import {
   Setting,
   Tickets,
   VideoPause,
+  View,
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { fetch } from '@tauri-apps/plugin-http'
@@ -118,6 +120,7 @@ const logActiveTab = ref<LogTab>('all')
 const runLogs = ref<LogEntry[]>([])
 const lastSystemPrompt = ref('')
 const reasoningOpenIds = ref<string[]>([])
+const revealedImages = ref<Set<string>>(new Set())
 
 const logTypeLabel = (type: LogType): string => {
   const labels: Record<LogType, string> = {
@@ -1377,9 +1380,18 @@ const onChatContentClick = (event: MouseEvent) => {
     if (payload) void copyText(decodeURIComponent(payload))
     return
   }
-  const img = target.closest('[data-img]') as HTMLElement | null
-  if (img) {
-    const src = img.dataset.img ?? ''
+  const toggleBtn = target.closest('[data-reveal]') as HTMLElement | null
+  if (toggleBtn) {
+    toggleReveal(toggleBtn.dataset.reveal ?? '')
+    return
+  }
+  const box = target.closest('[data-img]') as HTMLElement | null
+  if (box) {
+    const src = box.dataset.img ?? ''
+    if (box.classList.contains('blurred')) {
+      toggleReveal(src)
+      return
+    }
     if (src) previewImage.value = decodeURIComponent(src)
     return
   }
@@ -1390,12 +1402,23 @@ const onChatContentClick = (event: MouseEvent) => {
   }
 }
 
+const toggleReveal = (encoded: string) => {
+  if (!encoded) return
+  const src = decodeURIComponent(encoded)
+  const next = new Set(revealedImages.value)
+  if (next.has(src)) next.delete(src)
+  else next.add(src)
+  revealedImages.value = next
+}
+
 const onChatContentError = (event: Event) => {
   // Images that fail to load (broken URL, offline) are hidden instead of
   // showing a broken-image icon.
   const img = event.target as HTMLImageElement | null
   if (img && img.classList.contains('xz-img')) {
     img.style.display = 'none'
+    const box = img.closest('.xz-img-box') as HTMLElement | null
+    if (box) box.style.display = 'none'
   }
 }
 
@@ -1419,7 +1442,12 @@ const renderInline = (value: string): string => {
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, href: string) => {
     const decoded = href.replace(/&amp;/g, '&')
     const altText = escapeHtml((alt || 'image').trim())
-    return `<img class="xz-img" src="${escapeHtml(decoded)}" alt="${altText}" loading="lazy" data-img="${encodeURIComponent(decoded)}">`
+    const encoded = encodeURIComponent(decoded)
+    const isRevealed = revealedImages.value.has(decoded)
+    const blurEnabled = appSettings.xianzunNsfwBlur
+    const isBlurred = blurEnabled && !isRevealed
+    const toggleLabel = escapeHtml(isRevealed ? t('xianzun.hideImage') : t('xianzun.revealImage'))
+    return `<span class="xz-img-box${isBlurred ? ' blurred' : ''}${isRevealed ? ' revealed' : ''}${blurEnabled ? ' nsfw-on' : ''}" data-img="${encoded}"><img class="xz-img" src="${escapeHtml(decoded)}" alt="${altText}" loading="lazy"><button type="button" class="xz-img-toggle" data-reveal="${encoded}" title="${toggleLabel}" aria-label="${toggleLabel}"><svg class="xz-eye-icon xz-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="xz-eye-icon xz-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></span>`
   })
   // markdown links
   out = out.replace(
@@ -1694,6 +1722,13 @@ onUnmounted(() => {
       </div>
 
       <div class="xz-header-actions">
+        <el-tooltip :content="t('xianzun.nsfwBlur')" placement="bottom" :show-after="250">
+          <label class="xz-nsfw-toggle">
+            <el-switch v-model="appSettings.xianzunNsfwBlur" size="small" :active-icon="View" :inactive-icon="Hide" />
+            <span class="xz-nsfw-label">NSFW</span>
+          </label>
+        </el-tooltip>
+
         <el-select
           v-model="appSettings.xianzunModel"
           class="xz-model-select"
@@ -2267,6 +2302,40 @@ onUnmounted(() => {
 
 .xz-model-select :deep(.el-select__wrapper:hover) {
   background: rgba(var(--theme-surface-tint-rgb), 0.1);
+}
+
+.xz-nsfw-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
+  background: rgba(var(--theme-surface-tint-rgb), 0.06);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.xz-nsfw-toggle:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.1);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.26);
+}
+
+.xz-nsfw-toggle .el-switch {
+  --el-switch-on-color: var(--theme-warning, #e6a23c);
+  --el-switch-on-border-color: var(--theme-warning, #e6a23c);
+}
+
+.xz-nsfw-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.82);
+  user-select: none;
+}
+
+.xz-nsfw-toggle:has(.el-switch.is-checked) .xz-nsfw-label {
+  color: var(--theme-warning);
 }
 
 .xz-icon-btn {
@@ -3297,17 +3366,98 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.xz-img-box {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  margin: 10px 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 .xz-markdown img.xz-img {
   display: block;
   max-width: 100%;
   max-height: 380px;
-  margin: 10px 0;
+  margin: 0;
   border-radius: 12px;
   border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
   cursor: zoom-in;
   object-fit: contain;
   background: rgba(0, 0, 0, 0.25);
+}
+
+.xz-img-box.blurred .xz-img {
+  filter: blur(7px) brightness(0.92) saturate(0.9);
+  transform: scale(1.05);
+  pointer-events: none;
+  cursor: pointer;
+  transition: filter 200ms ease, transform 200ms ease;
+}
+
+.xz-img-box.blurred::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.12));
+  pointer-events: none;
+}
+
+.xz-img-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(12, 12, 20, 0.62);
+  color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.xz-img-box.nsfw-on .xz-img-toggle {
+  display: inline-flex;
+}
+
+.xz-img-toggle:hover {
+  transform: scale(1.08);
+  background: rgba(24, 24, 38, 0.78);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+}
+
+.xz-img-toggle:active {
+  transform: scale(0.96);
+}
+
+.xz-eye-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.xz-eye-closed {
+  display: none;
+}
+
+.xz-img-box.revealed .xz-eye-open {
+  display: none;
+}
+
+.xz-img-box.revealed .xz-eye-closed {
+  display: block;
 }
 
 .xz-markdown code.xz-inline-code {

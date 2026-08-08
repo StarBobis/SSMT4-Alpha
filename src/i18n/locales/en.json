@@ -247,6 +247,9 @@
   },
   "xianzun": {
     "nav": "XianZun",
+    "nsfwBlur": "Blur NSFW images",
+    "revealImage": "Click to reveal image",
+    "hideImage": "Click to cover image",
     "online": "Online",
     "offline": "API key not configured",
     "streaming": "Generating…",
