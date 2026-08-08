@@ -212,7 +212,7 @@ export class AppSettings {
 	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
 	nexusModsApiKey: string = ''
 	nexusModsGameDomain: string = ''
-	// XianZun (小尊小尊) — AI chat agent. OpenAI-compatible endpoint, so it
+	// CheeseCat (芝士猫) — AI chat agent. OpenAI-compatible endpoint, so it
 	// works with DeepSeek out of the box and any compatible provider.
 	xianzunApiKey: string = ''
 	xianzunApiUrl: string = 'https://api.deepseek.com/v1'

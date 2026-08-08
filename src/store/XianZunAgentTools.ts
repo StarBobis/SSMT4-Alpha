@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   XianZun (小尊小尊) — General agent tools
+   CheeseCat (芝士猫) — General agent tools
    ═══════════════════════════════════════════════════════════════
    Common agent capabilities (shell, file read, web fetch) so the
    assistant can inspect the machine and run commands, mirroring the

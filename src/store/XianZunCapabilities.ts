@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   XianZun (小尊小尊) — Full app capability layer
+   CheeseCat (芝士猫) — Full app capability layer
    ═══════════════════════════════════════════════════════════════
    Beyond the 39 Tauri commands (XianZunMcp.ts), this registry
    exposes every public function of the frontend stores / helpers

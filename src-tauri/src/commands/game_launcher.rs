@@ -594,6 +594,7 @@ pub async fn execute_external_program(
     let work_dir = work_dir.unwrap_or_else(|| {
         PathBuf::from(&program_path)
             .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
             .map(|parent| parent.to_string_lossy().to_string())
             .unwrap_or_else(|| ".".to_string())
     });
@@ -623,6 +624,7 @@ pub async fn launch_programs(programs: Vec<ProgramToLaunch>) -> Result<(), Strin
                 let default_work_dir = PathBuf::from(".");
                 path_obj
                     .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
                     .unwrap_or(&default_work_dir)
                     .to_string_lossy()
                     .to_string()

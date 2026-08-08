@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   XianZun (小尊小尊) — MCP tool registry for Tauri commands
+   CheeseCat (芝士猫) — MCP tool registry for Tauri commands
    ═══════════════════════════════════════════════════════════════
    Every #[tauri::command] registered in src-tauri/src/lib.rs is
    wrapped here as an MCP-style tool (name / description /

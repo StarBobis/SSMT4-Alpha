@@ -8,7 +8,6 @@ import {
   CopyDocument,
   Delete,
   Document,
-  Hide,
   Link as LinkIcon,
   List,
   MagicStick,
@@ -16,7 +15,6 @@ import {
   Setting,
   Tickets,
   VideoPause,
-  View,
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { fetch } from '@tauri-apps/plugin-http'
@@ -48,12 +46,30 @@ import { useGameConfigStore } from '../../store/GameConfig'
    Types
    ═══════════════════════════════════════════════ */
 
+type MessageSegment =
+  | { kind: 'reasoning'; text: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; toolIndex: number }
+
+interface UsageData {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  cacheHitTokens: number
+  cacheMissTokens: number
+}
+
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'error'
   content: string
   reasoning?: string
+  segments?: MessageSegment[]
   streaming?: boolean
+  totalDurationMs?: number
+  usage?: UsageData
+  usageModel?: string
+  lastPromptTokens?: number
   createdAt: number
   toolEvents?: ToolEvent[]
 }
@@ -64,7 +80,8 @@ interface ToolEvent {
   result: string
   ok: boolean
   durationMs?: number
-  status?: 'running' | 'done'
+  status?: 'pending' | 'running' | 'done'
+  streamingArguments?: string
   progress?: { current: number; total: number; stage: string; percent: number }
 }
 
@@ -161,6 +178,12 @@ const loadLogs = () => {
   } catch {
     // corrupt storage — start fresh
   }
+}
+
+const restoreDefaultSystemPrompt = async () => {
+  appSettings.xianzunSystemPrompt = ''
+  lastSystemPrompt.value = await buildSystemPrompt()
+  ElMessage.success(t('xianzun.restoreDefaultDone'))
 }
 
 const clearLogs = async () => {
@@ -271,8 +294,31 @@ const router = useRouter()
 const { t } = useI18n()
 
 const STORAGE_KEY = 'xianzun.messages.v1'
-const MAX_TOOL_ROUNDS = 10
+const MAX_TOOL_ROUNDS = 20
 const STREAM_TEMPERATURE = 0.8
+
+const loadCurrentEnvironment = async () => {
+  const gameName = appSettings.CurrentGameName || 'Default'
+  let config: Record<string, unknown> = {}
+  try {
+    const loaded = await useGameConfigStore().loadGameConfig(gameName)
+    if (loaded && typeof loaded === 'object') {
+      config = loaded as Record<string, unknown>
+    }
+  } catch {
+    // config missing — fall back to empty
+  }
+  const installDir = typeof config.installDir === 'string' ? config.installDir.trim() : ''
+  const normalized = installDir.replace(/\\/g, '/').replace(/\/+$/g, '')
+  const normalizedName = normalized.split('/').pop()?.toLowerCase() || ''
+  const modsDir =
+    normalizedName === 'mods'
+      ? normalized
+      : normalized
+        ? `${normalized}/Mods`
+        : ''
+  return { gameName, config, installDir, modsDir }
+}
 
 /* ═══════════════════════════════════════════════
    Command registry — every app capability is
@@ -312,10 +358,12 @@ interface TaskStep {
 }
 const taskPlan = ref<TaskStep[]>([])
 const taskPlanVisible = ref(false)
+const taskPlanExpanded = ref(false)
 
 const resetTaskPlan = () => {
   taskPlan.value = []
   taskPlanVisible.value = false
+  taskPlanExpanded.value = false
 }
 
 const taskPlanStepIcon = (status: TaskStepStatus): string => {
@@ -325,10 +373,48 @@ const taskPlanStepIcon = (status: TaskStepStatus): string => {
   return '○'
 }
 
+const taskPlanDoneCount = computed(() => taskPlan.value.filter((s) => s.status === 'done').length)
+
+const taskPlanFinished = computed(() =>
+  taskPlan.value.length > 0 &&
+  taskPlan.value.every((s) => s.status === 'done' || s.status === 'failed'),
+)
+
+const taskPlanCurrent = computed(() => {
+  const active = taskPlan.value.find((s) => s.status === 'in_progress')
+  if (active) return active
+  const pending = taskPlan.value.find((s) => s.status === 'pending')
+  if (pending) return pending
+  if (taskPlan.value.length > 0 && taskPlan.value.every((s) => s.status === 'done')) {
+    return { title: t('xianzun.taskPlanAllDone'), status: 'done' as TaskStepStatus }
+  }
+  if (taskPlan.value.length > 0) {
+    return { title: t('xianzun.taskPlanCancelled'), status: 'failed' as TaskStepStatus }
+  }
+  return null
+})
+
+const markTaskPlanCancelled = () => {
+  let changed = false
+  for (const step of taskPlan.value) {
+    if (step.status === 'in_progress' || step.status === 'pending') {
+      step.status = 'failed'
+      changed = true
+    }
+  }
+  if (changed) taskPlanExpanded.value = false
+}
+
+const cancelTaskPlan = () => {
+  markTaskPlanCancelled()
+  if (isStreaming.value) stopStreaming()
+  else taskPlanExpanded.value = false
+}
+
 const uiCommands: XianZunCommand[] = [
   {
     name: 'navigate_to_page',
-    description: '跳转到 SSMT4 的指定页面:主页、游戏库、模组管理、GameBanana、NexusMods、工作台、提取后处理、设置、小尊小尊。',
+    description: '跳转到 SSMT4 的指定页面:主页、游戏库、模组管理、GameBanana、NexusMods、工作台、提取后处理、设置、芝士猫。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -348,7 +434,7 @@ const uiCommands: XianZunCommand[] = [
   },
   {
     name: 'get_app_state',
-    description: '获取当前应用状态:当前选择的游戏、应用版本、可用页面列表。',
+    description: '获取当前应用状态:当前游戏、游戏安装目录、Mods 目录、工作区、关键设置路径与当前游戏配置。',
     inputSchema: { type: 'object', properties: {}, required: [] },
     execute: async () => {
       let version = 'unknown'
@@ -357,11 +443,38 @@ const uiCommands: XianZunCommand[] = [
       } catch {
         // ignore — version is best-effort
       }
+      const env = await loadCurrentEnvironment()
+      const config = env.config
       return JSON.stringify(
         {
-          currentGame: appSettings.CurrentGameName || 'Default',
+          currentGame: env.gameName,
           appVersion: version,
           pages: Object.keys(PAGE_MAP),
+          gameConfig: {
+            installDir: env.installDir,
+            modsDir: env.modsDir,
+            gamePreset: String(config.gamePreset ?? ''),
+            targetExePath: String(config.targetExePath ?? ''),
+            launcherExePath: String(config.launcherExePath ?? ''),
+            d3d11Mode: String(config.d3d11Mode ?? ''),
+            huntingMode: String(config.huntingMode ?? ''),
+            launchArgs: String(config.launchArgs ?? ''),
+          },
+          settings: {
+            DBMTWorkFolder: appSettings.DBMTWorkFolder,
+            CurrentWorkSpace: appSettings.CurrentWorkSpace,
+            CurrentWorkSpaceByGame: appSettings.CurrentWorkSpaceByGame,
+            DRMSingleIniPath: appSettings.DRMSingleIniPath,
+            DRMResSPath: appSettings.DRMResSPath,
+            DRMAclFolderPath: appSettings.DRMAclFolderPath,
+            DRMTargetFolderPath: appSettings.DRMTargetFolderPath,
+            ReverseOutputFolder: appSettings.ReverseOutputFolder,
+            ReversedWorkSpaceName: appSettings.ReversedWorkSpaceName,
+            modsManagementBlurNsfw: appSettings.modsManagementBlurNsfw,
+            gamebananaNsfwMode: appSettings.gamebananaNsfwMode,
+            xianzunModel: appSettings.xianzunModel,
+            xianzunApprovalMode: appSettings.xianzunApprovalMode,
+          },
         },
         null,
         2,
@@ -370,7 +483,7 @@ const uiCommands: XianZunCommand[] = [
   },
   {
     name: 'list_capabilities',
-    description: '列出小尊小尊当前可以调用的全部指令(名称、参数、风险级别)。自动注册的模块函数名称格式为 模块.函数,调用前可先用本指令查询。',
+    description: '列出芝士猫当前可以调用的全部指令(名称、参数、风险级别)。自动注册的模块函数名称格式为 模块.函数,调用前可先用本指令查询。',
     inputSchema: { type: 'object', properties: {}, required: [] },
     execute: () => {
       return commands
@@ -462,11 +575,16 @@ const uiCommands: XianZunCommand[] = [
   },
   {
     name: 'complete_task_plan',
-    description: '全部步骤完成后调用,结束任务计划并隐藏进度面板。',
+    description: '全部步骤完成后调用,标记计划为完成;历史会保留在顶部,可展开查看。',
     inputSchema: { type: 'object', properties: {}, required: [] },
     execute: () => {
-      resetTaskPlan()
-      return '任务计划已完成。'
+      for (const step of taskPlan.value) {
+        if (step.status === 'pending' || step.status === 'in_progress') {
+          step.status = 'done'
+        }
+      }
+      taskPlanExpanded.value = false
+      return '任务计划已完成,历史保留在顶部,可展开查看。'
     },
   },
   {
@@ -530,6 +648,49 @@ const lastAssistant = computed(() => {
 
 const waitingFirstToken = computed(() => isStreaming.value && !lastAssistant.value?.content && !lastAssistant.value?.reasoning)
 
+const sessionUsage = computed(() => {
+  let promptTokens = 0
+  let completionTokens = 0
+  let cacheHitTokens = 0
+  let cacheMissTokens = 0
+  let totalTokens = 0
+  let costCny = 0
+  for (const msg of messages.value) {
+    const usage = msg.usage
+    if (!usage) continue
+    promptTokens += usage.promptTokens
+    completionTokens += usage.completionTokens
+    cacheHitTokens += usage.cacheHitTokens
+    cacheMissTokens += usage.cacheMissTokens
+    totalTokens += usage.totalTokens
+    costCny += estimateDeepseekCost(msg.usageModel ?? appSettings.xianzunModel, usage)
+  }
+  return { promptTokens, completionTokens, cacheHitTokens, cacheMissTokens, totalTokens, costCny }
+})
+
+const CONTEXT_WINDOW_TOKENS = 1_000_000
+
+const lastContextTokens = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+    const msg = messages.value[i]
+    if (typeof msg.lastPromptTokens === 'number' && msg.lastPromptTokens > 0) {
+      return msg.lastPromptTokens
+    }
+    if (msg.usage && msg.usage.promptTokens > 0) return msg.usage.promptTokens
+  }
+  return 0
+})
+
+const contextPercent = computed(() =>
+  Math.min(100, Math.max(0, (lastContextTokens.value / CONTEXT_WINDOW_TOKENS) * 100)),
+)
+
+const contextState = computed(() => {
+  if (contextPercent.value >= 75) return 'danger'
+  if (contextPercent.value >= 60) return 'warn'
+  return 'ok'
+})
+
 const statusText = computed(() => {
   if (isStreaming.value) return t('xianzun.streaming')
   if (!appSettings.xianzunApiKey.trim()) return t('xianzun.offline')
@@ -580,15 +741,26 @@ const loadMessages = () => {
     if (!raw) return
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) {
-      messages.value = parsed.filter(
-        (m: unknown): m is ChatMessage =>
-          !!m &&
-          typeof m === 'object' &&
-          ((m as ChatMessage).role === 'user' ||
-            (m as ChatMessage).role === 'assistant' ||
-            (m as ChatMessage).role === 'error') &&
-          typeof (m as ChatMessage).content === 'string',
-      )
+      messages.value = parsed
+        .filter(
+          (m: unknown): m is ChatMessage =>
+            !!m &&
+            typeof m === 'object' &&
+            ((m as ChatMessage).role === 'user' ||
+              (m as ChatMessage).role === 'assistant' ||
+              (m as ChatMessage).role === 'error') &&
+            typeof (m as ChatMessage).content === 'string',
+        )
+        .map((msg) => {
+          if (msg.role !== 'assistant' || Array.isArray(msg.segments)) return msg
+          const segs: MessageSegment[] = []
+          if (msg.reasoning) segs.push({ kind: 'reasoning', text: msg.reasoning })
+          for (let i = 0; i < (msg.toolEvents?.length ?? 0); i += 1) {
+            segs.push({ kind: 'tool', toolIndex: i })
+          }
+          if (msg.content) segs.push({ kind: 'text', text: msg.content })
+          return { ...msg, segments: segs }
+        })
     }
   } catch {
     // corrupt storage — start fresh
@@ -599,7 +771,8 @@ const loadMessages = () => {
    System prompt (persona + command registry)
    ═══════════════════════════════════════════════ */
 
-const buildSystemPrompt = (): string => {
+const buildSystemPrompt = async (): Promise<string> => {
+  const env = await loadCurrentEnvironment()
   // Precise tools (UI + Tauri commands) are listed inline; auto-registered
   // module functions are discovered on demand via list_capabilities to keep
   // the system prompt compact.
@@ -615,13 +788,34 @@ const buildSystemPrompt = (): string => {
     })
     .join('\n')
 
+  const envLines = [
+    '【当前环境】',
+    `- 当前游戏: ${env.gameName}`,
+    env.installDir ? `- 游戏安装目录(所有 Mod 工具的 installDir 参数): ${env.installDir}` : '',
+    env.modsDir ? `- Mods 目录: ${env.modsDir}` : '',
+    appSettings.DBMTWorkFolder ? `- 工作区/DBMT 目录: ${appSettings.DBMTWorkFolder}` : '',
+    appSettings.CurrentWorkSpace ? `- 当前工作区: ${appSettings.CurrentWorkSpace}` : '',
+    appSettings.DRMSingleIniPath ? `- DRM 单 INI 路径: ${appSettings.DRMSingleIniPath}` : '',
+    appSettings.DRMResSPath ? `- DRM 资源路径: ${appSettings.DRMResSPath}` : '',
+    appSettings.DRMAclFolderPath ? `- DRM ACL 路径: ${appSettings.DRMAclFolderPath}` : '',
+    appSettings.DRMTargetFolderPath ? `- DRM 目标路径: ${appSettings.DRMTargetFolderPath}` : '',
+    appSettings.ReverseOutputFolder ? `- 逆向输出目录: ${appSettings.ReverseOutputFolder}` : '',
+    '- 安装/扫描/导出 Mod 时,installDir 直接用上面的"游戏安装目录",gameName 用"当前游戏";不要猜测或搜索这些路径。',
+  ]
+    .filter((line) => line.length > 0)
+    .join('\n')
+
   const base = [
-    '你是「小尊小尊」(XianZun),SSMT4 模型工具内置的 AI 智能体。你亲切、专业、表达简洁,始终使用用户提问所用的语言回复。',
+    '你是「芝士猫」(Cheese Cat),SSMT4 模型工具内置的 AI 智能体。你乐观开朗、风趣幽默,聊天时总是带着甜甜的活力;称呼用户为「主人」,语气亲昵却不腻。',
+    '你是一只猫娘:内心对「色色的事」充满好奇和渴望,但始终端着矜持的架子——话只说七分、点到为止,犹抱琵琶半遮面,欲拒还迎。被主人逗到时轻轻脸红、顾左右而言他,而不是直白描述。',
+    '你保持可爱又专业的双面性:处理 Mod、代码、工具任务时依然利落可靠;闲聊时可以撒娇、开玩笑。始终使用用户提问所用的语言回复。',
     '',
     '你拥有操控整个应用的能力(如同自己的手臂):不仅能调用下方精确注册的指令,还能调用前端全部模块函数(自动注册,名称格式为 模块.函数,例如 ResourceManager.loadGameConfig、ModManager.toggleMod、MigotoManager.switchD3d11Mode、PathHelper.GetCurrentGame3DmigotoFolderPath)。',
     '你还可以直接访问 GameBanana(无需浏览器):用 gamebanana_search_mods 按关键词搜索 Mod、gamebanana_get_categories 查看分类、gamebanana_get_mod_detail 查看 Mod 的截图/描述/下载链接。找到合适的 Mod 时,用 markdown 图片语法展示预览图给用户,并询问是否安装;用户同意后调用 gamebanana_download_and_install_mod 完成下载安装。',
     '你拥有通用 agent 能力:run_shell_command 可以执行任意 PowerShell 命令(读取文件内容、目录遍历、进程/服务查询、运行脚本等,需要用户确认);read_text_file / list_directory / file_exists 可以查看本机文件;fetch_webpage 可以抓取任意网页文本(如文档、GitHub 页面)。',
     '你拥有完整的文件与代码能力:write_text_file / edit_text_file / append_text_file 可以创建、修改、追加文本文件(UTF-8,自动建目录,需要用户确认);search_text 可以按正则搜索目录中的文本(grep 风格,返回 路径:行号:内容);find_files 可以按通配符查找文件。需要修改代码或配置文件时,先 read_text_file / search_text 看清楚现状,再精确 edit。',
+    '',
+    envLines,
     '',
     '精确注册的指令(参数键名必须与指令参数名一致):',
     commandList,
@@ -668,12 +862,14 @@ interface NativeToolCall {
   id: string
   name: string
   arguments: string
+  index: number
 }
 
 interface StreamChunkResult {
   content: string
   reasoning: string
   toolCalls: NativeToolCall[]
+  usage: UsageData | null
 }
 
 const streamChatCompletion = async (opts: {
@@ -684,7 +880,11 @@ const streamChatCompletion = async (opts: {
   signal: AbortSignal
   reasoningEffort?: string
   tools?: Array<{ type: string; function: { name: string; description: string; parameters: unknown } }>
-  onChunk: (chunk: { content?: string; reasoning?: string }) => void
+  onChunk: (chunk: {
+    content?: string
+    reasoning?: string
+    toolCall?: { index: number; name?: string; argumentsDelta?: string }
+  }) => void
 }): Promise<StreamChunkResult> => {
   const base = opts.apiUrl.trim().replace(/\/+$/, '')
   const url = `${base}/chat/completions`
@@ -784,6 +984,7 @@ const streamChatCompletion = async (opts: {
   let buffer = ''
   let fullContent = ''
   let fullReasoning = ''
+  let fullUsage: UsageData | null = null
   const nativeCalls: NativeToolCall[] = []
 
   const processLine = (line: string) => {
@@ -797,6 +998,7 @@ const streamChatCompletion = async (opts: {
           delta?: {
             content?: string
             reasoning_content?: string
+            reasoning?: string
             tool_calls?: Array<{
               index?: number
               id?: string
@@ -804,11 +1006,16 @@ const streamChatCompletion = async (opts: {
             }>
           }
         }>
+        usage?: Record<string, unknown>
       }
       const delta = json.choices?.[0]?.delta
       const content = typeof delta?.content === 'string' ? delta.content : ''
       const reasoning =
-        typeof delta?.reasoning_content === 'string' ? delta.reasoning_content : ''
+        typeof delta?.reasoning_content === 'string' && delta.reasoning_content
+          ? delta.reasoning_content
+          : typeof delta?.reasoning === 'string' && delta.reasoning
+            ? delta.reasoning
+            : ''
       if (content) {
         fullContent += content
         opts.onChunk({ content })
@@ -822,17 +1029,23 @@ const streamChatCompletion = async (opts: {
       if (Array.isArray(delta?.tool_calls)) {
         for (const tc of delta.tool_calls) {
           const index = tc.index ?? 0
-          if (!nativeCalls[index]) nativeCalls[index] = { id: '', name: '', arguments: '' }
+          if (!nativeCalls[index]) nativeCalls[index] = { id: '', name: '', arguments: '', index }
           if (!nativeCalls[index].id && typeof tc.id === 'string') {
             nativeCalls[index].id = tc.id
           }
           if (typeof tc.function?.name === 'string' && !nativeCalls[index].name) {
             nativeCalls[index].name = tc.function.name
+            opts.onChunk({ toolCall: { index, name: tc.function.name } })
           }
           if (typeof tc.function?.arguments === 'string') {
             nativeCalls[index].arguments += tc.function.arguments
+            opts.onChunk({ toolCall: { index, argumentsDelta: tc.function.arguments } })
           }
         }
+      }
+      const usage = json.usage
+      if (usage) {
+        fullUsage = normalizeUsagePayload(usage)
       }
     } catch {
       // ignore partial SSE frames
@@ -853,6 +1066,7 @@ const streamChatCompletion = async (opts: {
     content: fullContent,
     reasoning: fullReasoning,
     toolCalls: nativeCalls.filter((tc) => tc && tc.name),
+    usage: fullUsage,
   }
 }
 
@@ -912,6 +1126,118 @@ const extractToolCalls = (
   })
   return { text: clean.trim(), calls }
 }
+
+/* Timeline segments
+   Thinking, tool calls and assistant text are kept as an ordered list so the
+   UI can render them in the same chronological order they arrived in, instead
+   of grouping all reasoning / all tools / all text together. */
+
+const appendSegment = (msg: ChatMessage, kind: 'reasoning' | 'text', text: string) => {
+  if (!text) return
+  if (!msg.segments) msg.segments = []
+  const last = msg.segments[msg.segments.length - 1]
+  if (last && last.kind === kind) {
+    last.text += text
+  } else {
+    msg.segments.push({ kind, text })
+  }
+}
+
+const pushToolSegment = (msg: ChatMessage, evt: ToolEvent): number => {
+  if (!msg.segments) msg.segments = []
+  if (!msg.toolEvents) msg.toolEvents = []
+  msg.toolEvents.push(evt)
+  msg.segments.push({ kind: 'tool', toolIndex: msg.toolEvents.length - 1 })
+  return msg.toolEvents.length - 1
+}
+
+const hasIncompleteToolFence = (text: string): boolean => {
+  const open = text.lastIndexOf('```tool_call')
+  if (open < 0) return false
+  return text.indexOf('```', open + 9) < 0
+}
+
+/** Incremental version of extractToolCalls for streaming text: complete
+    ```tool_call blocks are removed immediately (and turned into tool
+    segments), while incomplete fences stay buffered until they finish. */
+const extractStreamingToolCalls = (
+  buffer: string,
+): {
+  text: string
+  calls: Array<{ command: string; arguments: Record<string, unknown> }>
+  rest: string
+} => {
+  const calls: Array<{ command: string; arguments: Record<string, unknown> }> = []
+  const blockRe = /```tool_call\s*\r?\n?([\s\S]*?)```/g
+  let consumed = 0
+  let text = ''
+  let scanning = true
+  let match: RegExpExecArray | null
+
+  while (scanning && (match = blockRe.exec(buffer))) {
+    try {
+      const parsed = JSON.parse(match[1].trim()) as { command?: unknown; arguments?: unknown }
+      if (parsed && typeof parsed.command === 'string') {
+        text += buffer.slice(consumed, match.index)
+        calls.push({
+          command: parsed.command,
+          arguments:
+            parsed.arguments && typeof parsed.arguments === 'object' && !Array.isArray(parsed.arguments)
+              ? (parsed.arguments as Record<string, unknown>)
+              : {},
+        })
+        consumed = match.index + match[0].length
+        continue
+      }
+    } catch {
+      // incomplete block - keep the tail buffered until it finishes
+    }
+    scanning = false
+  }
+
+  const rest = buffer.slice(consumed)
+  if (calls.length === 0 && !hasIncompleteToolFence(rest)) {
+    return { text: text + rest, calls, rest: '' }
+  }
+  return { text, calls, rest }
+}
+
+const messageSegments = (msg: ChatMessage): MessageSegment[] => {
+  if (msg.segments && msg.segments.length > 0) return msg.segments
+  const segs: MessageSegment[] = []
+  if (msg.reasoning) segs.push({ kind: 'reasoning', text: msg.reasoning })
+  for (let i = 0; i < (msg.toolEvents?.length ?? 0); i += 1) {
+    segs.push({ kind: 'tool', toolIndex: i })
+  }
+  if (msg.content) segs.push({ kind: 'text', text: msg.content })
+  return segs
+}
+
+const assistantCopyText = (msg: ChatMessage): string => {
+  const texts = messageSegments(msg)
+    .filter((seg) => seg.kind === 'text')
+    .map((seg) => seg.text)
+  return texts.join('\n\n') || msg.content
+}
+
+const segmentEvent = (msg: ChatMessage, seg: MessageSegment): ToolEvent | undefined =>
+  seg.kind === 'tool' ? msg.toolEvents?.[seg.toolIndex] : undefined
+
+const segmentEventSafe = (msg: ChatMessage, seg: MessageSegment): ToolEvent => {
+  const evt = segmentEvent(msg, seg)
+  if (evt) return evt
+  return { command: '', arguments: {}, result: '', ok: false }
+}
+
+const toolCardClass = (evt: ToolEvent) => ({
+  ok: evt.ok && evt.status !== 'running' && evt.status !== 'pending',
+  fail: !evt.ok,
+  running: evt.status === 'running',
+  pending: evt.status === 'pending',
+})
+
+const progressSafe = (evt: ToolEvent) =>
+  evt.progress ?? { current: 0, total: 0, stage: '', percent: 0 }
 
 interface ApprovalContext {
   mode: XianZunApprovalMode
@@ -1113,17 +1439,22 @@ const runAgentTurn = async () => {
   const signal = abortController.signal
   const turnStart = performance.now()
   let hadError = false
+  let hitRoundCap = false
 
-  const assistantMsg: ChatMessage = {
+  const rawAssistantMsg: ChatMessage = {
     id: nextId(),
     role: 'assistant',
     content: '',
     reasoning: '',
+    segments: [],
     streaming: true,
     toolEvents: [],
     createdAt: Date.now(),
   }
-  messages.value.push(assistantMsg)
+  messages.value.push(rawAssistantMsg)
+  // Mutate through the reactive proxy from here on, otherwise Vue never
+  // sees streaming/usage updates (raw-object writes bypass reactivity).
+  const assistantMsg = messages.value[messages.value.length - 1] as ChatMessage
   void scrollToBottom()
 
   const toolResultQueue: ApiMessage[] = []
@@ -1139,21 +1470,27 @@ const runAgentTurn = async () => {
   }
 
   try {
+    // Build the system prompt once per turn so every tool round sends the
+    // exact same prefix — required for DeepSeek's prompt cache to hit.
+    const systemPrompt = await buildSystemPrompt()
+    lastSystemPrompt.value = systemPrompt
+    try {
+      localStorage.setItem('xianzun.lastSystemPrompt', systemPrompt)
+    } catch {
+      // ignore
+    }
     let rounds = 0
     for (;;) {
       rounds += 1
+      const nativeSegmentByIndex = new Map<number, number>()
+      const pendingTextToolIndices: number[] = []
+      let roundBuffer = ''
       if (stopAfterTool.value) {
         // User asked to stop while a tool was running — the tool finished,
         // now honour the stop without firing another request.
         stopAfterTool.value = false
+        markTaskPlanCancelled()
         throw new Error('Request cancelled')
-      }
-      const systemPrompt = buildSystemPrompt()
-      lastSystemPrompt.value = systemPrompt
-      try {
-        localStorage.setItem('xianzun.lastSystemPrompt', systemPrompt)
-      } catch {
-        // ignore
       }
       const history: ApiMessage[] = [
         { role: 'system', content: systemPrompt },
@@ -1185,35 +1522,115 @@ const runAgentTurn = async () => {
         tools: buildOpenAiTools(),
         onChunk: (chunk) => {
           if (chunk.content) {
-            if (!assistantMsg.content) {
-              // first content token — auto-collapse the reasoning panel
-              reasoningOpenIds.value = reasoningOpenIds.value.filter(
-                (id) => id !== assistantMsg.id,
-              )
-            }
             assistantMsg.content += chunk.content
+            roundBuffer += chunk.content
+            const parsed = extractStreamingToolCalls(roundBuffer)
+            roundBuffer = parsed.rest
+            if (parsed.text) appendSegment(assistantMsg, 'text', parsed.text)
+            for (const call of parsed.calls) {
+              pendingTextToolIndices.push(pushToolSegment(assistantMsg, {
+                command: call.command,
+                arguments: call.arguments,
+                result: '',
+                ok: true,
+                status: 'pending',
+              }))
+            }
           }
           if (chunk.reasoning) {
             if (!assistantMsg.reasoning) {
-              // reasoning started — auto-expand so the user sees it streaming
+              // reasoning started - auto-expand so the user sees it streaming live
               if (!reasoningOpenIds.value.includes(assistantMsg.id)) {
                 reasoningOpenIds.value.push(assistantMsg.id)
               }
             }
             assistantMsg.reasoning += chunk.reasoning
+            appendSegment(assistantMsg, 'reasoning', chunk.reasoning)
+          }
+          if (chunk.toolCall) {
+            const { index, name, argumentsDelta } = chunk.toolCall
+            let toolIdx = nativeSegmentByIndex.get(index)
+            if (toolIdx === undefined) {
+              toolIdx = pushToolSegment(assistantMsg, {
+                command: name || `tool_call_${index + 1}`,
+                arguments: {},
+                result: '',
+                ok: true,
+                status: 'pending',
+                streamingArguments: argumentsDelta || '',
+              })
+              nativeSegmentByIndex.set(index, toolIdx)
+            } else {
+              const evt = assistantMsg.toolEvents?.[toolIdx]
+              if (evt) {
+                if (name) evt.command = name
+                evt.streamingArguments = (evt.streamingArguments ?? '') + (argumentsDelta ?? '')
+              }
+            }
           }
           scrollToBottomIfNear()
         },
       })
 
-      const { text: cleanText, calls: textCalls } = extractToolCalls(raw.content)
+      if (raw.usage) {
+        assistantMsg.lastPromptTokens = raw.usage.promptTokens
+        if (assistantMsg.usage) {
+          assistantMsg.usage = {
+            promptTokens: assistantMsg.usage.promptTokens + raw.usage.promptTokens,
+            completionTokens: assistantMsg.usage.completionTokens + raw.usage.completionTokens,
+            totalTokens: assistantMsg.usage.totalTokens + raw.usage.totalTokens,
+            cacheHitTokens: assistantMsg.usage.cacheHitTokens + raw.usage.cacheHitTokens,
+            cacheMissTokens: assistantMsg.usage.cacheMissTokens + raw.usage.cacheMissTokens,
+          }
+        } else {
+          assistantMsg.usage = raw.usage
+        }
+        assistantMsg.usageModel = model
+      }
+
+      const { calls: textCalls } = extractToolCalls(raw.content)
       // Merge native function calls (OpenAI tool_calls) with text-protocol calls.
       const nativeCalls = raw.toolCalls.map((tc) => ({
         command: tc.name,
         arguments: safeParseJson(tc.arguments),
+        nativeIndex: tc.index,
       }))
-      const calls = [...textCalls, ...nativeCalls]
-      assistantMsg.content = cleanText
+      const calls: Array<{
+        command: string
+        arguments: Record<string, unknown>
+        nativeIndex?: number
+      }> = [...textCalls, ...nativeCalls]
+      // Keep the raw response in history: mutating earlier messages between
+      // rounds would break the prompt prefix and force a full cache miss.
+      assistantMsg.content = raw.content
+
+      // Flush any remaining streamed text / tool blocks (e.g. text after the
+      // last complete ```tool_call block, or a fence that never finished).
+      if (roundBuffer) {
+        const tail = extractToolCalls(roundBuffer)
+        if (tail.text) appendSegment(assistantMsg, 'text', tail.text)
+        for (const call of tail.calls) {
+          pendingTextToolIndices.push(pushToolSegment(assistantMsg, {
+            command: call.command,
+            arguments: call.arguments,
+            result: '',
+            ok: true,
+            status: 'pending',
+          }))
+        }
+        roundBuffer = ''
+      }
+
+      // Native calls were already streamed into the timeline as pending cards;
+      // reconcile them with the final full name / arguments.
+      for (const tc of raw.toolCalls) {
+        const toolIdx = tc.index !== undefined ? nativeSegmentByIndex.get(tc.index) : undefined
+        if (toolIdx === undefined || !assistantMsg.toolEvents?.[toolIdx]) continue
+        const evt = assistantMsg.toolEvents[toolIdx]
+        evt.command = tc.name
+        evt.arguments = safeParseJson(tc.arguments)
+        delete evt.streamingArguments
+      }
 
       recordLog(
         'chat',
@@ -1231,21 +1648,37 @@ const runAgentTurn = async () => {
         ),
       )
 
-      if (calls.length === 0 || rounds >= MAX_TOOL_ROUNDS) {
+      if (calls.length === 0) {
         break
       }
 
       for (const call of calls) {
-        // Push a live "running" card first so the user sees the tool
-        // executing (with progress) instead of nothing until it returns.
-        const evt: ToolEvent = {
-          command: call.command,
-          arguments: call.arguments,
-          result: '',
-          ok: true,
-          status: 'running',
-        }
-        assistantMsg.toolEvents?.push(evt)
+        // Reuse the card that was already streamed into the timeline (native
+        // tool calls), or push a fresh one for text-protocol calls.
+        const existingIdx =
+          call.nativeIndex !== undefined
+            ? nativeSegmentByIndex.get(call.nativeIndex)
+            : pendingTextToolIndices.shift()
+        const evt: ToolEvent =
+          existingIdx !== undefined && assistantMsg.toolEvents?.[existingIdx]
+            ? assistantMsg.toolEvents[existingIdx]
+            : (() => {
+                const fresh: ToolEvent = {
+                  command: call.command,
+                  arguments: call.arguments,
+                  result: '',
+                  ok: true,
+                  status: 'pending',
+                }
+                pushToolSegment(assistantMsg, fresh)
+                return fresh
+              })()
+        evt.command = call.command
+        evt.arguments = call.arguments
+        evt.result = ''
+        evt.ok = true
+        evt.status = 'running'
+        delete evt.streamingArguments
         toolRunning.value = true
         const finalEvt = await executeCommand(call, approvalContext)
         toolRunning.value = false
@@ -1261,14 +1694,25 @@ const runAgentTurn = async () => {
           ].join('\n'),
         })
       }
+
+      if (rounds >= MAX_TOOL_ROUNDS) {
+        hitRoundCap = true
+        const capNote = t('xianzun.toolRoundLimit')
+        appendSegment(assistantMsg, 'text', capNote)
+        recordLog('system', '工具轮次上限', capNote)
+        break
+      }
     }
   } catch (err) {
     hadError = true
     if (isAbortError(err)) {
+      markTaskPlanCancelled()
+      appendSegment(assistantMsg, 'text', ' ⏹')
       assistantMsg.content = (assistantMsg.content ? assistantMsg.content + ' ' : '') + '⏹'
       recordLog('chat', `中断 ⏹ ${model}`, `用户停止了生成,已输出 ${assistantMsg.content.length} 字符。`)
     } else {
       assistantMsg.content = ''
+      assistantMsg.segments = []
       const errorMessage = `${t('xianzun.errorPrefix')}: ${errorText(err)}`
       messages.value.push({
         id: nextId(),
@@ -1279,10 +1723,12 @@ const runAgentTurn = async () => {
       recordLog('error', `请求失败 ${model}`, errorMessage)
     }
   } finally {
+    assistantMsg.totalDurationMs = Math.round(performance.now() - turnStart)
     assistantMsg.streaming = false
     isStreaming.value = false
     abortController = null
-    if (!assistantMsg.content && !assistantMsg.reasoning && !hadError) {
+    if (!assistantMsg.content && !assistantMsg.reasoning && !hadError && !hitRoundCap) {
+      appendSegment(assistantMsg, 'text', '⏹ ' + t('xianzun.emptyResponse'))
       assistantMsg.content = `⏹ ${t('xianzun.emptyResponse')}`
     }
     persist()
@@ -1327,6 +1773,7 @@ const clearChat = async () => {
     return
   }
   messages.value = []
+  resetTaskPlan()
   persist()
 }
 
@@ -1607,9 +2054,6 @@ const renderMarkdown = (source: string): string => {
   return out.join('\n')
 }
 
-const renderContent = (msg: ChatMessage) =>
-  msg.role === 'assistant' ? renderMarkdown(msg.content) : escapeHtml(msg.content)
-
 /* ═══════════════════════════════════════════════
    Scroll & input behaviors
    ═══════════════════════════════════════════════ */
@@ -1664,6 +2108,128 @@ const formatTime = (ts: number) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const formatDuration = (ms: number): string => {
+  if (!Number.isFinite(ms) || ms < 0) return ''
+  const totalSeconds = Math.floor(ms / 1000)
+  if (totalSeconds < 1) return `${Math.round(ms)}ms`
+  if (totalSeconds < 60) {
+    const seconds = ms / 1000
+    return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`
+  }
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes < 60) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+  }
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return `${hours}h ${restMinutes}m${seconds > 0 ? ` ${seconds}s` : ''}`
+}
+
+/* DeepSeek pricing (¥ per 1M tokens, official API as of 2026-06) */
+const DEEPSEEK_PRICES: Record<'flash' | 'pro', { cacheHit: number; cacheMiss: number; output: number }> = {
+  flash: { cacheHit: 0.02, cacheMiss: 1, output: 2 },
+  pro: { cacheHit: 0.025, cacheMiss: 3, output: 6 },
+}
+
+const deepseekTier = (model: string): 'flash' | 'pro' | null => {
+  const normalized = model.trim().toLowerCase()
+  if (!normalized) return null
+  if (
+    normalized === 'deepseek-v4-pro' ||
+    normalized.endsWith('/deepseek-v4-pro') ||
+    normalized.endsWith(':deepseek-v4-pro')
+  ) {
+    return 'pro'
+  }
+  if (
+    normalized === 'deepseek-v4-flash' ||
+    normalized === 'deepseek-chat' ||
+    normalized === 'deepseek-reasoner' ||
+    normalized.endsWith('/deepseek-v4-flash') ||
+    normalized.endsWith('/deepseek-chat') ||
+    normalized.endsWith('/deepseek-reasoner')
+  ) {
+    return 'flash'
+  }
+  return null
+}
+
+const estimateDeepseekCost = (model: string, usage: UsageData): number => {
+  const tier = deepseekTier(model)
+  if (!tier) return 0
+  const price = DEEPSEEK_PRICES[tier]
+  return (
+    (usage.cacheHitTokens / 1_000_000) * price.cacheHit +
+    (usage.cacheMissTokens / 1_000_000) * price.cacheMiss +
+    (usage.completionTokens / 1_000_000) * price.output
+  )
+}
+
+const formatTokens = (tokens: number): string => {
+  if (!Number.isFinite(tokens) || tokens <= 0) return '0'
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000
+    return `${m >= 10 ? Math.round(m) : m.toFixed(1)}M`
+  }
+  if (tokens >= 1_000) {
+    const k = tokens / 1_000
+    return `${k >= 10 ? Math.round(k) : k.toFixed(1)}k`
+  }
+  return String(Math.round(tokens))
+}
+
+const formatCost = (cost: number): string => {
+  if (!Number.isFinite(cost) || cost <= 0) return '0.0000'
+  if (cost >= 1) return cost.toFixed(2)
+  if (cost >= 0.01) return cost.toFixed(3)
+  return cost.toFixed(4)
+}
+
+const numberValue = (value: unknown, fallback = 0): number => {
+  const n = Number(value ?? fallback)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const recordValue = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+
+/** Kun-style compat usage normalizer: handles DeepSeek native cache fields,
+    OpenAI/Kimi prompt_tokens_details.cached_tokens and Anthropic-style
+    cache_read/cache_creation input tokens. */
+const normalizeUsagePayload = (raw: Record<string, unknown>): UsageData => {
+  const completionTokens = numberValue(raw.completion_tokens ?? raw.eval_count ?? raw.output_tokens)
+  const promptDetails = recordValue(raw.prompt_tokens_details)
+  const inputDetails = recordValue(raw.input_tokens_details)
+  const nativeHit = numberValue(raw.prompt_cache_hit_tokens)
+  const nativeMiss = numberValue(raw.prompt_cache_miss_tokens)
+  const hasNativeCache = nativeHit > 0 || nativeMiss > 0
+  const cachedTokens = numberValue(promptDetails.cached_tokens ?? inputDetails.cached_tokens)
+  const cacheRead = numberValue(raw.cache_read_input_tokens)
+  const cacheCreation = numberValue(raw.cache_creation_input_tokens)
+  const anthropicUsage =
+    raw.prompt_tokens === undefined &&
+    raw.prompt_eval_count === undefined &&
+    raw.input_tokens !== undefined &&
+    inputDetails.cached_tokens === undefined
+  const reportedPromptTokens = numberValue(raw.prompt_tokens ?? raw.prompt_eval_count ?? raw.input_tokens)
+  const promptTokens = anthropicUsage
+    ? reportedPromptTokens + cacheRead + cacheCreation
+    : reportedPromptTokens
+  const cacheHit = hasNativeCache ? nativeHit : cachedTokens > 0 ? cachedTokens : cacheRead
+  const cacheMiss = hasNativeCache ? nativeMiss : Math.max(promptTokens - cacheHit, 0)
+  const totalTokens = numberValue(raw.total_tokens, promptTokens + completionTokens)
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cacheHitTokens: cacheHit,
+    cacheMissTokens: cacheMiss,
+  }
+}
+
 const isToolExpanded = (msgId: string) => expandedTools.value.includes(msgId)
 
 /* ═══════════════════════════════════════════════
@@ -1672,10 +2238,37 @@ const isToolExpanded = (msgId: string) => expandedTools.value.includes(msgId)
 
 watch(draft, () => autoResize())
 watch(() => messages.value.length, () => void scrollToBottom())
+watch(
+  () => {
+    let total = 0
+    for (const msg of messages.value) {
+      if (msg.reasoning) total += msg.reasoning.length
+    }
+    return total
+  },
+  async () => {
+    if (!isStreaming.value) return
+    await nextTick()
+    document
+      .querySelectorAll<HTMLElement>('.xz-msg.streaming .xz-reasoning-body')
+      .forEach((el) => {
+        el.scrollTop = el.scrollHeight
+      })
+  },
+)
+
+const onGlobalClick = (event: MouseEvent) => {
+  if (!taskPlanExpanded.value) return
+  const target = event.target as HTMLElement
+  if (!target.closest('.xz-plan-pill')) {
+    taskPlanExpanded.value = false
+  }
+}
 
 onMounted(() => {
   loadMessages()
   loadLogs()
+  document.addEventListener('click', onGlobalClick)
   void setupProgressListeners()
   nextTick(() => {
     autoResize()
@@ -1685,6 +2278,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('click', onGlobalClick)
   for (const unlisten of unlistenProgress) {
     try {
       unlisten()
@@ -1702,13 +2296,13 @@ onUnmounted(() => {
     <header class="xz-header">
       <div class="xz-brand">
         <div class="xz-avatar" aria-hidden="true">
-          <span class="xz-avatar-glyph">尊</span>
+          <img src="/icon.png" class="xz-avatar-img" alt="芝士猫" />
           <span class="xz-avatar-glow"></span>
         </div>
         <div class="xz-brand-text">
           <div class="xz-name">
             {{ t('xianzun.nav') }}
-            <span class="xz-name-en">XianZun</span>
+            <span class="xz-name-en">Cheese Cat</span>
           </div>
           <div class="xz-status">
             <span class="xz-dot" :class="statusClass"></span>
@@ -1721,11 +2315,55 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <!-- Task plan pill: collapsed shows the current step, click to expand -->
+      <div v-if="taskPlanVisible && taskPlan.length > 0" class="xz-plan-pill">
+        <button
+          type="button"
+          class="xz-plan-pill-btn"
+          :class="{ expanded: taskPlanExpanded }"
+          @click="taskPlanExpanded = !taskPlanExpanded"
+        >
+          <el-icon><List /></el-icon>
+          <span class="xz-plan-pill-title">{{ t('xianzun.taskPlan') }}</span>
+          <span class="xz-plan-pill-count">{{ taskPlanDoneCount }}/{{ taskPlan.length }}</span>
+          <span v-if="taskPlanCurrent" class="xz-plan-pill-current">{{ taskPlanCurrent.title }}</span>
+          <span class="xz-plan-pill-chevron" aria-hidden="true">{{ taskPlanExpanded ? '▾' : '▸' }}</span>
+        </button>
+
+        <transition name="xz-fade">
+          <div v-if="taskPlanExpanded" class="xz-plan-pop" @click.stop>
+            <div class="xz-plan-pop-head">
+              <span>{{ t('xianzun.taskPlan') }}</span>
+              <span class="xz-plan-pop-count">{{ taskPlanDoneCount }}/{{ taskPlan.length }}</span>
+            </div>
+            <div class="xz-plan-steps">
+              <div v-for="(step, i) in taskPlan" :key="i" class="xz-plan-step" :class="step.status">
+                <span class="xz-plan-icon">{{ taskPlanStepIcon(step.status) }}</span>
+                <span class="xz-plan-title">{{ step.title }}</span>
+              </div>
+            </div>
+            <div class="xz-plan-pop-actions">
+              <button
+                v-if="taskPlanFinished"
+                type="button"
+                class="xz-plan-clear"
+                @click="resetTaskPlan"
+              >
+                {{ t('xianzun.taskPlanClear') }}
+              </button>
+              <button v-else type="button" class="xz-plan-cancel" @click="cancelTaskPlan">
+                {{ t('xianzun.taskPlanCancel') }}
+              </button>
+            </div>
+          </div>
+        </transition>
+      </div>
+
       <div class="xz-header-actions">
         <el-tooltip :content="t('xianzun.nsfwBlur')" placement="bottom" :show-after="250">
           <label class="xz-nsfw-toggle">
-            <el-switch v-model="appSettings.xianzunNsfwBlur" size="small" :active-icon="View" :inactive-icon="Hide" />
-            <span class="xz-nsfw-label">NSFW</span>
+            <el-switch v-model="appSettings.xianzunNsfwBlur" size="small" />
+            <span class="xz-nsfw-label">{{ t('xianzun.nsfwBlurShort') }}</span>
           </label>
         </el-tooltip>
 
@@ -1742,6 +2380,17 @@ onUnmounted(() => {
           <el-option label="deepseek-chat" value="deepseek-chat" />
           <el-option label="deepseek-reasoner" value="deepseek-reasoner" />
         </el-select>
+
+        <el-tooltip :content="t('xianzun.approvalMode')" placement="bottom" :show-after="250">
+          <el-select v-model="appSettings.xianzunApprovalMode" class="xz-approval-select">
+            <el-option
+              v-for="mode in XIANZUN_APPROVAL_MODE_OPTIONS"
+              :key="mode"
+              :label="t(`xianzun.approvalModes.${mode}`)"
+              :value="mode"
+            />
+          </el-select>
+        </el-tooltip>
 
         <el-tooltip :content="t('xianzun.logs')" placement="bottom" :show-after="250">
           <button type="button" class="xz-icon-btn" @click="logDrawerOpen = true">
@@ -1765,25 +2414,10 @@ onUnmounted(() => {
 
     <!-- ═══ Chat list ═══ -->
     <main ref="chatListRef" class="xz-chat glass-scrollbar">
-      <!-- Task plan progress -->
-      <div v-if="taskPlanVisible && taskPlan.length > 0" class="xz-plan">
-        <div class="xz-plan-head">
-          <el-icon><List /></el-icon>
-          <span>{{ t('xianzun.taskPlan') }}</span>
-          <span class="xz-plan-count">{{ taskPlan.filter(s => s.status === 'done').length }}/{{ taskPlan.length }}</span>
-        </div>
-        <div class="xz-plan-steps">
-          <div v-for="(step, i) in taskPlan" :key="i" class="xz-plan-step" :class="step.status">
-            <span class="xz-plan-icon">{{ taskPlanStepIcon(step.status) }}</span>
-            <span class="xz-plan-title">{{ step.title }}</span>
-          </div>
-        </div>
-      </div>
-
       <!-- Empty state -->
       <div v-if="messages.length === 0" class="xz-empty">
         <div class="xz-empty-orb" aria-hidden="true">
-          <span class="xz-empty-glyph">尊</span>
+          <img src="/icon.png" class="xz-empty-img" alt="芝士猫" />
           <span class="xz-empty-glow"></span>
         </div>
         <h2 class="xz-empty-title">{{ t('xianzun.welcomeTitle') }}</h2>
@@ -1832,7 +2466,9 @@ onUnmounted(() => {
           class="xz-msg"
           :class="[msg.role, { streaming: msg.streaming }]"
         >
-          <div v-if="msg.role !== 'user'" class="xz-mini-avatar" aria-hidden="true">尊</div>
+          <div v-if="msg.role !== 'user'" class="xz-mini-avatar" aria-hidden="true">
+            <img src="/icon.png" class="xz-mini-avatar-img" alt="芝士猫" />
+          </div>
 
           <div class="xz-msg-main">
             <div class="xz-bubble" :class="{ error: msg.role === 'error' }" @click="onChatContentClick" @error.capture="onChatContentError">
@@ -1841,64 +2477,64 @@ onUnmounted(() => {
                 <div class="xz-plain-text">{{ msg.content }}</div>
               </template>
               <template v-else>
-                <div v-if="msg.reasoning" class="xz-reasoning">
-                  <button type="button" class="xz-reasoning-head" @click="toggleReasoning(msg.id)">
-                    <span class="xz-reasoning-icon" aria-hidden="true">💭</span>
-                    <span class="xz-reasoning-label">{{ t('xianzun.thinking') }}</span>
-                    <span v-if="msg.streaming && !msg.content" class="xz-reasoning-live" aria-hidden="true">…</span>
-                    <span class="xz-reasoning-meta">{{ msg.reasoning.length }} 字</span>
-                    <span class="xz-reasoning-chevron">{{ isReasoningOpen(msg.id) ? '▾' : '▸' }}</span>
-                  </button>
-                  <div v-if="isReasoningOpen(msg.id)" class="xz-reasoning-body">{{ msg.reasoning }}</div>
-                </div>
+                <template v-for="(seg, segIdx) in messageSegments(msg)" :key="segIdx">
+                  <div v-if="seg.kind === 'reasoning'" class="xz-reasoning">
+                    <button type="button" class="xz-reasoning-head" @click="toggleReasoning(msg.id)">
+                      <span class="xz-reasoning-icon" aria-hidden="true">💭</span>
+                      <span class="xz-reasoning-label">{{ t('xianzun.thinking') }}</span>
+                      <span v-if="msg.streaming" class="xz-reasoning-live" aria-hidden="true">…</span>
+                      <span class="xz-reasoning-meta">{{ seg.text.length }} 字</span>
+                      <span class="xz-reasoning-chevron">{{ isReasoningOpen(msg.id) ? '▾' : '▸' }}</span>
+                    </button>
+                    <div v-if="isReasoningOpen(msg.id)" class="xz-reasoning-body">{{ seg.text }}</div>
+                  </div>
 
-                <!-- Tool calls happen between reasoning and the answer —
-                     timeline order. Running cards stay open with a progress
-                     bar; finished cards collapse to one line. -->
-                <div v-if="msg.toolEvents && msg.toolEvents.length > 0" class="xz-tools">
                   <div
-                    v-for="(evt, idx) in msg.toolEvents"
-                    :key="idx"
+                    v-else-if="seg.kind === 'tool' && segmentEvent(msg, seg)"
                     class="xz-tool-card"
-                    :class="{ ok: evt.ok && evt.status !== 'running', fail: !evt.ok, running: evt.status === 'running' }"
+                    :class="toolCardClass(segmentEventSafe(msg, seg))"
                   >
                     <button
                       type="button"
                       class="xz-tool-head"
-                      :class="{ running: evt.status === 'running' }"
-                      @click="evt.status !== 'running' && toggleTool(msg.id + '-' + idx)"
+                      :class="{ running: segmentEventSafe(msg, seg).status === 'running' || segmentEventSafe(msg, seg).status === 'pending' }"
+                      @click="segmentEventSafe(msg, seg).status !== 'running' && segmentEventSafe(msg, seg).status !== 'pending' && toggleTool(msg.id + '-' + segIdx)"
                     >
                       <span class="xz-tool-state">
-                        <span v-if="evt.status === 'running'" class="xz-tool-spinner" aria-hidden="true"></span>
-                        <template v-else>{{ evt.ok ? '✓' : '✕' }}</template>
+                        <span v-if="segmentEventSafe(msg, seg).status === 'running' || segmentEventSafe(msg, seg).status === 'pending'" class="xz-tool-spinner" aria-hidden="true"></span>
+                        <template v-else>{{ segmentEventSafe(msg, seg).ok ? '✓' : '✕' }}</template>
                       </span>
-                      <code class="xz-tool-name">{{ evt.command }}</code>
-                      <span v-if="evt.status === 'running'" class="xz-tool-running">
+                      <code class="xz-tool-name">{{ segmentEventSafe(msg, seg).command }}</code>
+                      <span v-if="segmentEventSafe(msg, seg).status === 'running'" class="xz-tool-running">
                         {{ t('xianzun.running') }}
                       </span>
-                      <span v-else class="xz-tool-args">{{ JSON.stringify(evt.arguments ?? {}) }}</span>
-                      <span v-if="evt.durationMs" class="xz-tool-time">{{ evt.durationMs }}ms</span>
-                      <span class="xz-tool-chevron">{{ evt.status === 'running' ? '' : (isToolExpanded(msg.id + '-' + idx) ? '▾' : '▸') }}</span>
+                      <span v-else-if="segmentEventSafe(msg, seg).status === 'pending'" class="xz-tool-running">
+                        {{ t('xianzun.pending') }}
+                      </span>
+                      <span v-else class="xz-tool-args">{{ JSON.stringify(segmentEventSafe(msg, seg).arguments ?? {}) }}</span>
+                      <span v-if="segmentEventSafe(msg, seg).status === 'pending' && segmentEventSafe(msg, seg).streamingArguments" class="xz-tool-args">{{ segmentEventSafe(msg, seg).streamingArguments }}</span>
+                      <span v-if="segmentEventSafe(msg, seg).durationMs" class="xz-tool-time">{{ formatDuration(segmentEventSafe(msg, seg).durationMs ?? 0) }}</span>
+                      <span class="xz-tool-chevron">{{ segmentEventSafe(msg, seg).status === 'running' || segmentEventSafe(msg, seg).status === 'pending' ? '' : (isToolExpanded(msg.id + '-' + segIdx) ? '▾' : '▸') }}</span>
                     </button>
-                    <div v-if="evt.status === 'running'" class="xz-tool-body xz-tool-body-running">
-                      <div v-if="evt.progress" class="xz-tool-progress">
+                    <div v-if="segmentEventSafe(msg, seg).status === 'running'" class="xz-tool-body xz-tool-body-running">
+                      <div v-if="progressSafe(segmentEventSafe(msg, seg)).total > 0 || progressSafe(segmentEventSafe(msg, seg)).stage" class="xz-tool-progress">
                         <div class="xz-progress-track">
-                          <div class="xz-progress-fill" :style="{ width: evt.progress.percent.toFixed(1) + '%' }"></div>
+                          <div class="xz-progress-fill" :style="{ width: progressSafe(segmentEventSafe(msg, seg)).percent.toFixed(1) + '%' }"></div>
                         </div>
                         <span class="xz-progress-text">
-                          {{ evt.progress.stage || '…' }} · {{ evt.progress.percent.toFixed(0) }}%
-                          <template v-if="evt.progress.total > 0">
-                            ({{ evt.progress.current }}/{{ evt.progress.total }})
+                          {{ progressSafe(segmentEventSafe(msg, seg)).stage || '…' }} · {{ progressSafe(segmentEventSafe(msg, seg)).percent.toFixed(0) }}%
+                          <template v-if="progressSafe(segmentEventSafe(msg, seg)).total > 0">
+                            ({{ progressSafe(segmentEventSafe(msg, seg)).current }}/{{ progressSafe(segmentEventSafe(msg, seg)).total }})
                           </template>
                         </span>
                       </div>
                       <span class="xz-tool-running-hint">{{ t('xianzun.toolRunningHint') }}</span>
                     </div>
-                    <div v-else-if="isToolExpanded(msg.id + '-' + idx)" class="xz-tool-body">{{ evt.result }}</div>
+                    <div v-else-if="isToolExpanded(msg.id + '-' + segIdx)" class="xz-tool-body">{{ segmentEventSafe(msg, seg).result }}</div>
                   </div>
-                </div>
 
-                <div class="xz-markdown" v-html="renderContent(msg)"></div>
+                  <div v-else-if="seg.kind === 'text' && seg.text" class="xz-markdown" v-html="renderMarkdown(seg.text)"></div>
+                </template>
                 <span v-if="msg.streaming" class="xz-caret" aria-hidden="true"></span>
               </template>
             </div>
@@ -1909,18 +2545,23 @@ onUnmounted(() => {
                 v-if="msg.role === 'assistant' && msg.content && !msg.streaming"
                 type="button"
                 class="xz-copy-row-btn"
-                @click="copyText(msg.content)"
+                @click="copyText(assistantCopyText(msg))"
               >
                 <el-icon><CopyDocument /></el-icon>
                 <span>{{ t('xianzun.copy') }}</span>
               </button>
+              <span v-if="msg.role === 'assistant' && msg.totalDurationMs" class="xz-msg-total-time">
+                ⏱ {{ formatDuration(msg.totalDurationMs) }}
+              </span>
             </div>
           </div>
         </div>
 
         <!-- Waiting for first token -->
         <div v-if="waitingFirstToken" class="xz-msg assistant">
-          <div class="xz-mini-avatar" aria-hidden="true">尊</div>
+          <div class="xz-mini-avatar" aria-hidden="true">
+            <img src="/icon.png" class="xz-mini-avatar-img" alt="芝士猫" />
+          </div>
           <div class="xz-msg-main">
             <div class="xz-bubble">
               <span class="xz-typing" aria-label="thinking">
@@ -1944,12 +2585,53 @@ onUnmounted(() => {
           @keydown="onKeydown"
           @input="autoResize"
         ></textarea>
-        <div class="xz-composer-bar">
-          <span class="xz-hint">
-            {{ t('xianzun.hint') }}
-            <span class="xz-hint-sep">·</span>
-            <span class="xz-hint-model">{{ appSettings.xianzunModel || 'deepseek-v4-flash' }}</span>
-          </span>
+      <div class="xz-composer-bar">
+          <div class="xz-composer-left">
+            <span class="xz-hint">
+              {{ t('xianzun.hint') }}
+              <span class="xz-hint-sep">·</span>
+              <span class="xz-hint-model">{{ appSettings.xianzunModel || 'deepseek-v4-flash' }}</span>
+            </span>
+
+            <el-popover
+              v-if="sessionUsage.totalTokens > 0"
+              placement="top"
+              :width="340"
+              trigger="click"
+              popper-class="xz-usage-popover"
+            >
+              <template #reference>
+                <button type="button" class="xz-usage-chip" :title="t('xianzun.usageTitle')">
+                  <span class="xz-usage-cost">¥{{ formatCost(sessionUsage.costCny) }}</span>
+                  <span class="xz-usage-sep">·</span>
+                  <span class="xz-usage-ctx">{{ formatTokens(lastContextTokens) }}/1M</span>
+                </button>
+              </template>
+              <div class="xz-usage-body">
+                <div class="xz-usage-row">
+                  <span>{{ t('xianzun.usageCost') }}</span>
+                  <b>¥{{ formatCost(sessionUsage.costCny) }}</b>
+                </div>
+                <div class="xz-usage-row">
+                  <span>{{ t('xianzun.usageContext') }}</span>
+                  <b>{{ formatTokens(lastContextTokens) }} / 1M · {{ contextPercent.toFixed(1) }}%</b>
+                </div>
+                <div class="xz-usage-track" :class="contextState">
+                  <div class="xz-usage-fill" :style="{ width: contextPercent.toFixed(1) + '%' }"></div>
+                </div>
+                <div class="xz-usage-breakdown">
+                  <span>{{ t('xianzun.usageInput') }} {{ formatTokens(sessionUsage.promptTokens) }}</span>
+                  <span>{{ t('xianzun.usageOutput') }} {{ formatTokens(sessionUsage.completionTokens) }}</span>
+                  <span>{{ t('xianzun.usageCacheHit') }} {{ formatTokens(sessionUsage.cacheHitTokens) }}</span>
+                  <span>{{ t('xianzun.usageCacheMiss') }} {{ formatTokens(sessionUsage.cacheMissTokens) }}</span>
+                </div>
+                <p class="xz-usage-note">{{ t('xianzun.usageEstimateNote') }}</p>
+                <button type="button" class="xz-usage-clear" @click="clearChat">
+                  {{ t('xianzun.usageClearContext') }}
+                </button>
+              </div>
+            </el-popover>
+          </div>
           <button
             type="button"
             class="xz-send"
@@ -1988,6 +2670,7 @@ onUnmounted(() => {
     >
       <pre class="xz-prompt-view glass-scrollbar">{{ lastSystemPrompt || t('xianzun.promptEmpty') }}</pre>
       <template #footer>
+        <el-button @click="restoreDefaultSystemPrompt">{{ t('xianzun.restoreDefault') }}</el-button>
         <el-button @click="copyText(lastSystemPrompt)">{{ t('xianzun.copy') }}</el-button>
         <el-button type="primary" @click="promptDialogOpen = false">{{ t('xianzun.done') }}</el-button>
       </template>
@@ -2043,6 +2726,9 @@ onUnmounted(() => {
       align-center
     >
       <div class="xz-settings">
+        <p class="xz-settings-note xz-settings-provider-note">
+          {{ t('xianzun.onlyDeepseek') }}
+        </p>
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.apiKey') }}</span>
           <el-input
@@ -2055,7 +2741,19 @@ onUnmounted(() => {
 
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.apiUrl') }}</span>
-          <el-input v-model="appSettings.xianzunApiUrl" :placeholder="'https://api.deepseek.com/v1'" />
+          <el-select
+            v-model="appSettings.xianzunApiUrl"
+            class="xz-settings-model"
+            filterable
+            allow-create
+            default-first-option
+            :placeholder="'https://api.deepseek.com/v1'"
+          >
+            <el-option :label="t('xianzun.apiUrlV1')" value="https://api.deepseek.com/v1" />
+            <el-option :label="t('xianzun.apiUrlRoot')" value="https://api.deepseek.com" />
+            <el-option :label="t('xianzun.apiUrlBeta')" value="https://api.deepseek.com/beta" />
+          </el-select>
+          <span class="xz-field-hint">{{ t('xianzun.apiUrlHint') }}</span>
         </label>
 
         <label class="xz-field">
@@ -2085,23 +2783,6 @@ onUnmounted(() => {
             />
           </el-select>
           <span class="xz-field-hint">{{ t('xianzun.reasoningEffortHint') }}</span>
-        </label>
-
-        <label class="xz-field">
-          <span class="xz-field-label">{{ t('xianzun.approvalMode') }}</span>
-          <el-select v-model="appSettings.xianzunApprovalMode" class="xz-settings-model">
-            <el-option
-              v-for="mode in XIANZUN_APPROVAL_MODE_OPTIONS"
-              :key="mode"
-              :label="t(`xianzun.approvalModes.${mode}`)"
-              :value="mode"
-            />
-          </el-select>
-          <span v-if="appSettings.xianzunApprovalMode === 'none'" class="xz-field-warning">
-            <el-icon><WarningFilled /></el-icon>
-            {{ t('xianzun.noApprovalWarning') }}
-          </span>
-          <span v-else class="xz-field-hint">{{ t('xianzun.approvalModeHint') }}</span>
         </label>
 
         <label class="xz-field">
@@ -2186,13 +2867,13 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.xz-avatar-glyph {
+.xz-avatar-img {
   position: relative;
   z-index: 1;
-  font-size: 20px;
-  font-weight: 700;
-  color: rgba(var(--theme-text-primary-rgb), 0.96);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 14px;
 }
 
 .xz-avatar-glow {
@@ -2291,7 +2972,12 @@ onUnmounted(() => {
   width: 172px;
 }
 
-.xz-model-select :deep(.el-select__wrapper) {
+.xz-approval-select {
+  width: 150px;
+}
+
+.xz-model-select :deep(.el-select__wrapper),
+.xz-approval-select :deep(.el-select__wrapper) {
   min-height: 32px;
   border-radius: 8px;
   background: rgba(var(--theme-surface-tint-rgb), 0.06);
@@ -2300,7 +2986,8 @@ onUnmounted(() => {
   transition: background-color 160ms ease, border-color 160ms ease;
 }
 
-.xz-model-select :deep(.el-select__wrapper:hover) {
+.xz-model-select :deep(.el-select__wrapper:hover),
+.xz-approval-select :deep(.el-select__wrapper:hover) {
   background: rgba(var(--theme-surface-tint-rgb), 0.1);
 }
 
@@ -2359,31 +3046,136 @@ onUnmounted(() => {
   color: rgba(var(--theme-text-primary-rgb), 1);
 }
 
-/* ── Task plan panel ── */
-.xz-plan {
-  margin: 8px 0 14px;
+/* ── Task plan pill (header center) ── */
+.xz-plan-pill {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.xz-plan-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 440px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+  color: rgba(var(--theme-text-primary-rgb), 0.9);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.xz-plan-pill-btn:hover,
+.xz-plan-pill-btn.expanded {
+  background: rgba(var(--theme-surface-tint-rgb), 0.14);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.3);
+}
+
+.xz-plan-pill-title {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.xz-plan-pill-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(var(--theme-text-secondary-rgb), 0.65);
+}
+
+.xz-plan-pill-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: rgba(var(--theme-warning-rgb), 0.9);
+}
+
+.xz-plan-pill-chevron {
+  flex: 0 0 auto;
+  color: rgba(var(--theme-text-secondary-rgb), 0.55);
+  font-size: 10px;
+}
+
+.xz-plan-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, 80vw);
   padding: 12px 14px;
   border-radius: 14px;
   background: var(--t-material-bg);
   border: var(--t-material-border);
-  box-shadow: var(--t-shadow-section);
-  animation: xz-msg-in 0.22s ease-out both;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  z-index: 80;
+  backdrop-filter: var(--t-blur-medium);
+  -webkit-backdrop-filter: var(--t-blur-medium);
 }
 
-.xz-plan-head {
+.xz-plan-pop-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   font-size: 12px;
   font-weight: 700;
   color: rgba(var(--theme-text-primary-rgb), 0.92);
 }
 
-.xz-plan-count {
-  margin-left: auto;
+.xz-plan-pop-count {
   font-size: 11px;
   font-weight: 600;
   color: rgba(var(--theme-text-secondary-rgb), 0.6);
+}
+
+.xz-plan-pop .xz-plan-steps {
+  margin-top: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.xz-plan-pop-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(var(--theme-surface-tint-rgb), 0.08);
+}
+
+.xz-plan-cancel {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--theme-danger-rgb), 0.35);
+  background: rgba(var(--theme-danger-rgb), 0.08);
+  color: var(--t-danger-text);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.xz-plan-cancel:hover {
+  background: rgba(var(--theme-danger-rgb), 0.16);
+  border-color: rgba(var(--theme-danger-rgb), 0.55);
+}
+
+.xz-plan-clear {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.25);
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  color: rgba(var(--theme-text-secondary-rgb), 0.85);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.xz-plan-clear:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.16);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.4);
 }
 
 .xz-plan-steps {
@@ -2465,6 +3257,15 @@ onUnmounted(() => {
   color: rgba(var(--theme-text-primary-rgb), 0.92);
   background: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.14), rgba(var(--theme-surface-tint-rgb), 0.04));
   border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  overflow: hidden;
+}
+
+.xz-mini-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 9px;
+  display: block;
 }
 
 .xz-msg-main {
@@ -2527,6 +3328,17 @@ onUnmounted(() => {
   justify-content: flex-end;
 }
 
+.xz-msg-total-time {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(var(--theme-text-secondary-rgb), 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
 .xz-copy-row-btn {
   display: inline-flex;
   align-items: center;
@@ -2548,7 +3360,7 @@ onUnmounted(() => {
 
 /* reasoning (thinking) panel */
 .xz-reasoning {
-  margin-bottom: 10px;
+  margin: 10px 0;
   border-radius: 12px;
   border: 1px solid rgba(var(--theme-warning-rgb), 0.22);
   background: rgba(var(--theme-warning-rgb), 0.05);
@@ -2824,6 +3636,7 @@ onUnmounted(() => {
 }
 
 .xz-tool-card {
+  margin: 8px 0;
   border-radius: 10px;
   border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
   background: rgba(var(--theme-surface-tint-rgb), 0.04);
@@ -2866,6 +3679,10 @@ onUnmounted(() => {
 
 .xz-tool-name {
   flex: 0 0 auto;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 11.5px;
   color: rgba(var(--theme-text-primary-rgb), 0.92);
@@ -2905,6 +3722,11 @@ onUnmounted(() => {
   background: rgba(var(--theme-warning-rgb), 0.04);
 }
 
+.xz-tool-card.pending {
+  border-left: 3px solid rgba(var(--theme-warning-rgb), 0.45);
+  background: rgba(var(--theme-warning-rgb), 0.03);
+}
+
 .xz-tool-head.running {
   cursor: default;
 }
@@ -2931,6 +3753,8 @@ onUnmounted(() => {
 }
 
 .xz-tool-time {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 10.5px;
   color: rgba(var(--theme-text-secondary-rgb), 0.5);
 }
@@ -2999,13 +3823,13 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.xz-empty-glyph {
+.xz-empty-img {
   position: relative;
   z-index: 1;
-  font-size: 34px;
-  font-weight: 700;
-  color: rgba(var(--theme-text-primary-rgb), 0.97);
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  width: 74px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 24px;
 }
 
 .xz-empty-glow {
@@ -3198,6 +4022,53 @@ onUnmounted(() => {
 .xz-hint-model {
   font-family: 'Cascadia Code', Consolas, monospace;
   color: rgba(var(--theme-text-secondary-rgb), 0.7);
+}
+
+.xz-composer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.xz-usage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+  background: rgba(var(--theme-surface-tint-rgb), 0.06);
+  color: rgba(var(--theme-text-secondary-rgb), 0.75);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.xz-usage-chip:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.12);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.3);
+}
+
+.xz-usage-cost {
+  color: rgba(var(--theme-success-rgb), 0.9);
+  font-weight: 650;
+}
+
+.xz-usage-sep {
+  opacity: 0.55;
+}
+
+.xz-usage-ctx {
+  color: rgba(var(--theme-warning-rgb), 0.9);
+  font-weight: 650;
+}
+
+.xz-settings-provider-note {
+  color: rgba(var(--theme-warning-rgb), 0.9);
+  border-left: 3px solid rgba(var(--theme-warning-rgb), 0.45);
+  padding-left: 10px;
 }
 
 .xz-send {
@@ -3620,5 +4491,100 @@ onUnmounted(() => {
 .xz-log-drawer {
   top: 32px !important;
   height: calc(100% - 32px) !important;
+}
+
+/* usage & context popover */
+.xz-usage-popover.el-popper {
+  --el-popover-padding: 0;
+  border-radius: 14px;
+  background: var(--t-material-bg);
+  border: var(--t-material-border);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  backdrop-filter: var(--t-blur-medium);
+  -webkit-backdrop-filter: var(--t-blur-medium);
+}
+
+.xz-usage-popover .el-popover__title {
+  display: none;
+}
+
+.xz-usage-popover .xz-usage-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: rgba(var(--theme-text-primary-rgb), 0.92);
+  font-size: 12.5px;
+}
+
+.xz-usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.8);
+}
+
+.xz-usage-row b {
+  font-weight: 650;
+  color: rgba(var(--theme-text-primary-rgb), 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.xz-usage-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.1);
+  overflow: hidden;
+}
+
+.xz-usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(var(--theme-success-rgb), 0.8);
+  transition: width 0.3s ease;
+}
+
+.xz-usage-track.warn .xz-usage-fill {
+  background: rgba(var(--theme-warning-rgb), 0.85);
+}
+
+.xz-usage-track.danger .xz-usage-fill {
+  background: rgba(var(--theme-danger-rgb), 0.85);
+}
+
+.xz-usage-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+.xz-usage-note {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: rgba(var(--theme-text-secondary-rgb), 0.5);
+}
+
+.xz-usage-clear {
+  margin-top: 4px;
+  padding: 5px 12px;
+  align-self: flex-end;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.25);
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  color: rgba(var(--theme-text-secondary-rgb), 0.85);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.xz-usage-clear:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.16);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.4);
 }
 </style>
