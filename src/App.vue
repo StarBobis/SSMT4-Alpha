@@ -1,7 +1,8 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
+import { normalizeAppUiScale } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
 
 const route = useRoute();
@@ -43,6 +44,17 @@ const globalDimLayerBackground = computed(() => {
 
   return `radial-gradient(circle at 50% 50%, rgba(0, 0, 0, ${center}) 0%, rgba(0, 0, 0, ${middle}) 52%, rgba(0, 0, 0, ${edge}) 100%)`;
 });
+
+const appUiScale = computed(() => normalizeAppUiScale(appSettings.uiScale));
+
+const normalizeStoredAppUiScale = (value: number) => {
+  const normalizedScale = normalizeAppUiScale(value);
+  if (appSettings.uiScale !== normalizedScale) {
+    appSettings.uiScale = normalizedScale;
+  }
+};
+
+watch(() => appSettings.uiScale, normalizeStoredAppUiScale, { immediate: true });
  
  
 // Disable default right-click context menu
@@ -96,28 +108,30 @@ onUnmounted(() => {
     ></div>
   </transition>
 
-  <el-config-provider>
-    <!-- Title Bar (fixed, outside flex flow so backdrop-filter always targets bg-layer) -->
-    <TitleBar />
-    
-    <!-- Use a Flex Layout Container -->
-    <div class="app-layout">
-      <!-- 1. Main Content Area (Flex grow, takes remaining space) -->
-      <div class="app-content-area">
-        <main class="app-main" :style="mainContentStyle">
-          <div class="content-scroll-wrapper glass-scrollbar" :class="{ 'no-scroll': route.path === '/' }">
-            <router-view v-slot="{ Component }">
-              <transition name="page-blur">
-                <KeepAlive>
-                  <component :is="Component" />
-                </KeepAlive>
-              </transition>
-            </router-view>
-          </div>
-        </main>
+  <div class="app-ui-scale" :style="{ '--app-ui-scale': appUiScale }">
+    <el-config-provider>
+      <!-- Title Bar (fixed, outside flex flow so backdrop-filter always targets bg-layer) -->
+      <TitleBar />
+
+      <!-- Use a Flex Layout Container -->
+      <div class="app-layout">
+        <!-- 1. Main Content Area (Flex grow, takes remaining space) -->
+        <div class="app-content-area">
+          <main class="app-main" :style="mainContentStyle">
+            <div class="content-scroll-wrapper glass-scrollbar" :class="{ 'no-scroll': route.path === '/' }">
+              <router-view v-slot="{ Component }">
+                <transition name="page-blur">
+                  <KeepAlive>
+                    <component :is="Component" />
+                  </KeepAlive>
+                </transition>
+              </router-view>
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
-  </el-config-provider>
+    </el-config-provider>
+  </div>
 </template>
 
 <style>
@@ -221,13 +235,23 @@ input, textarea {
 .app-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   overflow: hidden;
   position: relative;
   z-index: 1; /* Above bg */
   padding-top: 32px; /* Space for fixed TitleBar */
   box-sizing: border-box;
+}
+
+.app-ui-scale {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% / var(--app-ui-scale, 1));
+  height: calc(100% / var(--app-ui-scale, 1));
+  transform: scale(var(--app-ui-scale, 1));
+  transform-origin: top left;
 }
 
 /* New wrapper for content area (flex item) */

@@ -8,10 +8,12 @@ import { appDataDir, join } from '@tauri-apps/api/path';
 import { exists, mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { AppStateManager } from '../../store/AppStateManager';
 import { ResourceManager } from '../../store/ResourceManager';
 import { ModManager } from '../../store/ModManager';
+import { PathHelper } from '../../helper/PathHelper';
+import { gameBananaHistory, type GameBananaHistoryEntry } from './gameBananaHistory';
 
 type GbImage = Record<string, unknown>;
 
@@ -29,6 +31,13 @@ interface GbCategoryRef {
   _sIconUrl?: string;
 }
 
+interface GbGameRef {
+  _idRow?: number;
+  _sName?: string;
+  _sProfileUrl?: string;
+  _sIconUrl?: string;
+}
+
 interface GbRecord {
   _idRow: number;
   _sName?: string;
@@ -39,6 +48,7 @@ interface GbRecord {
   _bIsNsfw?: boolean;
   _bHasContentRatings?: boolean;
   _aSubmitter?: GbSubmitter;
+  _aGame?: GbGameRef;
   _aPreviewMedia?: { _aImages?: GbImage[] };
   _aCategory?: GbCategoryRef;
   _aRootCategory?: GbCategoryRef;
@@ -128,6 +138,8 @@ interface GbModCard {
   authorId: number | null;
   authorUrl: string;
   profileUrl: string;
+  gameId: number | null;
+  gameName: string;
   thumbnailUrl: string;
   description: string;
   updatedAt: number;
@@ -148,6 +160,12 @@ interface GbModDetail extends GbModCard {
   files: GbFile[];
 }
 
+interface GamebananaInstallContext {
+  gameName: string;
+  installDir: string;
+  fallbackGameName: string;
+}
+
 interface TranslationModelOption {
   value: string;
   label: string;
@@ -165,6 +183,7 @@ interface InstallProgressEvent {
 
 const { t } = useI18n();
 const appSettings = AppStateManager.appSettings;
+const route = useRoute();
 const router = useRouter();
 
 const GAMEBANANA_ID_BY_PRESET: Record<string, number> = {
@@ -173,8 +192,16 @@ const GAMEBANANA_ID_BY_PRESET: Record<string, number> = {
   SRMI: 18366,
   ZZMI: 19567,
   HIMI: 10349,
+  EFMI: 21842,
+  NTEMI: 23012,
+  APMI: 21772,
+  IDENTITYV: 19670,
+  SNOWBREAK: 19719,
+  NARAKA: 17843,
+  GF2: 19494,
 };
 const DEFAULT_GAMEBANANA_ID = GAMEBANANA_ID_BY_PRESET.GIMI;
+const DEFAULT_GAMEBANANA_INSTALL_GAME = 'DefaultGame';
 const API_BASE = 'https://gamebanana.com/apiv11';
 const PAGE_SIZE_OPTIONS = [12, 24, 36, 48];
 const GAMEBANANA_ICON_CACHE_FOLDER = 'gamebanana-category-icons';
@@ -193,6 +220,7 @@ const selectedCategoryId = ref<number | null>(null);
 const mods = ref<GbModCard[]>([]);
 const selectedModId = ref<number | null>(null);
 const detail = ref<GbModDetail | null>(null);
+const fallbackInstallGameName = ref('');
 const comments = ref<GbComment[]>([]);
 const commentsPage = ref(0);
 const commentsHasMore = ref(false);
@@ -220,6 +248,9 @@ let detailRequestId = 0;
 let commentsRequestId = 0;
 let categoriesRequestId = 0;
 let downloadedStateRequestId = 0;
+let syncingGameTarget = false;
+let gameTargetSyncRevision = 0;
+let resolvedRequestedModTargetKey = '';
 let hoveredTranslateElement: HTMLElement | null = null;
 let hoveredTranslateText = '';
 let activeGamebananaInstall: { gameName: string; modName: string } | null = null;
@@ -264,6 +295,19 @@ const visibleMods = computed(() => appSettings.gamebananaNsfwMode === 'hide'
   : mods.value);
 const visibleCountText = computed(() => `${visibleMods.value.length}${appSettings.gamebananaNsfwMode === 'hide' && mods.value.length !== visibleMods.value.length ? ` / ${mods.value.length}` : ''}`);
 const currentGameName = computed(() => appSettings.CurrentGameName?.trim() || '');
+const queryNumber = (value: unknown): number | null => {
+  const parsed = Number(Array.isArray(value) ? value[0] : value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+};
+const requestedModId = computed(() => queryNumber(route.query.mod));
+const requestedGameId = computed(() => queryNumber(route.query.game));
+const requestedGameName = computed(() => {
+  const value = Array.isArray(route.query.gameName) ? route.query.gameName[0] : route.query.gameName;
+  return typeof value === 'string' ? value.trim() : '';
+});
+const requestedModTargetKey = (): string => requestedModId.value === null
+  ? ''
+  : `${requestedModId.value}:${requestedGameId.value || ''}:${requestedGameName.value}`;
 const gameUrl = computed(() => gameId.value && gameId.value > 0
   ? `https://gamebanana.com/games/${gameId.value}`
   : 'https://gamebanana.com/games');
@@ -271,6 +315,63 @@ const isInstalling = computed(() => installingFileId.value !== null);
 
 const asString = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 const asNumber = (value: unknown): number => Number.isFinite(Number(value)) ? Number(value) : 0;
+
+const normalizedGameName = (value: string): string => value
+  .trim()
+  .toLocaleLowerCase()
+  .replace(/[^\p{L}\p{N}]+/gu, '');
+
+const gamebananaPresetForGameId = (gameId: number | null): string | null => {
+  if (gameId === null) return null;
+  return Object.entries(GAMEBANANA_ID_BY_PRESET)
+    .find(([, knownGameId]) => knownGameId === gameId)?.[0] || null;
+};
+
+const resolveGamebananaEnvironment = async (gameId: number | null, gameName: string) => {
+  const preset = gamebananaPresetForGameId(gameId);
+  const normalizedName = normalizedGameName(gameName);
+  const directMatch = AppStateManager.gamesList.find((game) => {
+    const normalizedLocalName = normalizedGameName(game.name);
+    return (normalizedName && normalizedLocalName === normalizedName)
+      || (preset !== null && game.name.trim().toUpperCase() === preset);
+  });
+  if (directMatch) return directMatch;
+  if (!preset) return null;
+
+  for (const game of AppStateManager.gamesList) {
+    try {
+      const config = await ResourceManager.loadGameConfig(game.name);
+      if (asString(config?.gamePreset).toUpperCase() === preset) return game;
+    } catch (error) {
+      console.warn(`Unable to read the ${game.name} configuration while resolving a GameBanana game:`, error);
+    }
+  }
+  return null;
+};
+
+const resolveGamebananaInstallContext = async (
+  mod: Pick<GbModCard, 'gameId' | 'gameName'>,
+  switchEnvironment = false,
+): Promise<GamebananaInstallContext> => {
+  const matchedGame = await resolveGamebananaEnvironment(mod.gameId, mod.gameName);
+  if (matchedGame) {
+    if (switchEnvironment && currentGameName.value !== matchedGame.name) {
+      await AppStateManager.selectGame(matchedGame);
+    }
+    const installDir = await PathHelper.GetGame3DmigotoFolderPath(matchedGame.name);
+    if (installDir) {
+      return { gameName: matchedGame.name, installDir, fallbackGameName: '' };
+    }
+  }
+
+  const installDir = await PathHelper.GetGame3DmigotoFolderPath(DEFAULT_GAMEBANANA_INSTALL_GAME);
+  if (!installDir) throw new Error(t('modManager.messages.installDirNotConfigured'));
+  return {
+    gameName: DEFAULT_GAMEBANANA_INSTALL_GAME,
+    installDir,
+    fallbackGameName: mod.gameName || (mod.gameId ? `Game ${mod.gameId}` : t('gameBanana.unknownGame')),
+  };
+};
 
 const toPlainText = (value: unknown): string => {
   const html = asString(value);
@@ -445,6 +546,8 @@ const recordToCard = (record: GbRecord): GbModCard => {
     authorId: record._aSubmitter?._idRow ?? null,
     authorUrl: asString(record._aSubmitter?._sProfileUrl),
     profileUrl: asString(record._sProfileUrl) || `https://gamebanana.com/mods/${record._idRow}`,
+    gameId: record._aGame?._idRow ?? null,
+    gameName: asString(record._aGame?._sName),
     thumbnailUrl: mediaUrls(record)[0] || '',
     description: toPlainText(record._sDescription),
     updatedAt: asNumber(record._tsDateUpdated || record._tsDateModified),
@@ -470,6 +573,8 @@ const profileToDetail = (profile: GbProfile, sourceCard?: GbModCard): GbModDetai
   const files = profile._aArchivedFiles || profile._aFiles || [];
   return {
     ...base,
+    gameId: base.gameId ?? sourceCard?.gameId ?? null,
+    gameName: base.gameName || sourceCard?.gameName || '',
     categoryTrail,
     categoryId: category?._idRow ?? base.categoryId,
     categoryName: asString(category?._sName) || base.categoryName,
@@ -572,6 +677,15 @@ const loadCategoryChildren = async (node: GbCategoryNode) => {
   }
 };
 
+const revealCategoryTrail = async (trail: GbCategoryNode[]) => {
+  for (const category of trail) {
+    const node = allCategories.value.find((item) => item._idRow === category._idRow);
+    if (!node) continue;
+    expandedCategoryIds.value = new Set([...expandedCategoryIds.value, node._idRow]);
+    await loadCategoryChildren(node);
+  }
+};
+
 const loadCategories = async () => {
   if (!gameId.value || gameId.value <= 0) return;
   const requestId = ++categoriesRequestId;
@@ -623,8 +737,19 @@ const loadMods = async (requestedPage = 1) => {
     hasMore.value = !payload._aMetadata?._bIsComplete && mods.value.length >= pageSize.value;
     selectedModId.value = null;
     detail.value = null;
-    const initialMod = visibleMods.value[0] || mods.value[0];
-    if (initialMod) void selectMod(initialMod);
+    const targetKey = requestedModTargetKey();
+    const shouldLocateRequestedMod = Boolean(targetKey && targetKey !== resolvedRequestedModTargetKey);
+    const requestedMod = !shouldLocateRequestedMod || requestedModId.value === null
+      ? null
+      : visibleMods.value.find((item) => item.id === requestedModId.value) || null;
+    if (requestedMod) {
+      resolvedRequestedModTargetKey = targetKey;
+      void selectMod(requestedMod);
+    } else if (shouldLocateRequestedMod && requestedModId.value !== null) void loadRequestedMod(requestedModId.value);
+    else {
+      const initialMod = visibleMods.value[0] || mods.value[0];
+      if (initialMod) void selectMod(initialMod);
+    }
   } catch (error) {
     if (requestId === modsRequestId) {
       mods.value = [];
@@ -694,6 +819,7 @@ const selectMod = async (mod: GbModCard) => {
   clearTranslations();
   clearHoveredText();
   downloadedFileIds.value = new Set();
+  fallbackInstallGameName.value = '';
   selectedModId.value = mod.id;
   detail.value = null;
   comments.value = [];
@@ -718,6 +844,37 @@ const selectMod = async (mod: GbModCard) => {
   }
 };
 
+async function loadRequestedMod(modId: number) {
+  try {
+    const profile = await apiGet<GbProfile>(`/Mod/${modId}/ProfilePage`);
+    if (requestedModId.value !== modId) return;
+    const targetKey = requestedModTargetKey();
+    if (!targetKey || targetKey === resolvedRequestedModTargetKey) return;
+    const profileCard = recordToCard(profile);
+    const card: GbModCard = {
+      ...profileCard,
+      gameId: profileCard.gameId ?? requestedGameId.value,
+      gameName: profileCard.gameName || requestedGameName.value,
+    };
+    // The leaf category can contain only this one Mod. Keep the list useful by
+    // filtering at the top-level group while still expanding the full trail.
+    const targetCategoryId = card.categoryTrail[0]?._idRow ?? card.categoryId;
+    if (targetCategoryId !== null && selectedCategoryId.value !== targetCategoryId) {
+      await revealCategoryTrail(card.categoryTrail);
+      selectedCategoryId.value = targetCategoryId;
+      await loadMods(1);
+      return;
+    }
+    if (!mods.value.some((item) => item.id === card.id)) {
+      mods.value = [card, ...mods.value];
+    }
+    resolvedRequestedModTargetKey = targetKey;
+    await selectMod(card);
+  } catch (error) {
+    errorMessage.value = t('gameBanana.errors.loadDetail', { error: String(error) });
+  }
+}
+
 const applyTarget = async () => {
   currentPage.value = 1;
   selectedCategoryId.value = null;
@@ -730,11 +887,13 @@ const applyTarget = async () => {
     hasMore.value = false;
     return;
   }
-  await Promise.all([loadCategories(), loadMods(1)]);
+  await loadCategories();
+  await loadMods(1);
 };
 
 const selectCategory = (categoryId: number | null) => {
   if (selectedCategoryId.value === categoryId) return;
+  resolvedRequestedModTargetKey = requestedModTargetKey();
   selectedCategoryId.value = categoryId;
   void loadMods(1);
 };
@@ -770,13 +929,28 @@ const memberIdFromProfileUrl = (profileUrl: string): number | null => {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 };
 
-const openAuthorPage = (authorId: number | null, authorUrl: string) => {
+const openAuthorPage = (authorId: number | null, authorUrl: string, authorName: string) => {
   const memberId = authorId || memberIdFromProfileUrl(authorUrl);
   if (!memberId) {
     void openExternal(authorUrl);
     return;
   }
-  void router.push({ name: 'GameBananaAuthor', params: { authorId: String(memberId) } });
+  void gameBananaHistory.push(router, {
+    kind: 'author',
+    title: authorName,
+    location: { name: 'GameBananaAuthor', params: { authorId: String(memberId) } },
+  });
+};
+
+const goBack = () => { void gameBananaHistory.go(router, -1); };
+const goForward = () => { void gameBananaHistory.go(router, 1); };
+const goParent = () => { void gameBananaHistory.parent(router); };
+const goHome = () => { void gameBananaHistory.home(router); };
+const jumpToHistory = (entryIndex: number) => { void gameBananaHistory.jump(router, entryIndex); };
+const historyLabel = (entry: GameBananaHistoryEntry): string => {
+  if (entry.kind === 'home') return t('gameBanana.historyInitial');
+  if (entry.kind === 'author') return t('gameBanana.historyAuthor', { name: entry.title });
+  return t('gameBanana.historyMod', { name: entry.title });
 };
 
 const richTextClick = (event: MouseEvent) => {
@@ -838,15 +1012,21 @@ const resolveGamebananaCategoryTrail = async (mod: GbModCard): Promise<GbCategor
   return loadedTrail.length ? loadedTrail : mod.categoryTrail;
 };
 
-const gamebananaInstallGroupFromTrail = (trail: GbCategoryNode[]): string => {
-  return ['GameBanana', ...trail.map((category) => sanitizeCategoryPathSegment(category._sName || `Category ${category._idRow}`))].join('/');
+const gamebananaInstallGroupFromTrail = (trail: GbCategoryNode[], fallbackGameName = ''): string => {
+  const sourceGameSegment = fallbackGameName ? sanitizeCategoryPathSegment(fallbackGameName) : '';
+  return ['GameBanana', sourceGameSegment, ...trail.map((category) => sanitizeCategoryPathSegment(category._sName || `Category ${category._idRow}`))]
+    .filter(Boolean)
+    .join('/');
 };
 
-const gamebananaInstallGroup = (mod: GbModCard): string => gamebananaInstallGroupFromTrail(gamebananaCategoryTrail(mod));
+const gamebananaInstallGroup = (mod: GbModCard): string => gamebananaInstallGroupFromTrail(
+  gamebananaCategoryTrail(mod),
+  fallbackInstallGameName.value || (currentGameName.value === 'Default' ? mod.gameName : ''),
+);
 
-const resolveGamebananaInstallTarget = async (mod: GbModCard) => {
+const resolveGamebananaInstallTarget = async (mod: GbModCard, fallbackGameName = '') => {
   const categoryTrail = await resolveGamebananaCategoryTrail(mod);
-  const automaticGroup = gamebananaInstallGroupFromTrail(categoryTrail);
+  const automaticGroup = gamebananaInstallGroupFromTrail(categoryTrail, fallbackGameName);
   return {
     categoryTrail,
     automaticGroup,
@@ -859,18 +1039,19 @@ const isFileDownloaded = (file: GbFile): boolean => downloadedFileIds.value.has(
 
 const refreshDownloadedFileState = async (mod: GbModDetail | null = detail.value) => {
   const requestId = ++downloadedStateRequestId;
-  if (!mod?.files.length || !currentGameName.value || currentGameName.value === 'Default') {
+  if (!mod?.files.length) {
     downloadedFileIds.value = new Set();
     return;
   }
 
   try {
-    const [installDir, target] = await Promise.all([
-      ModManager.getInstallDir(currentGameName.value),
-      resolveGamebananaInstallTarget(mod),
-    ]);
+    const context = await resolveGamebananaInstallContext(mod);
+    if (requestId === downloadedStateRequestId && detail.value?.id === mod.id) {
+      fallbackInstallGameName.value = context.fallbackGameName;
+    }
+    const target = await resolveGamebananaInstallTarget(mod, context.fallbackGameName);
     const installed = await invoke<boolean>('mod_install_target_exists', {
-      installDir,
+      installDir: context.installDir,
       targetName: target.targetName,
       targetGroup: target.targetGroup,
     });
@@ -1013,11 +1194,6 @@ const handleInstallAction = async (file: GbFile) => {
 
 const downloadAndInstall = async (file: GbFile) => {
   if (!detail.value || isInstalling.value) return;
-  const gameName = currentGameName.value;
-  if (!gameName || gameName === 'Default') {
-    ElMessage.warning(t('gameBanana.errors.installNeedsGame'));
-    return;
-  }
   const downloadUrl = asString(file._sDownloadUrl);
   if (!downloadUrl) {
     ElMessage.error(t('gameBanana.errors.installNoDownload'));
@@ -1047,16 +1223,16 @@ const downloadAndInstall = async (file: GbFile) => {
   downloadProgress.value = 0;
   installProgress.value = 0;
   try {
-    const installDir = await ModManager.getInstallDir(gameName);
-    const target = await resolveGamebananaInstallTarget(detail.value);
+    const context = await resolveGamebananaInstallContext(detail.value, true);
+    const target = await resolveGamebananaInstallTarget(detail.value, context.fallbackGameName);
     const previewUrls = Array.from(new Set([
       ...detail.value.screenshots,
       detail.value.thumbnailUrl,
     ].map((url) => url.trim()).filter(Boolean)));
-    activeGamebananaInstall = { gameName, modName: target.targetName };
+    activeGamebananaInstall = { gameName: context.gameName, modName: target.targetName };
     await invoke('gamebanana_download_and_install_mod', {
-      gameName,
-      installDir,
+      gameName: context.gameName,
+      installDir: context.installDir,
       downloadUrl,
       archiveName: file._sFile || '',
       targetName: target.targetName,
@@ -1065,7 +1241,9 @@ const downloadAndInstall = async (file: GbFile) => {
       backupExisting: true,
       previewUrls,
     });
-    if (target.targetGroup === target.automaticGroup) await applyGamebananaCategoryIcons(gameName, target.categoryTrail);
+    if (!context.fallbackGameName && target.targetGroup === target.automaticGroup) {
+      await applyGamebananaCategoryIcons(context.gameName, target.categoryTrail);
+    }
     downloadedFileIds.value = new Set(detail.value.files.map((item) => item._idRow ?? -1));
     installStatus.value = t('gameBanana.installComplete');
     ElMessage.success(t('gameBanana.installComplete'));
@@ -1521,13 +1699,32 @@ const onGlobalKeydown = (event: KeyboardEvent) => {
   void translateHoveredParagraph();
 };
 
-const syncGameTarget = async () => {
-  const gameName = currentGameName.value;
+const syncGameTargetOnce = async () => {
+  let gameName = currentGameName.value;
+  const routeGameId = requestedGameId.value;
+  if (routeGameId !== null) {
+    const matchedGame = await resolveGamebananaEnvironment(routeGameId, requestedGameName.value);
+    if (matchedGame && matchedGame.name !== gameName) {
+      await AppStateManager.selectGame(matchedGame);
+      gameName = matchedGame.name;
+    }
+  }
+
   const storedKey = `gamebanana:game-id:${gameName || 'default'}`;
   const storedId = Number(localStorage.getItem(storedKey));
   gameTargetLabel.value = gameName || t('gameBanana.noGameSelected');
   showGameIdInput.value = true;
   gameId.value = Number.isInteger(storedId) && storedId > 0 ? storedId : null;
+
+  if (routeGameId !== null) {
+    gameId.value = routeGameId;
+    const preset = gamebananaPresetForGameId(routeGameId);
+    gameTargetLabel.value = gameName && gameName !== 'Default'
+      ? `${gameName} · ${preset || routeGameId}`
+      : requestedGameName.value || `${t('gameBanana.game')} · ${routeGameId}`;
+    await applyTarget();
+    return;
+  }
 
   if (gameName && gameName !== 'Default') {
     try {
@@ -1547,6 +1744,23 @@ const syncGameTarget = async () => {
   await applyTarget();
 };
 
+const syncGameTarget = async () => {
+  gameTargetSyncRevision += 1;
+  if (syncingGameTarget) return;
+  syncingGameTarget = true;
+  try {
+    let completedRevision = -1;
+    while (completedRevision !== gameTargetSyncRevision) {
+      completedRevision = gameTargetSyncRevision;
+      await syncGameTargetOnce();
+    }
+  } finally {
+    syncingGameTarget = false;
+  }
+};
+
+watch(() => route.fullPath, () => gameBananaHistory.observe(router, route), { immediate: true });
+
 watch(gameId, (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return;
@@ -1555,6 +1769,7 @@ watch(gameId, (value) => {
     gameId.value = normalized;
     return;
   }
+  if (requestedGameId.value === normalized) return;
   localStorage.setItem(`gamebanana:game-id:${currentGameName.value || 'default'}`, String(normalized));
 });
 
@@ -1569,6 +1784,11 @@ watch(() => appSettings.gamebananaNsfwMode, (mode) => {
 });
 
 watch(() => appSettings.CurrentGameName, () => {
+  if (!syncingGameTarget) void syncGameTarget();
+});
+
+watch(() => [route.query.mod, route.query.game, route.query.gameName], () => {
+  resolvedRequestedModTargetKey = '';
   void syncGameTarget();
 });
 
@@ -1727,6 +1947,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page-container gamebanana-page" @pointerover="rememberHoveredText" @pointermove="rememberHoveredText" @mouseleave="clearHoveredText">
+    <nav class="gb-history-nav" :aria-label="t('gameBanana.historyNavigation')">
+      <div class="gb-history-trail">
+        <template v-for="(entry, entryIndex) in gameBananaHistory.items" :key="`${entryIndex}:${entry.title}`">
+          <span v-if="entryIndex" class="gb-history-separator" aria-hidden="true">/</span>
+          <button type="button" class="gb-history-entry" :class="{ 'is-current': entryIndex === gameBananaHistory.currentIndex }" :title="historyLabel(entry)" @click="jumpToHistory(entryIndex)">{{ historyLabel(entry) }}</button>
+        </template>
+      </div>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyBack')" :aria-label="t('gameBanana.historyBack')" :disabled="!gameBananaHistory.canGoBack" @click="goBack">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyForward')" :aria-label="t('gameBanana.historyForward')" :disabled="!gameBananaHistory.canGoForward" @click="goForward">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+      </button>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyParent')" :aria-label="t('gameBanana.historyParent')" :disabled="!gameBananaHistory.canGoParent" @click="goParent">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5" /><path d="m6 11 6-6 6 6" /></svg>
+      </button>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyHome')" :aria-label="t('gameBanana.historyHome')" :disabled="gameBananaHistory.isHome" @click="goHome">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7" /><path d="M5 9.5V21h14V9.5" /><path d="M9 21v-7h6v7" /></svg>
+      </button>
+    </nav>
     <section class="gb-controls glass-panel">
       <div class="gb-title-block">
         <strong>GameBanana</strong>
@@ -1922,7 +2162,7 @@ onBeforeUnmount(() => {
             <span class="gb-mod-copy">
               <strong :title="mod.title" data-gb-translate>{{ mod.title }}</strong>
               <small>
-                <button type="button" class="gb-author-link" :disabled="!mod.authorId && !mod.authorUrl" data-gb-translate @click.stop="openAuthorPage(mod.authorId, mod.authorUrl)">{{ mod.author }}</button>
+                  <button type="button" class="gb-author-link" :disabled="!mod.authorId && !mod.authorUrl" data-gb-translate @click.stop="openAuthorPage(mod.authorId, mod.authorUrl, mod.author)">{{ mod.author }}</button>
               </small>
               <em v-if="mod.categoryName" data-gb-translate>{{ mod.categoryName }}</em>
               <p data-gb-translate>{{ mod.description || t('gameBanana.noDescription') }}</p>
@@ -1967,7 +2207,7 @@ onBeforeUnmount(() => {
           <div class="gb-detail-head">
             <div>
               <h2 data-gb-translate>{{ detail.title }}</h2>
-              <button type="button" class="gb-author-link" :disabled="!detail.authorId && !detail.authorUrl" data-gb-translate @click="openAuthorPage(detail.authorId, detail.authorUrl)">
+              <button type="button" class="gb-author-link" :disabled="!detail.authorId && !detail.authorUrl" data-gb-translate @click="openAuthorPage(detail.authorId, detail.authorUrl, detail.author)">
                 {{ detail.author }}
               </button>
             </div>
@@ -2032,7 +2272,7 @@ onBeforeUnmount(() => {
               <article v-for="comment in comments" :key="comment.id" class="gb-comment" :class="{ reply: comment.depth > 0 }" :style="{ '--comment-depth': String(Math.min(comment.depth, 3)) }">
                 <header>
                   <img v-if="comment.avatarUrl" :src="comment.avatarUrl" :alt="comment.author" />
-                  <button type="button" class="gb-author-link" data-gb-translate @click="openAuthorPage(comment.authorId, comment.authorUrl)">{{ comment.author }}</button>
+                  <button type="button" class="gb-author-link" data-gb-translate @click="openAuthorPage(comment.authorId, comment.authorUrl, comment.author)">{{ comment.author }}</button>
                   <time>{{ formatDate(comment.postedAt) }}</time>
                   <span v-if="comment.score" class="gb-comment-score">+{{ comment.score }}</span>
                 </header>
@@ -2062,6 +2302,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .gamebanana-page {
+  position: relative;
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
@@ -2072,6 +2313,8 @@ onBeforeUnmount(() => {
   padding: 46px 18px 18px;
   color: rgba(var(--theme-text-primary-rgb), 0.9);
 }
+
+.gb-history-nav { position:absolute; top:8px; right:24px; left:24px; z-index:2; display:flex; align-items:center; gap:6px; min-width:0; }.gb-history-trail { display:flex; flex:1 1 auto; align-items:center; min-width:0; height:32px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; border:1px solid rgba(255,255,255,.1); border-radius:7px; background:rgba(15,18,31,.32); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }.gb-history-trail::-webkit-scrollbar { display:none; }.gb-history-entry { display:block; flex:0 1 auto; max-width:220px; overflow:hidden; padding:0 8px; border:0; background:transparent; color:rgba(var(--theme-text-secondary-rgb),.72); font:inherit; font-size:11px; line-height:30px; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }.gb-history-entry:hover { color:rgba(var(--theme-text-primary-rgb),.96); }.gb-history-entry.is-current { color:rgba(var(--theme-surface-tint-rgb),.96); font-weight:700; }.gb-history-separator { flex:0 0 auto; color:rgba(var(--theme-text-secondary-rgb),.38); font-size:12px; }.gb-history-button { display:grid; flex:0 0 auto; width:32px; height:32px; place-items:center; padding:0; border:1px solid rgba(255,255,255,.13); border-radius:7px; background:rgba(15,18,31,.42); color:rgba(var(--theme-text-primary-rgb),.88); cursor:pointer; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }.gb-history-button:hover:not(:disabled) { border-color:rgba(var(--theme-surface-tint-rgb),.42); background:rgba(var(--theme-surface-tint-rgb),.18); }.gb-history-button:disabled { opacity:.4; cursor:default; }.gb-history-button svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2; }
 
 .glass-panel {
   background: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)), rgba(255, 255, 255, 0.035);
@@ -2413,6 +2656,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .gamebanana-page { overflow: hidden; padding: 42px 10px 10px; }
+  .gb-history-nav { right:10px; left:10px; }
+  .gb-history-entry { max-width:150px; }
   .gb-controls { align-items: end; flex-wrap: wrap; }
   .gb-search-field { flex-basis: 100%; }
   .gb-translation-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }.gb-translation-settings-head { grid-column: 1 / -1; flex-direction: column; gap: 3px; }.gb-translation-url { min-width: 0; }

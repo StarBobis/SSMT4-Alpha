@@ -1,6 +1,11 @@
 ﻿<script setup lang="ts">
 import { AppStateManager } from '../../store/AppStateManager'
-import { SSMTLocale } from '../../store/AppSettings'
+import {
+  APP_UI_SCALE_MAX,
+  APP_UI_SCALE_MIN,
+  APP_UI_SCALE_STEP,
+  SSMTLocale,
+} from '../../store/AppSettings'
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { getVersion } from '@tauri-apps/api/app';
@@ -18,6 +23,7 @@ import {
   Lock,
   Monitor,
   Refresh,
+  FullScreen,
   View,
 } from '@element-plus/icons-vue';
 import {
@@ -38,6 +44,13 @@ const languageOptions = computed(() => [
 const appVersion = ref('1.0.0');
 
 const formatMaskOpacity = (value: number) => `${value.toFixed(1)}x`;
+const uiScalePercent = computed({
+  get: () => Math.round(appSettings.uiScale * 100),
+  set: (value: number) => {
+    appSettings.uiScale = value / 100;
+  },
+});
+const formatUiScale = (value: number) => `${value}%`;
 
 const selectCacheDir = async () => {
   const selected = await openDialog({
@@ -191,6 +204,27 @@ const openUsageDocs = async () => {
                       :value="item"
                     />
                   </el-select>
+                </div>
+              </div>
+
+              <div class="setting-row setting-row-slider">
+                <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><FullScreen /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.personalization.uiScale') }}</div>
+                    <div class="setting-description">{{ t('settings.personalization.uiScaleHint') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control ui-scale-control">
+                  <el-slider
+                    v-model="uiScalePercent"
+                    :aria-label="t('settings.personalization.uiScale')"
+                    :min="APP_UI_SCALE_MIN * 100"
+                    :max="APP_UI_SCALE_MAX * 100"
+                    :step="APP_UI_SCALE_STEP * 100"
+                    :format-tooltip="formatUiScale"
+                  />
+                  <output class="scale-value">{{ formatUiScale(uiScalePercent) }}</output>
                 </div>
               </div>
 
@@ -503,6 +537,26 @@ const openUsageDocs = async () => {
   --el-slider-main-bg-color: rgba(var(--theme-text-primary-rgb), 0.88);
   --el-slider-runway-bg-color: rgba(var(--theme-surface-tint-rgb), 0.16);
   --el-slider-button-size: 16px;
+}
+
+.ui-scale-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 12px;
+}
+
+.ui-scale-control :deep(.el-slider) {
+  --el-slider-main-bg-color: rgba(var(--theme-text-primary-rgb), 0.88);
+  --el-slider-runway-bg-color: rgba(var(--theme-surface-tint-rgb), 0.16);
+  --el-slider-button-size: 16px;
+}
+
+.scale-value {
+  color: rgba(var(--theme-text-primary-rgb), 0.9);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .mask-opacity-control :deep(.el-slider__input),

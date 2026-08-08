@@ -20,6 +20,24 @@ export type TextureMarkStylePreference = 'Hash' | 'Slot' | 'SharedSlot'
 export type GameBananaNsfwMode = 'show' | 'blur' | 'hide'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 
+export const APP_UI_SCALE_MIN = 0.7
+export const APP_UI_SCALE_MAX = 1.2
+export const APP_UI_SCALE_STEP = 0.05
+
+export const normalizeAppUiScale = (value: unknown): number => {
+	if (value === null || value === undefined || value === '') {
+		return 1
+	}
+
+	const numericValue = typeof value === 'number' ? value : Number(value)
+	if (!Number.isFinite(numericValue)) {
+		return 1
+	}
+
+	const clampedValue = Math.min(APP_UI_SCALE_MAX, Math.max(APP_UI_SCALE_MIN, numericValue))
+	return Math.round(clampedValue / APP_UI_SCALE_STEP) * APP_UI_SCALE_STEP
+}
+
 const normalizeTextureMarkStylePreference = (
 	value: unknown
 ): TextureMarkStylePreference => {
@@ -44,10 +62,21 @@ export type XianZunReasoningEffort = (typeof REASONING_EFFORTS)[number]
 
 export const REASONING_EFFORT_OPTIONS = [...REASONING_EFFORTS]
 
+const XIANZUN_APPROVAL_MODES = ['manual', 'auto', 'none'] as const
+
+export type XianZunApprovalMode = (typeof XIANZUN_APPROVAL_MODES)[number]
+
+export const XIANZUN_APPROVAL_MODE_OPTIONS = [...XIANZUN_APPROVAL_MODES]
+
 const normalizeReasoningEffort = (value: unknown): XianZunReasoningEffort =>
 	typeof value === 'string' && (REASONING_EFFORTS as readonly string[]).includes(value)
 		? (value as XianZunReasoningEffort)
 		: 'auto'
+
+const normalizeXianZunApprovalMode = (value: unknown): XianZunApprovalMode =>
+	typeof value === 'string' && (XIANZUN_APPROVAL_MODES as readonly string[]).includes(value)
+		? (value as XianZunApprovalMode)
+		: 'manual'
 
 const normalizeSidebarGameOrder = (value: unknown): string[] => {
 	if (!Array.isArray(value)) {
@@ -142,6 +171,7 @@ export class AppSettings {
 	bgVideo: string = ''
 	contentOpacity: number = 0.5
 	globalDimMaskStrength: number = 2.5
+	uiScale: number = 1
 	DBMTWorkFolder: string = ''
 	CurrentGameName: string = 'Default'
 	githubToken: string = ''
@@ -189,6 +219,7 @@ export class AppSettings {
 	xianzunModel: string = 'deepseek-v4-flash'
 	xianzunSystemPrompt: string = ''
 	xianzunReasoningEffort: XianZunReasoningEffort = 'auto'
+	xianzunApprovalMode: XianZunApprovalMode = 'manual'
 
 	constructor(init?: Partial<AppSettings>) {
 		if (init) {
@@ -202,6 +233,7 @@ export class AppSettings {
 		this.contentOpacity = init?.contentOpacity ?? this.contentOpacity
 
 		this.globalDimMaskStrength = init?.globalDimMaskStrength ?? this.globalDimMaskStrength
+		this.uiScale = normalizeAppUiScale(init?.uiScale)
 		this.DBMTWorkFolder = init?.DBMTWorkFolder ?? this.DBMTWorkFolder
 		this.CurrentGameName = init?.CurrentGameName ?? this.CurrentGameName
 		this.githubToken = init?.githubToken ?? this.githubToken
@@ -258,6 +290,7 @@ export class AppSettings {
 				: savedXianzunModel || this.xianzunModel
 		this.xianzunSystemPrompt = init?.xianzunSystemPrompt ?? this.xianzunSystemPrompt
 		this.xianzunReasoningEffort = normalizeReasoningEffort(init?.xianzunReasoningEffort)
+		this.xianzunApprovalMode = normalizeXianZunApprovalMode(init?.xianzunApprovalMode)
 		// VersionNumber is always controlled by current app code version,
 		// not by persisted settings.json.
 		this.VersionNumber = AppSettings.CURRENT_VERSION
@@ -280,6 +313,7 @@ export class AppSettings {
 			bgVideo: this.bgVideo,
 			contentOpacity: this.contentOpacity,
 			globalDimMaskStrength: this.globalDimMaskStrength,
+			uiScale: this.uiScale,
 			DBMTWorkFolder: this.DBMTWorkFolder,
 			CurrentGameName: this.CurrentGameName,
 			githubToken: this.githubToken,
@@ -323,6 +357,7 @@ export class AppSettings {
 			xianzunModel: this.xianzunModel,
 			xianzunSystemPrompt: this.xianzunSystemPrompt,
 			xianzunReasoningEffort: this.xianzunReasoningEffort,
+			xianzunApprovalMode: this.xianzunApprovalMode,
 		}
 	}
 }

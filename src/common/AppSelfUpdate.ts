@@ -25,6 +25,10 @@ type AppUpdateOutcome =
     }
 
 const APP_RELEASE_NOTES_REPO = 'StarBobis/SSMT4-Alpha'
+// The updater endpoint is intended for packaged release builds only. Vite's
+// production flag is compiled into the bundle, so `bun tauri dev` cannot
+// accidentally contact GitHub while release artifacts retain the updater.
+const APP_UPDATE_ENABLED = import.meta.env.PROD
 
 const t = i18n.global.t
 
@@ -168,6 +172,11 @@ const promptAndInstallAppUpdate = async (outcome: Extract<AppUpdateOutcome, { ki
 }
 
 export const checkAndInstallAppUpdate = async (mode: AppUpdateMode = 'manual'): Promise<void> => {
+  if (!APP_UPDATE_ENABLED) {
+    debugWarn('AppSelfUpdate', 'Skipping app update check in a development build')
+    return
+  }
+
   if (isInstallingAppUpdate.value) {
     return
   }

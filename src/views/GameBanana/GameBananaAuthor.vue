@@ -6,6 +6,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { AppStateManager } from '../../store/AppStateManager';
+import { gameBananaHistory, type GameBananaHistoryEntry } from './gameBananaHistory';
 
 type GbImage = Record<string, unknown>;
 
@@ -13,6 +14,13 @@ interface GbSubmitter {
   _idRow?: number;
   _sName?: string;
   _sProfileUrl?: string;
+}
+
+interface GbGameRef {
+  _idRow?: number;
+  _sName?: string;
+  _sProfileUrl?: string;
+  _sIconUrl?: string;
 }
 
 interface GbRecord {
@@ -25,6 +33,7 @@ interface GbRecord {
   _bIsNsfw?: boolean;
   _bHasContentRatings?: boolean;
   _aSubmitter?: GbSubmitter;
+  _aGame?: GbGameRef;
   _aPreviewMedia?: { _aImages?: GbImage[] };
 }
 
@@ -50,6 +59,9 @@ interface AuthorModCard {
   id: number;
   title: string;
   profileUrl: string;
+  gameId: number | null;
+  gameName: string;
+  gameIconUrl: string;
   description: string;
   thumbnailUrl: string;
   updatedAt: number;
@@ -90,6 +102,15 @@ const toPlainText = (value: unknown): string => asString(value)
   .replace(/\s+/g, ' ')
   .trim();
 
+const gamebananaUrl = (value: unknown, fallbackPath: string): string => {
+  const raw = asString(value);
+  try {
+    return new URL(raw || fallbackPath, 'https://gamebanana.com').toString();
+  } catch {
+    return `https://gamebanana.com${fallbackPath}`;
+  }
+};
+
 const imageUrl = (image: GbImage): string => {
   for (const key of ['_sUrl530', '_sUrl220', '_sUrl100', '_sUrl']) {
     const url = asString(image[key]);
@@ -112,7 +133,10 @@ const apiGet = async <T>(path: string, params: Record<string, string> = {}): Pro
 const cardFromRecord = (record: GbRecord): AuthorModCard => ({
   id: record._idRow,
   title: asString(record._sName) || `Mod #${record._idRow}`,
-  profileUrl: asString(record._sProfileUrl) || `https://gamebanana.com/mods/${record._idRow}`,
+  profileUrl: gamebananaUrl(record._sProfileUrl, `/mods/${record._idRow}`),
+  gameId: record._aGame?._idRow ?? null,
+  gameName: asString(record._aGame?._sName),
+  gameIconUrl: asString(record._aGame?._sIconUrl),
   description: toPlainText(record._sDescription),
   thumbnailUrl: (record._aPreviewMedia?._aImages || []).map(imageUrl).find(Boolean) || '',
   updatedAt: asNumber(record._tsDateUpdated || record._tsDateModified),
@@ -129,6 +153,49 @@ const openExternal = async (url: string) => {
   } catch (error) {
     ElMessage.error(t('gameBanana.errors.openExternal', { error: String(error) }));
   }
+};
+
+const restoreGameEnvironment = async (gameName: string) => {
+  const targetGameName = gameName.trim();
+  const currentGameName = appSettings.CurrentGameName?.trim() || 'Default';
+  if (!targetGameName || targetGameName === currentGameName) return;
+
+  if (targetGameName === 'Default') {
+    AppStateManager.switchToDefaultGame();
+    return;
+  }
+
+  const game = AppStateManager.gamesList.find((item) => item.name === targetGameName);
+  if (game) await AppStateManager.selectGame(game);
+};
+
+const openModPage = async (mod: AuthorModCard) => {
+  const returnGame = appSettings.CurrentGameName?.trim() || 'Default';
+  await gameBananaHistory.replace(router, {
+    kind: 'author',
+    title: profile.value?._sName || `#${route.params.authorId}`,
+    location: {
+      name: 'GameBananaAuthor',
+      params: { authorId: String(route.params.authorId) },
+      query: { ...route.query, returnGame },
+    },
+  });
+
+  const query: Record<string, string> = { mod: String(mod.id) };
+  if (mod.gameId) query.game = String(mod.gameId);
+  if (mod.gameName) query.gameName = mod.gameName;
+  await gameBananaHistory.push(router, { kind: 'mod', title: mod.title, location: { name: 'GameBanana', query } });
+};
+
+const goBack = () => { void gameBananaHistory.go(router, -1); };
+const goForward = () => { void gameBananaHistory.go(router, 1); };
+const goParent = () => { void gameBananaHistory.parent(router); };
+const goHome = () => { void gameBananaHistory.home(router); };
+const jumpToHistory = (entryIndex: number) => { void gameBananaHistory.jump(router, entryIndex); };
+const historyLabel = (entry: GameBananaHistoryEntry): string => {
+  if (entry.kind === 'home') return t('gameBanana.historyInitial');
+  if (entry.kind === 'author') return t('gameBanana.historyAuthor', { name: entry.title });
+  return t('gameBanana.historyMod', { name: entry.title });
 };
 
 const loadAuthor = async () => {
@@ -178,13 +245,41 @@ const refresh = async () => {
 };
 
 watch(authorId, () => { void refresh(); });
+watch(() => route.fullPath, () => gameBananaHistory.observe(router, route), { immediate: true });
+watch(
+  () => route.name === 'GameBananaAuthor' ? route.query.returnGame : undefined,
+  (value) => {
+    const gameName = Array.isArray(value) ? value[0] : value;
+    if (typeof gameName === 'string') void restoreGameEnvironment(gameName);
+  },
+  { immediate: true },
+);
 onMounted(() => { void refresh(); });
 </script>
 
 <template>
   <div class="page-container gb-author-page">
+    <nav class="gb-history-nav" :aria-label="t('gameBanana.historyNavigation')">
+      <div class="gb-history-trail">
+        <template v-for="(entry, entryIndex) in gameBananaHistory.items" :key="`${entryIndex}:${entry.title}`">
+          <span v-if="entryIndex" class="gb-history-separator" aria-hidden="true">/</span>
+          <button type="button" class="gb-history-entry" :class="{ 'is-current': entryIndex === gameBananaHistory.currentIndex }" :title="historyLabel(entry)" @click="jumpToHistory(entryIndex)">{{ historyLabel(entry) }}</button>
+        </template>
+      </div>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyBack')" :aria-label="t('gameBanana.historyBack')" :disabled="!gameBananaHistory.canGoBack" @click="goBack">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyForward')" :aria-label="t('gameBanana.historyForward')" :disabled="!gameBananaHistory.canGoForward" @click="goForward">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+      </button>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyParent')" :aria-label="t('gameBanana.historyParent')" :disabled="!gameBananaHistory.canGoParent" @click="goParent">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5" /><path d="m6 11 6-6 6 6" /></svg>
+      </button>
+      <button type="button" class="gb-history-button" :title="t('gameBanana.historyHome')" :aria-label="t('gameBanana.historyHome')" :disabled="gameBananaHistory.isHome" @click="goHome">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7" /><path d="M5 9.5V21h14V9.5" /><path d="M9 21v-7h6v7" /></svg>
+      </button>
+    </nav>
     <section class="gb-author-toolbar glass-panel">
-      <button type="button" class="gb-button" @click="router.push({ name: 'GameBanana' })">{{ t('gameBanana.backToCatalog') }}</button>
       <span class="gb-author-toolbar-title">{{ t('gameBanana.authorPage') }}</span>
       <label class="gb-author-nsfw-field" :title="t('gameBanana.nsfwShown')">
         <span>{{ t('gameBanana.nsfwShown') }}</span>
@@ -221,13 +316,17 @@ onMounted(() => { void refresh(); });
         <header><strong>{{ t('gameBanana.authorMods') }}</strong><span>{{ visibleMods.length }}</span></header>
         <div v-if="loadingMods" class="gb-empty">{{ t('gameBanana.loading') }}</div>
         <div v-else-if="visibleMods.length" class="gb-author-mod-grid">
-          <button v-for="mod in visibleMods" :key="mod.id" type="button" class="gb-author-card" @click="openExternal(mod.profileUrl)">
+          <button v-for="mod in visibleMods" :key="mod.id" type="button" class="gb-author-card" @click="openModPage(mod)">
             <div class="gb-author-thumb" :class="{ 'is-nsfw-blurred': appSettings.gamebananaNsfwMode === 'blur' && mod.isNsfw }">
               <img v-if="mod.thumbnailUrl" :src="mod.thumbnailUrl" :alt="mod.title" loading="lazy" />
               <span v-else>{{ mod.title.slice(0, 1) }}</span>
               <b v-if="mod.isNsfw">NSFW</b>
             </div>
             <strong>{{ mod.title }}</strong>
+            <span class="gb-author-game" :title="`${t('gameBanana.game')}: ${mod.gameName || t('gameBanana.unknownGame')}`">
+              <img v-if="mod.gameIconUrl" :src="mod.gameIconUrl" alt="" loading="lazy" />
+              <span>{{ t('gameBanana.game') }}: {{ mod.gameName || t('gameBanana.unknownGame') }}</span>
+            </span>
             <p>{{ mod.description || t('gameBanana.noDescription') }}</p>
             <time>{{ formatDate(mod.updatedAt) }}</time>
           </button>
@@ -244,11 +343,12 @@ onMounted(() => { void refresh(); });
 </template>
 
 <style scoped>
-.gb-author-page { height: 100%; min-height: 0; box-sizing:border-box; display: flex; flex-direction: column; gap: 12px; overflow:hidden; padding: 46px 18px 18px; color: rgba(var(--theme-text-primary-rgb),.9); }
+.gb-author-page { position:relative; height: 100%; min-height: 0; box-sizing:border-box; display: flex; flex-direction: column; gap: 12px; overflow:hidden; padding: 46px 18px 18px; color: rgba(var(--theme-text-primary-rgb),.9); }
 .glass-panel { background: linear-gradient(145deg,rgba(var(--theme-surface-tint-rgb),.07),rgba(var(--theme-surface-tint-rgb),.025)),rgba(255,255,255,.035); border: 1px solid rgba(var(--theme-surface-tint-rgb),.12); box-shadow: 0 14px 36px rgba(0,0,0,.18),inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb),.035); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .gb-author-toolbar { display: flex; align-items: end; gap: 9px; padding: 9px 12px; border-radius: 12px; }.gb-author-toolbar-title { align-self:center; flex: 1; color: rgba(var(--theme-text-primary-rgb),.9); font-size: 14px; font-weight: 700; }.gb-author-nsfw-field { display:grid; min-width:188px; gap:4px; }.gb-author-nsfw-field>span { color:rgba(var(--theme-text-secondary-rgb),.64); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }.gb-author-nsfw-mode { display:flex; min-height:30px; }.gb-author-nsfw-mode :deep(.el-radio-button) { flex:1 1 0; }.gb-author-nsfw-mode :deep(.el-radio-button__inner) { display:flex; align-items:center; justify-content:center; width:100%; min-height:30px; padding:0 10px; border-color:rgba(255,255,255,.13); background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.86); font:inherit; font-size:12px; line-height:1; box-shadow:none; transition:background .16s ease,border-color .16s ease,color .16s ease; }.gb-author-nsfw-mode :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius:7px 0 0 7px; }.gb-author-nsfw-mode :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius:0 7px 7px 0; }.gb-author-nsfw-mode :deep(.el-radio-button__inner:hover) { background:rgba(var(--theme-surface-tint-rgb),.16); border-color:rgba(var(--theme-surface-tint-rgb),.38); color:rgba(var(--theme-text-primary-rgb),.96); }.gb-author-nsfw-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.20); border-color:rgba(var(--theme-surface-tint-rgb),.42); color:rgba(var(--theme-text-primary-rgb),.98); box-shadow:-1px 0 0 0 rgba(var(--theme-surface-tint-rgb),.42); }
-.gb-button { min-height: 30px; padding: 0 11px; border: 1px solid rgba(255,255,255,.13); border-radius: 7px; background: rgba(255,255,255,.055); color: rgba(var(--theme-text-primary-rgb),.86); font: inherit; font-size: 12px; cursor: pointer; }.gb-button:hover:not(:disabled) { background: rgba(var(--theme-surface-tint-rgb),.16); border-color: rgba(var(--theme-surface-tint-rgb),.38); }.gb-button:disabled { opacity: .45; cursor: default; }.gb-button--primary { background: rgba(var(--theme-surface-tint-rgb),.2); border-color: rgba(var(--theme-surface-tint-rgb),.42); }
+.gb-button { min-height: 30px; padding: 0 11px; border: 1px solid rgba(255,255,255,.13); border-radius: 7px; background: rgba(255,255,255,.055); color: rgba(var(--theme-text-primary-rgb),.86); font: inherit; font-size: 12px; cursor: pointer; }.gb-button:hover:not(:disabled) { background: rgba(var(--theme-surface-tint-rgb),.16); border-color: rgba(var(--theme-surface-tint-rgb),.38); }.gb-button:disabled { opacity: .45; cursor: default; }.gb-button--primary { background: rgba(var(--theme-surface-tint-rgb),.2); border-color: rgba(var(--theme-surface-tint-rgb),.42); }.gb-history-nav { position:absolute; top:8px; right:24px; left:24px; z-index:2; display:flex; align-items:center; gap:6px; min-width:0; }.gb-history-trail { display:flex; flex:1 1 auto; align-items:center; min-width:0; height:32px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; border:1px solid rgba(255,255,255,.1); border-radius:7px; background:rgba(15,18,31,.32); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }.gb-history-trail::-webkit-scrollbar { display:none; }.gb-history-entry { display:block; flex:0 1 auto; max-width:220px; overflow:hidden; padding:0 8px; border:0; background:transparent; color:rgba(var(--theme-text-secondary-rgb),.72); font:inherit; font-size:11px; line-height:30px; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }.gb-history-entry:hover { color:rgba(var(--theme-text-primary-rgb),.96); }.gb-history-entry.is-current { color:rgba(var(--theme-surface-tint-rgb),.96); font-weight:700; }.gb-history-separator { flex:0 0 auto; color:rgba(var(--theme-text-secondary-rgb),.38); font-size:12px; }.gb-history-button { display:grid; flex:0 0 auto; width:32px; height:32px; place-items:center; padding:0; border:1px solid rgba(255,255,255,.13); border-radius:7px; background:rgba(15,18,31,.42); color:rgba(var(--theme-text-primary-rgb),.88); cursor:pointer; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }.gb-history-button:hover:not(:disabled) { border-color:rgba(var(--theme-surface-tint-rgb),.42); background:rgba(var(--theme-surface-tint-rgb),.18); }.gb-history-button:disabled { opacity:.4; cursor:default; }.gb-history-button svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2; }
 .gb-author-error { margin: -4px 1px 0; color:#ffabab; font-size:12px; }.gb-author-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(245px,.85fr) minmax(0,2fr); gap:12px; overflow:hidden; }.gb-author-profile,.gb-author-mods { min-height:0; border-radius:12px; overflow:auto; }.gb-author-profile { display:flex; align-items:flex-start; gap:14px; padding:18px; }.gb-author-avatar { width:76px; height:76px; flex:0 0 auto; border-radius:50%; object-fit:cover; border:1px solid rgba(var(--theme-surface-tint-rgb),.35); }.gb-author-profile-copy { display:grid; gap:7px; min-width:0; }.gb-author-profile-copy h1,.gb-author-profile-copy p { margin:0; }.gb-author-profile-copy h1 { font-size:19px; }.gb-author-profile-copy p { color:rgba(var(--theme-text-secondary-rgb),.65); font-size:12px; line-height:1.4; }.gb-author-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }.gb-author-stats span { display:grid; gap:2px; padding:6px; border-radius:6px; background:rgba(255,255,255,.045); color:rgba(var(--theme-text-secondary-rgb),.58); font-size:10px; }.gb-author-stats strong { color:rgba(var(--theme-text-primary-rgb),.88); font-size:12px; }
 .gb-author-mods { display:flex; flex-direction:column; }.gb-author-mods>header,.gb-author-mods>footer { display:flex; align-items:center; justify-content:space-between; gap:8px; flex:0 0 auto; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.07); font-size:12px; }.gb-author-mods>header span,.gb-author-mods>footer span { color:rgba(var(--theme-text-secondary-rgb),.58); font-size:11px; }.gb-author-mods>footer { border-top:1px solid rgba(255,255,255,.07); border-bottom:0; justify-content:flex-end; }.gb-author-mod-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:9px; padding:10px; overflow:auto; }.gb-author-card { min-width:0; padding:7px; border:1px solid rgba(255,255,255,.07); border-radius:8px; background:rgba(255,255,255,.025); color:inherit; text-align:left; cursor:pointer; }.gb-author-card:hover { border-color:rgba(var(--theme-surface-tint-rgb),.35); background:rgba(var(--theme-surface-tint-rgb),.08); }.gb-author-thumb { position:relative; display:grid; place-items:center; aspect-ratio:16/9; overflow:hidden; margin-bottom:7px; border-radius:5px; background:rgba(0,0,0,.22); color:rgba(var(--theme-surface-tint-rgb),.7); font-size:22px; font-weight:800; }.gb-author-thumb img { width:100%; height:100%; object-fit:cover; }.gb-author-thumb b { position:absolute; top:4px; right:4px; padding:2px 4px; border-radius:4px; background:rgba(138,27,58,.84); color:#fff; font-size:9px; }.gb-author-thumb.is-nsfw-blurred img { filter:blur(18px) saturate(.75); transform:scale(1.16); }.gb-author-thumb.is-nsfw-blurred::after { content:'NSFW'; position:absolute; inset:0; display:grid; place-items:center; background:rgba(8,9,14,.26); color:#fff; font-size:10px; font-weight:800; letter-spacing:.14em; text-shadow:0 1px 6px rgba(0,0,0,.9); }.gb-author-thumb.is-nsfw-blurred:hover img { filter:none; transform:scale(1.04); }.gb-author-thumb.is-nsfw-blurred:hover::after { opacity:0; }.gb-author-card>strong { display:block; overflow:hidden; color:rgba(var(--theme-text-primary-rgb),.88); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }.gb-author-card p { display:-webkit-box; min-height:30px; margin:4px 0; overflow:hidden; color:rgba(var(--theme-text-secondary-rgb),.62); font-size:10px; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:2; }.gb-author-card time { color:rgba(var(--theme-text-secondary-rgb),.5); font-size:10px; }.gb-empty { display:grid; flex:1; place-items:center; padding:24px; color:rgba(var(--theme-text-secondary-rgb),.58); font-size:12px; text-align:center; }
-@media (max-width:720px) { .gb-author-page { overflow:hidden; padding:42px 10px 10px; }.gb-author-toolbar { flex-wrap:wrap; }.gb-author-toolbar-title { min-width:100%; order:-1; }.gb-author-layout { display:flex; flex-direction:column; overflow:auto; }.gb-author-profile { min-height:170px; }.gb-author-mods { min-height:450px; } }
+.gb-author-game { display:flex; align-items:center; gap:4px; min-width:0; margin-top:4px; color:rgba(var(--theme-surface-tint-rgb),.82); font-size:10px; line-height:1.25; }.gb-author-game img { width:14px; height:14px; flex:0 0 auto; border-radius:3px; object-fit:cover; }.gb-author-game span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:720px) { .gb-author-page { overflow:hidden; padding:42px 10px 10px; }.gb-history-nav { right:10px; left:10px; }.gb-history-entry { max-width:150px; }.gb-author-toolbar { flex-wrap:wrap; }.gb-author-toolbar-title { min-width:100%; order:-1; }.gb-author-layout { display:flex; flex-direction:column; overflow:auto; }.gb-author-profile { min-height:170px; }.gb-author-mods { min-height:450px; } }
 </style>
