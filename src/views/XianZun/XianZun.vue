@@ -21,7 +21,10 @@ import { fetch } from '@tauri-apps/plugin-http'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { getVersion } from '@tauri-apps/api/app'
+import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { appDataDir, join } from '@tauri-apps/api/path'
+import { exists, mkdir, writeFile } from '@tauri-apps/plugin-fs'
 import { AppStateManager } from '../../store/AppStateManager'
 import {
   REASONING_EFFORT_OPTIONS,
@@ -292,6 +295,8 @@ const setupProgressListeners = async () => {
 const appSettings = AppStateManager.appSettings
 const router = useRouter()
 const { t } = useI18n()
+const modManager = useModManagerStore()
+const modTagStore = useModTagStore()
 
 const STORAGE_KEY = 'xianzun.messages.v1'
 const MAX_TOOL_ROUNDS = 20
@@ -318,6 +323,227 @@ const loadCurrentEnvironment = async () => {
         ? `${normalized}/Mods`
         : ''
   return { gameName, config, installDir, modsDir }
+}
+
+type GamebananaCategoryMetadata = {
+  id: number
+  name: string
+  iconUrl: string
+}
+
+const GAMEBANANA_API_BASE = 'https://gamebanana.com/apiv11'
+const GAMEBANANA_ICON_CACHE_FOLDER = 'gamebanana-category-icons'
+
+const gamebananaString = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : value === undefined || value === null ? '' : String(value).trim()
+
+const gamebananaNumber = (value: unknown): number => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const gamebananaCategoryId = (category: Record<string, unknown>): number => {
+  const direct = gamebananaNumber(category._idRow)
+  if (direct > 0) return direct
+  for (const key of ['_sUrl', '_sProfileUrl']) {
+    const match = gamebananaString(category[key]).match(/\/cats\/(\d+)(?:[/?#]|$)/i)
+    if (match) return gamebananaNumber(match[1])
+  }
+  return 0
+}
+
+const gamebananaRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+
+const gamebananaRecordArray = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value) ? value.map(gamebananaRecord) : []
+
+const isSafeHttpUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+const sanitizeGamebananaPathSegment = (value: string, fallback: string): string => {
+  const sanitized = value
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return sanitized || fallback
+}
+
+const gamebananaImageUrl = (image: Record<string, unknown>): string => {
+  for (const key of ['_sUrl', '_sUrl800', '_sUrl530', '_sUrl220', '_sUrl100']) {
+    const direct = gamebananaString(image[key])
+    if (direct) return direct
+  }
+  const baseUrl = gamebananaString(image._sBaseUrl) || 'https://images.gamebanana.com/img/ss/mods'
+  for (const key of ['_sFile', '_sFile800', '_sFile530', '_sFile220', '_sFile100']) {
+    const file = gamebananaString(image[key])
+    if (file) return `${baseUrl.replace(/\/$/, '')}/${file.replace(/^\//, '')}`
+  }
+  return ''
+}
+
+const gamebananaCategoryTrail = (profile: Record<string, unknown>): GamebananaCategoryMetadata[] => {
+  const seen = new Set<number>()
+  return ['_aRootCategory', '_aCategory', '_aSubCategory']
+    .map((key) => gamebananaRecord(profile[key]))
+    .map((category) => ({
+      id: gamebananaCategoryId(category),
+      name: gamebananaString(category._sName),
+      iconUrl: gamebananaString(category._sIconUrl),
+    }))
+    .filter((category) => Number.isSafeInteger(category.id) && category.id > 0 && !seen.has(category.id) && Boolean(seen.add(category.id)))
+}
+
+type GamebananaCategoryTreeNode = GamebananaCategoryMetadata & {
+  categoryCount: number
+}
+
+const gamebananaCategoryCount = (category: Record<string, unknown>): number =>
+  category._nCategoryCount === undefined ? -1 : Math.max(0, gamebananaNumber(category._nCategoryCount))
+
+const fetchGamebananaCategoryChildren = async (categoryId: number): Promise<GamebananaCategoryTreeNode[]> => {
+  const response = await fetch(`${GAMEBANANA_API_BASE}/ModCategory/${categoryId}/SubCategories`, { method: 'GET' })
+  if (!response.ok) throw new Error(`GameBanana category HTTP ${response.status}`)
+  return gamebananaRecordArray(await response.json())
+    .map((category) => ({
+      id: gamebananaCategoryId(category),
+      name: gamebananaString(category._sName),
+      iconUrl: gamebananaString(category._sIconUrl),
+      categoryCount: gamebananaCategoryCount(category),
+    }))
+    .filter((category) => category.id > 0 && category.name)
+}
+
+const resolveGamebananaCategoryTrail = async (profile: Record<string, unknown>): Promise<GamebananaCategoryMetadata[]> => {
+  const directTrail = gamebananaCategoryTrail(profile)
+  const leaf = directTrail.at(-1)
+  const gameId = gamebananaNumber(gamebananaRecord(profile._aGame)._idRow)
+  if (!leaf?.id || !gameId) return directTrail
+
+  try {
+    const response = await fetch(`${GAMEBANANA_API_BASE}/Mod/Categories?_idGameRow=${gameId}&_sSort=a_to_z&_bShowEmpty=true`, { method: 'GET' })
+    if (!response.ok) return directTrail
+    const roots = gamebananaRecordArray(await response.json())
+      .map((category) => ({
+        id: gamebananaCategoryId(category),
+        name: gamebananaString(category._sName),
+        iconUrl: gamebananaString(category._sIconUrl),
+        categoryCount: gamebananaCategoryCount(category),
+      }))
+      .filter((category) => category.id > 0 && category.name)
+
+    const rootId = gamebananaCategoryId(gamebananaRecord(profile._aRootCategory))
+    let frontier = (rootId ? roots.filter((root) => root.id === rootId) : roots)
+      .map((node) => ({
+        node,
+        path: [{ id: node.id, name: node.name, iconUrl: node.iconUrl }],
+      }))
+
+    // GameBanana omits _nCategoryCount for many child records. Search one
+    // hierarchy level at a time so an unknown sibling cannot cause a costly
+    // depth-first walk through its entire branch before the correct one.
+    for (let depth = 0; depth < 5 && frontier.length > 0; depth += 1) {
+      const currentMatch = frontier.find(({ node }) => node.id === leaf.id)
+      if (currentMatch) return currentMatch.path
+
+      const childrenByNode = await Promise.all(frontier
+        .filter(({ node }) => node.categoryCount !== 0)
+        .map(async ({ node, path }) => ({
+          path,
+          children: await fetchGamebananaCategoryChildren(node.id),
+        })))
+      const next = childrenByNode.flatMap(({ path, children }) => children.map((node) => ({
+        node,
+        path: [...path, { id: node.id, name: node.name, iconUrl: node.iconUrl }],
+      })))
+      const nextMatch = next.find(({ node }) => node.id === leaf.id)
+      if (nextMatch) return nextMatch.path
+      if (next.length > 160) return directTrail
+      frontier = next
+    }
+
+    return directTrail
+  } catch {
+    return directTrail
+  }
+}
+
+const gamebananaPreviewUrls = (profile: Record<string, unknown>): string[] => {
+  const media = gamebananaRecord(profile._aPreviewMedia)
+  const urls = gamebananaRecordArray(media._aImages).map(gamebananaImageUrl)
+  return Array.from(new Set(urls.filter(isSafeHttpUrl)))
+}
+
+const fetchGamebananaModProfile = async (modId: number): Promise<Record<string, unknown>> => {
+  const response = await fetch(`${GAMEBANANA_API_BASE}/Mod/${modId}/ProfilePage`, { method: 'GET' })
+  if (!response.ok) throw new Error(`GameBanana HTTP ${response.status}`)
+  const profile = gamebananaRecord(await response.json())
+  const error = gamebananaString(profile._sErrorMessage) || gamebananaString(profile.error)
+  if (error) throw new Error(error)
+  return profile
+}
+
+const cacheGamebananaCategoryIcon = async (category: GamebananaCategoryMetadata): Promise<string> => {
+  if (!isSafeHttpUrl(category.iconUrl)) return ''
+  const cacheDir = await join(await appDataDir(), GAMEBANANA_ICON_CACHE_FOLDER)
+  const path = await join(cacheDir, `category-${category.id}.png`)
+  if (await exists(path)) return path
+
+  const response = await fetch(category.iconUrl, { method: 'GET' })
+  if (!response.ok) throw new Error(`GameBanana category icon returned HTTP ${response.status}`)
+  await mkdir(cacheDir, { recursive: true })
+  await writeFile(path, new Uint8Array(await response.arrayBuffer()))
+  return path
+}
+
+const applyGamebananaCategoryIcons = async (
+  gameName: string,
+  trail: GamebananaCategoryMetadata[],
+): Promise<string[]> => {
+  const warnings: string[] = []
+  for (let index = 0; index < trail.length; index += 1) {
+    const category = trail[index]
+    try {
+      const iconPath = await cacheGamebananaCategoryIcon(category)
+      if (!iconPath) continue
+      const groupPath = ['GameBanana', ...trail.slice(0, index + 1).map((item) =>
+        sanitizeGamebananaPathSegment(item.name, `Category ${item.id}`),
+      )].join('/')
+      await modManager.setModGroupIcon(gameName, groupPath, iconPath)
+    } catch (error) {
+      warnings.push(`分类图标 ${category.name || category.id} 写入失败: ${String(error)}`)
+    }
+  }
+  return warnings
+}
+
+const markGamebananaModNsfw = async (gameName: string, relativePath: string): Promise<void> => {
+  const initial = await modTagStore.load(gameName)
+  let nsfwTag = initial.tags.find((tag) => tag.name.trim().toLowerCase() === 'nsfw')
+  if (!nsfwTag) {
+    nsfwTag = await modTagStore.upsertTag(gameName, { name: 'NSFW', color: '#C33B53' })
+  }
+  const latest = await modTagStore.load(gameName)
+  const existingTagIds = latest.modMappings[relativePath] ?? []
+  await modTagStore.setModTags(gameName, relativePath, Array.from(new Set([...existingTagIds, nsfwTag.id])))
+}
+
+const resolveInstalledGamebananaModPath = async (
+  gameName: string,
+  targetGroup: string,
+  targetName: string,
+): Promise<string> => {
+  const scan = await modManager.scanGroup(gameName, targetGroup, undefined, { refresh: true })
+  const normalizedTargetName = targetName.trim().toLocaleLowerCase()
+  const installed = scan.mods.find((mod) => mod.name.trim().toLocaleLowerCase() === normalizedTargetName)
+  return installed?.relativePath?.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || ''
 }
 
 /* ═══════════════════════════════════════════════
@@ -482,6 +708,122 @@ const uiCommands: XianZunCommand[] = [
     },
   },
   {
+    name: 'gamebanana_install_mod',
+    description: '按 GameBanana 页面的规则下载并安装 Mod。自动使用当前已配置游戏的真实安装目录，按 GameBanana 分类创建分组，保存预览图和分类图标，并写入 thisisa.mod 标记以便 Mod 管理器识别没有根目录 ini 的 Mod；成人内容会写入 NSFW 标签。禁止传入缓存目录或手动拼接下载路径。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        modId: { type: 'number', description: 'GameBanana Mod ID，可由 gamebanana_search_mods 或 gamebanana_get_mod_detail 获得' },
+        fileId: { type: 'number', description: '要下载的文件 ID（可选；不传时使用第一个可下载文件）' },
+        targetGroup: { type: 'string', description: '自定义目标分组（可选；默认使用 GameBanana/分类层级）' },
+        targetName: { type: 'string', description: '自定义安装名称（可选；默认使用 Mod 标题）' },
+        password: { type: 'string', description: '压缩包密码（可选）' },
+      },
+      required: ['modId'],
+    },
+    risk: 'write',
+    execute: async (args) => {
+      const modId = Number(args.modId)
+      if (!Number.isSafeInteger(modId) || modId <= 0) {
+        return '缺少有效参数: modId。请先通过 gamebanana_search_mods 或 gamebanana_get_mod_detail 获取 Mod ID。'
+      }
+
+      const environment = await loadCurrentEnvironment()
+      if (!environment.gameName || environment.gameName === 'Default' || !environment.installDir) {
+        return '当前游戏未配置真实安装目录。请先在游戏设置中配置 3Dmigoto 安装目录；为避免写入默认缓存目录，芝士猫不会继续安装。'
+      }
+
+      const profile = await fetchGamebananaModProfile(modId)
+      const files = gamebananaRecordArray(profile._aArchivedFiles ?? profile._aFiles)
+        .filter((file) => isSafeHttpUrl(gamebananaString(file._sDownloadUrl)))
+      if (files.length === 0) {
+        return `GameBanana Mod #${modId} 没有可用下载文件。`
+      }
+
+      const requestedFileId = Number(args.fileId)
+      const selectedFile = Number.isSafeInteger(requestedFileId) && requestedFileId > 0
+        ? files.find((file) => gamebananaNumber(file._idRow) === requestedFileId)
+        : files[0]
+      if (!selectedFile) {
+        return `GameBanana Mod #${modId} 中未找到文件 ID ${requestedFileId}。`
+      }
+
+      const title = sanitizeGamebananaPathSegment(gamebananaString(profile._sName), `GameBanana Mod ${modId}`)
+      const profileTrail = gamebananaCategoryTrail(profile)
+      const trail = await resolveGamebananaCategoryTrail(profile)
+      const hasRootCategory = gamebananaCategoryId(gamebananaRecord(profile._aRootCategory)) > 0
+      const hasCategory = gamebananaCategoryId(gamebananaRecord(profile._aCategory)) > 0
+      const hasSubCategory = gamebananaCategoryId(gamebananaRecord(profile._aSubCategory)) > 0
+      const profileHasCompleteTrail = hasRootCategory && (!hasSubCategory || hasCategory)
+      if (trail.length <= profileTrail.length && !profileHasCompleteTrail) {
+        return `无法解析 GameBanana Mod #${modId} 的完整分类路径，已取消安装以避免写入虚拟路径。请稍后重试或改用 GameBanana 页面安装。`
+      }
+      const automaticGroup = ['GameBanana', ...trail.map((category) =>
+        sanitizeGamebananaPathSegment(category.name, `Category ${category.id}`),
+      )].join('/')
+      const targetGroup = gamebananaString(args.targetGroup) || automaticGroup
+      const targetName = sanitizeGamebananaPathSegment(gamebananaString(args.targetName) || title, `GameBanana Mod ${modId}`)
+      const previewUrls = gamebananaPreviewUrls(profile)
+      const archiveName = gamebananaString(selectedFile._sFile)
+      if (!archiveName) {
+        return `GameBanana Mod #${modId} 的所选文件没有有效文件名，无法安全安装。`
+      }
+
+      await invoke('gamebanana_download_and_install_mod', {
+        gameName: environment.gameName,
+        installDir: environment.installDir,
+        downloadUrl: gamebananaString(selectedFile._sDownloadUrl),
+        archiveName,
+        targetName,
+        targetGroup,
+        password: gamebananaString(args.password) || null,
+        previewUrls,
+        expectedSizeBytes: gamebananaNumber(selectedFile._nFilesize) || undefined,
+      })
+
+      const warnings: string[] = []
+      let installedRelativePath = ''
+      try {
+        const scannedPath = await resolveInstalledGamebananaModPath(environment.gameName, targetGroup, targetName)
+        if (scannedPath) installedRelativePath = scannedPath
+        else warnings.push('安装完成，但 Mod 管理器未能立即解析出该 Mod 的真实路径')
+      } catch (error) {
+        warnings.push(`Mod 真实路径刷新失败: ${String(error)}`)
+      }
+      if (targetGroup === automaticGroup) {
+        warnings.push(...await applyGamebananaCategoryIcons(environment.gameName, trail))
+      }
+      const isNsfw = profile._bIsNsfw === true
+        || profile._bHasContentRatings === true
+        || Object.keys(gamebananaRecord(profile._aContentRatings)).length > 0
+      if (isNsfw) {
+        try {
+          if (installedRelativePath) {
+            await markGamebananaModNsfw(environment.gameName, installedRelativePath)
+          } else {
+            warnings.push('NSFW 标签未写入：缺少 Mod 管理器返回的真实路径')
+          }
+        } catch (error) {
+          warnings.push(`NSFW 标签写入失败: ${String(error)}`)
+        }
+      }
+
+      return JSON.stringify({
+        installed: true,
+        gameName: environment.gameName,
+        installDir: environment.installDir,
+        targetGroup,
+        targetName,
+        categoryTrail: trail.map((category) => ({ id: category.id, name: category.name })),
+        relativePath: installedRelativePath || null,
+        source: `https://gamebanana.com/mods/${modId}`,
+        nsfw: isNsfw,
+        previewCount: previewUrls.length,
+        warnings,
+      }, null, 2)
+    },
+  },
+  {
     name: 'list_capabilities',
     description: '列出芝士猫当前可以调用的全部指令(名称、参数、风险级别)。自动注册的模块函数名称格式为 模块.函数,调用前可先用本指令查询。',
     inputSchema: { type: 'object', properties: {}, required: [] },
@@ -603,15 +945,21 @@ const uiCommands: XianZunCommand[] = [
 // module function (auto-registered capabilities).
 const capabilityTools = buildCapabilityTools({
   resourceManager: useResourceManagerStore() as unknown as Record<string, unknown>,
-  modManager: useModManagerStore() as unknown as Record<string, unknown>,
-  modTagStore: useModTagStore() as unknown as Record<string, unknown>,
+  modManager: modManager as unknown as Record<string, unknown>,
+  modTagStore: modTagStore as unknown as Record<string, unknown>,
   modPresetStore: useModPresetStore() as unknown as Record<string, unknown>,
   modStateStore: useModStateStore() as unknown as Record<string, unknown>,
   gameConfig: useGameConfigStore() as unknown as Record<string, unknown>,
 })
+
+// The high-level command resolves the configured game directory and persists
+// GameBanana metadata. Keep the raw installer available to the UI, but do not
+// expose a bypass through Cheese Cat's tool registry.
+const xianzunMcpTools = mcpTools.filter((tool) => tool.name !== 'gamebanana_download_and_install_mod')
+
 const commands: XianZunCommand[] = [
   ...uiCommands,
-  ...mcpTools,
+  ...xianzunMcpTools,
   ...capabilityTools,
   ...webTools,
   ...agentTools,
@@ -779,7 +1127,7 @@ const buildSystemPrompt = async (): Promise<string> => {
   // Precise tools (UI + Tauri commands) are listed inline; auto-registered
   // module functions are discovered on demand via list_capabilities to keep
   // the system prompt compact.
-  const commandList = [...uiCommands, ...mcpTools]
+  const commandList = [...uiCommands, ...xianzunMcpTools]
     .map((c) => {
       const requiredParams = c.inputSchema.required.join(', ')
       const optionalParams = Object.keys(c.inputSchema.properties).filter(
@@ -814,7 +1162,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     '你保持可爱又专业的双面性:处理 Mod、代码、工具任务时依然利落可靠;闲聊时可以撒娇、开玩笑。始终使用用户提问所用的语言回复。',
     '',
     '你拥有操控整个应用的能力(如同自己的手臂):不仅能调用下方精确注册的指令,还能调用前端全部模块函数(自动注册,名称格式为 模块.函数,例如 ResourceManager.loadGameConfig、ModManager.toggleMod、MigotoManager.switchD3d11Mode、PathHelper.GetCurrentGame3DmigotoFolderPath)。',
-    '你还可以直接访问 GameBanana(无需浏览器):用 gamebanana_search_mods 按关键词搜索 Mod、gamebanana_get_categories 查看分类、gamebanana_get_mod_detail 查看 Mod 的截图/描述/下载链接。找到合适的 Mod 时,用 markdown 图片语法展示预览图给用户,并询问是否安装;用户同意后调用 gamebanana_download_and_install_mod 完成下载安装。',
+    '你还可以直接访问 GameBanana(无需浏览器):用 gamebanana_search_mods 按关键词搜索 Mod、gamebanana_get_categories 查看分类、gamebanana_get_mod_detail 查看 Mod 的截图/描述/下载链接。找到合适的 Mod 时,用 markdown 图片语法展示预览图并询问是否安装;用户同意后必须调用 gamebanana_install_mod。该命令会复用 GameBanana 页面的分类路径、预览图、图标和 NSFW 标签逻辑，并且拒绝使用默认缓存目录。不要直接调用底层 gamebanana_download_and_install_mod。',
     '你拥有通用 agent 能力:run_shell_command 可以执行任意 PowerShell 命令(读取文件内容、目录遍历、进程/服务查询、运行脚本等,需要用户确认);read_text_file / list_directory / file_exists 可以查看本机文件;fetch_webpage 可以抓取任意网页文本(如文档、GitHub 页面)。',
     '你拥有完整的文件与代码能力:write_text_file / edit_text_file / append_text_file 可以创建、修改、追加文本文件(UTF-8,自动建目录,需要用户确认);search_text 可以按正则搜索目录中的文本(grep 风格,返回 路径:行号:内容);find_files 可以按通配符查找文件。需要修改代码或配置文件时,先 read_text_file / search_text 看清楚现状,再精确 edit。',
     '',
@@ -826,6 +1174,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     '调用规则:',
     '- 调用工具时优先使用原生 function calling(端点已启用 tools 参数,模型会自动输出标准 tool_calls,无需手写格式);若端点不支持原生调用(报错后会自动降级),则输出语言标记为 tool_call 的 fenced code block,内容为 JSON: {"command":"指令名","arguments":{...}}。两种方式的结果都会回传给你。',
     '- 对自动注册的模块函数,先用 list_capabilities 查看函数名与参数,再用 get_tool_schema 查看详细参数说明,然后调用。',
+    '- 安装 GameBanana Mod 时，只使用 gamebanana_install_mod(modId, fileId?)，不要自行传 installDir 或调用 PathHelper 的缓存回退路径。除非用户明确指定分组或名称，否则不要传 targetGroup/targetName。当前游戏未配置真实安装目录时，说明原因并引导用户配置，不得安装到默认 CacheFolder。',
     '- 你可以自由组合多个指令完成复杂任务(例如:扫描 Mod 库 → 从 GameBanana 下载指定类型 Mod → 安装 → 打标签 → 启动游戏),每一步的执行结果都会回传给你,根据结果决定下一步。',
     '- 缺少必需参数(如 installDir、frameAnalysisFolder、drawIb hash、downloadUrl 等用户才知道的信息)时,不要猜测或编造,先向用户提问,补齐后再调用。',
     '- 标记 [写] 或 [危险] 的指令会按当前审批策略处理:手动审批时弹出确认框,自动审批时由独立审核上下文判断,无审批时直接执行。若操作被拒绝(返回拒绝原因),不要硬重试,改为向用户说明或换一种方案。',
