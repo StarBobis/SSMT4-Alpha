@@ -2,9 +2,8 @@
 
 ## Repository layout
 
-- Extraction source: src-tauri/src/gametype/type_zzmi.rs (ZZMI data types as Rust code).
-- Runtime data types: src-tauri/resources/GameType/ZZMI/*.json (one file per data type, generated).
-- Generator: scripts/export-gametype-json.mjs (run with node from the repo root).
+- Single source of truth: src-tauri/resources/GameType/ZZMI/*.json (one file per data type; the Rust registry type_zzmi.rs was removed).
+- Runtime data types: %LOCALAPPDATA%\SSMT4GlobalConfigs\GameType\ZZMI\ (synced from the bundle on every app start).
 - Constants: src-tauri/src/constants/gametype_{format,element_name,extract_slot,extract_technique,category_name}.rs.
 - Extractor matching logic: src-tauri/src/extract_new/zzmi.rs (get_possible_gametype_list_unity_vs, filter_trianglelist_index_unity_vs).
 - Frame analysis plumbing: src-tauri/src/common/frame_analysis/frameanalysis_log.rs, frameanalysis_data.rs.
@@ -77,6 +76,6 @@ GPU-pre-skinning types use pointlist ExtractTechnique; CPU types use trianglelis
 2. Open the paired VB txt headers for a representative trianglelist draw (and pointlist draw if present): record SemanticName/SemanticIndex/Format/InputSlot/AlignedByteOffset/stride per slot, and the actual buffer bytes.
 3. Build the element list (order matters: POSITION, NORMAL, TANGENT, COLOR, TEXCOORD0..N, BLENDWEIGHTS, BLENDINDICES) with ExtractSlot/ExtractTechnique/Category/DrawCategory/ByteWidth; infer CPU vs GPU from topology and blend presence.
 4. Choose a type name following the encoding table.
-5. Append the D3D11GameType::from_parts block to type_zzmi.rs (7-arg D3D11Element::new calls; use the constants modules, not raw strings).
-6. Run node scripts/export-gametype-json.mjs; confirm the new JSON appears under GameType/ZZMI and existing files are unchanged (hash-compare before/after).
-7. Re-run the checker: the new hash must match; no previously matched hash may lose its match.
+5. Write src-tauri/resources/GameType/ZZMI/<TYPE_NAME>.json with the D3D11ElementList. For a same-name variant use a _2 file suffix and set GameTypeName to the real name.
+6. Re-run the checker: the new hash must match; no previously matched hash may lose its match.
+7. Restart the app (or run `bun tauri dev`) so the file is synced into the user config GameType folder.

@@ -23,14 +23,12 @@ description: Check whether every IB buffer in a ZZZ 3Dmigoto FrameAnalysis folde
    - Any IB hash shows matched=[] -> that IB layout is unsupported. Investigate by opening the paired NNNNNN-vbN=... txt headers of its trianglelist/pointlist draws (element semantic/format/InputSlot/stride) and derive the required data type.
 
 4. **Add missing data types** (one file per data type, project convention):
-   - Edit src-tauri/src/gametype/type_zzmi.rs: append a D3D11GameType::from_parts("<TYPE_NAME>", vec![...]) block using the constants from src-tauri/src/constants/gametype_*.rs (ElementName, DxgiFormat, ExtractSlot, ExtractTechnique, CategoryName).
-   - Regenerate JSON: run node scripts/export-gametype-json.mjs from the repo root (writes one JSON per type into src-tauri/resources/GameType/ZZMI/). Never hand-edit the JSON; it is generated from the Rust sources.
-   - Type name encodes the layout, e.g. GPU_P12_N12_TA16_C16_T8_T1-8_T2-8_T3-8_BW16_BI16_ (see the references file for the naming table).
+   - Create src-tauri/resources/GameType/ZZMI/<TYPE_NAME>.json containing only the D3D11ElementList (see references/PROJECT-CONVENTIONS.md for the format). The Rust registry was removed; JSON is the single source of truth.
+   - Type name encodes the layout, e.g. GPU_P12_N12_TA16_C16_T8_T1-8_T2-8_T3-8_BW16_BI16_ (see the references file for the naming table). Use GameTypeName + a _2 file suffix for same-name variants.
 
 5. **Verify**:
    - Re-run step 2; every IB hash must now match, and previously matched hashes must keep the same matches (no regressions).
-   - Snapshot hashes of src-tauri/resources/GameType/** before exporting, and confirm only the intended new JSON files appear.
-   - If Rust is available, run cargo check in src-tauri/.
+   - Restart the app (or run `bun tauri dev`) so the bundle GameType is synced into `%LOCALAPPDATA%\SSMT4GlobalConfigs\GameType`.
 
 ## Pitfalls
 
@@ -38,7 +36,7 @@ description: Check whether every IB buffer in a ZZZ 3Dmigoto FrameAnalysis folde
 - GPU types use the pointlist-index buffer for Position/Texcoord when a pointlist index exists; the pointlist index is derived from the log (IASetVertexBuffers slot 0 hash, last matching draw before the first trianglelist index).
 - CPU types compute file size from the txt stride x vertex count; GPU types use the buf file size.
 - A type may legitimately match multiple IB hashes, and one IB hash may match several GPU types (the extractor keeps all of them).
-- The export script regenerates every GameType JSON; commit the Rust source and rerun it rather than patching JSON by hand.
+- At runtime the app reads from the user config GameType folder; the bundled JSON is synced there on every start (same-name files are overwritten, user-only files are preserved).
 
 ## Resources
 
