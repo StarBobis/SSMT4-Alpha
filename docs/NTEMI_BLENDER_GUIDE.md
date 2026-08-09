@@ -990,5 +990,6 @@ Workspace/
 
 - `mod_importer` (NTEMI 参考实现): https://github.com/ssice-a/mod_importer
 - SSMT4 提取代码: `src-tauri/src/extract_new/ntemi.rs`
-- 数据类型定义: `src-tauri/src/gametype/type_ntemi.rs`
+- 数据类型定义: `src-tauri/resources/GameType/NTEMI/*.json`
+  （运行时从用户配置目录 `%LOCALAPPDATA%\SSMT4GlobalConfigs\GameType\NTEMI\` 读取）
 - SubMeshJson 结构: `src-tauri/src/workspace/submesh_json.rs`

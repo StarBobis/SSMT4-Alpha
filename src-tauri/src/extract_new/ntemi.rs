@@ -12,7 +12,6 @@ use crate::common::shape_keys::ShapeKeys;
 use crate::config::drawib_config::{DrawIBConfig, DrawIBEntry};
 use crate::config::path_manager::PathManager;
 use crate::extract_new::extract_services::FullExtractDataTypeFilter;
-use crate::gametype::type_ntemi::D3D11GameTypeWrapper;
 use crate::helper::texture_convert_helper::TextureConvertHelper;
 use crate::utils::ssmt_binary_utils::SSMTBinaryUtils;
 use crate::utils::ssmt_file_utils::SSMTFileUtils;
@@ -20,6 +19,27 @@ use crate::utils::ssmt_string_utils::SSMTStringUtils;
 use crate::workspace::submesh_json::{
     SubMeshCategoryBuffer, SubMeshIndexBuffer, SubMeshJson, SubMeshTextureMarkUpInfo,
 };
+
+#[derive(Debug, Clone)]
+pub struct D3D11GameTypeWrapper {
+    pub d3d11gametype: D3D11GameType,
+    pub pointlist_index: String,
+    pub matched_trianglelistindex: String,
+}
+
+impl D3D11GameTypeWrapper {
+    pub fn new(
+        d3d11gametype: D3D11GameType,
+        pointlist_index: impl Into<String>,
+        matched_trianglelistindex: impl Into<String>,
+    ) -> Self {
+        Self {
+            d3d11gametype,
+            pointlist_index: pointlist_index.into(),
+            matched_trianglelistindex: matched_trianglelistindex.into(),
+        }
+    }
+}
 
 fn push_unique_string(target: &mut Vec<String>, value: &str) {
     if value.is_empty() || target.iter().any(|item| item == value) {

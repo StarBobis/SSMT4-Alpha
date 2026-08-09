@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   XianZun (小尊小尊) — Web tools (GameBanana)
+   CheeseCat (芝士猫) — Web tools (GameBanana)
    ═══════════════════════════════════════════════════════════════
    Gives the agent read access to GameBanana so it can search mods,
    inspect details (screenshots, description, download links) and

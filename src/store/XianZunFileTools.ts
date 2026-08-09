@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   XianZun (小尊小尊) — File & code tools
+   CheeseCat (芝士猫) — File & code tools
    ═══════════════════════════════════════════════════════════════
    Gives the agent Kun-style file and code capabilities:
    - write / append / edit files (via PowerShell -EncodedCommand,

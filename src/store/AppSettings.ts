@@ -199,6 +199,7 @@ export class AppSettings {
 	sidebarGameOrder: string[] = []
 	modsManagementBlurNsfw: boolean = true
 	gamebananaNsfwMode: GameBananaNsfwMode = 'blur'
+	gamebananaNsfwBlur: boolean = true
 	gamebananaTranslationEnabled: boolean = true
 	gamebananaTranslationRichText: boolean = false
 	gamebananaTranslationProvider: GameBananaTranslationProvider = 'openai'
@@ -212,7 +213,7 @@ export class AppSettings {
 	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
 	nexusModsApiKey: string = ''
 	nexusModsGameDomain: string = ''
-	// XianZun (小尊小尊) — AI chat agent. OpenAI-compatible endpoint, so it
+	// CheeseCat (芝士猫) — AI chat agent. OpenAI-compatible endpoint, so it
 	// works with DeepSeek out of the box and any compatible provider.
 	xianzunApiKey: string = ''
 	xianzunApiUrl: string = 'https://api.deepseek.com/v1'
@@ -220,6 +221,7 @@ export class AppSettings {
 	xianzunSystemPrompt: string = ''
 	xianzunReasoningEffort: XianZunReasoningEffort = 'auto'
 	xianzunApprovalMode: XianZunApprovalMode = 'manual'
+	xianzunNsfwBlur: boolean = true
 
 	constructor(init?: Partial<AppSettings>) {
 		if (init) {
@@ -263,6 +265,7 @@ export class AppSettings {
 		this.sidebarGameOrder = normalizeSidebarGameOrder(init?.sidebarGameOrder)
 		this.modsManagementBlurNsfw = init?.modsManagementBlurNsfw ?? this.modsManagementBlurNsfw
 		this.gamebananaNsfwMode = normalizeGameBananaNsfwMode(init?.gamebananaNsfwMode)
+		this.gamebananaNsfwBlur = init?.gamebananaNsfwBlur ?? this.gamebananaNsfwBlur
 		this.gamebananaTranslationEnabled = init?.gamebananaTranslationEnabled ?? this.gamebananaTranslationEnabled
 		this.gamebananaTranslationRichText = init?.gamebananaTranslationRichText ?? this.gamebananaTranslationRichText
 		this.gamebananaTranslationProvider = normalizeGameBananaTranslationProvider(init?.gamebananaTranslationProvider)
@@ -291,6 +294,7 @@ export class AppSettings {
 		this.xianzunSystemPrompt = init?.xianzunSystemPrompt ?? this.xianzunSystemPrompt
 		this.xianzunReasoningEffort = normalizeReasoningEffort(init?.xianzunReasoningEffort)
 		this.xianzunApprovalMode = normalizeXianZunApprovalMode(init?.xianzunApprovalMode)
+		this.xianzunNsfwBlur = init?.xianzunNsfwBlur ?? this.xianzunNsfwBlur
 		// VersionNumber is always controlled by current app code version,
 		// not by persisted settings.json.
 		this.VersionNumber = AppSettings.CURRENT_VERSION
@@ -341,6 +345,7 @@ export class AppSettings {
 			sidebarGameOrder: this.sidebarGameOrder,
 			modsManagementBlurNsfw: this.modsManagementBlurNsfw,
 			gamebananaNsfwMode: this.gamebananaNsfwMode,
+			gamebananaNsfwBlur: this.gamebananaNsfwBlur,
 			gamebananaTranslationEnabled: this.gamebananaTranslationEnabled,
 			gamebananaTranslationRichText: this.gamebananaTranslationRichText,
 			gamebananaTranslationProvider: this.gamebananaTranslationProvider,
@@ -358,6 +363,7 @@ export class AppSettings {
 			xianzunSystemPrompt: this.xianzunSystemPrompt,
 			xianzunReasoningEffort: this.xianzunReasoningEffort,
 			xianzunApprovalMode: this.xianzunApprovalMode,
+			xianzunNsfwBlur: this.xianzunNsfwBlur,
 		}
 	}
 }

@@ -1,65 +1,70 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::common::d3d11_gametype::D3D11GameType;
 use crate::config::path_manager::PathManager;
 
-pub mod type_ailimit;
-pub mod type_apmi;
-pub mod type_doav;
-pub mod type_efmi;
-pub mod type_gf2;
-pub mod type_gimi;
-pub mod type_himi;
-pub mod type_hok;
-pub mod type_identityv2;
-pub mod type_miside;
-pub mod type_naraka;
-pub mod type_narakam;
-pub mod type_neirr;
-pub mod type_nioh2;
-pub mod type_ntemi;
-pub mod type_snowbreak;
-pub mod type_srmi;
-pub mod type_theoutcast;
-pub mod type_wwmi;
-pub mod type_yysls;
-pub mod type_zzmi;
-pub mod type_zzmidx12;
+/// 运行时读取的数据类型根目录（用户配置目录，安装时由 bundle 同步）。
+pub fn runtime_gametype_folder() -> PathBuf {
+    PathManager::ssmt_gametype_folder()
+}
 
-pub const GAME_NAME_LIST: &[&str] = &[
-    "AILIMIT",
-    "APMI",
-    "DOAV",
-    "EFMI",
-    "GF2",
-    "GIMI",
-    "HIMI",
-    "HOK",
-    "IDENTITYV",
-    "MISIDE",
-    "NARAKA",
-    "NARAKAM",
-    "NEIRR",
-    "NIOH2",
-    "NTEMI",
-    "SNOWBREAK",
-    "SRMI",
-    "THEOUTCAST",
-    "WUWA",
-    "WWMI",
-    "YYSLS",
-    "ZZMI",
-    "ZZMIDX12",
-];
+/// 随包发布的 GameType 根目录（安装包 resources/GameType）。
+pub fn bundled_gametype_folder() -> PathBuf {
+    PathManager::bundled_gametype_folder()
+}
 
+/// 将随包发布的 GameType 同步到用户配置目录。
+/// 同名文件直接覆盖（保证新版本的数据类型生效），bundle 中没有的用户文件会保留。
+pub fn sync_bundled_gametype_to_config() -> Result<usize, String> {
+    let source = bundled_gametype_folder();
+    let target = runtime_gametype_folder();
+    if !source.is_dir() {
+        return Err(format!(
+            "Bundled GameType folder not found: {}",
+            source.display()
+        ));
+    }
+    sync_folder(&source, &target)
+}
+
+fn sync_folder(source: &Path, target: &Path) -> Result<usize, String> {
+    fs::create_dir_all(target)
+        .map_err(|e| format!("Failed to create GameType folder {}: {e}", target.display()))?;
+
+    let mut copied = 0usize;
+    for entry in fs::read_dir(source)
+        .map_err(|e| format!("Failed to read GameType source {}: {e}", source.display()))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read GameType entry: {e}"))?;
+        let from = entry.path();
+        let to = target.join(entry.file_name());
+
+        if from.is_dir() {
+            copied += sync_folder(&from, &to)?;
+        } else {
+            fs::copy(&from, &to).map_err(|e| {
+                format!(
+                    "Failed to copy GameType file {} -> {}: {e}",
+                    from.display(),
+                    to.display()
+                )
+            })?;
+            copied += 1;
+        }
+    }
+
+    Ok(copied)
+}
+
+/// 根据游戏名定位用户配置目录下的 GameType 文件夹。
 fn external_game_type_folder(game_name: &str) -> Option<PathBuf> {
     let normalized = game_name.trim().to_ascii_uppercase();
     let root = PathManager::ssmt_gametype_folder();
 
-    // IDENTITYV 预设沿用 IdentityV2 目录，避免与旧版 IdentityV 目录混淆。
+    // IDENTITYV 使用 IdentityV 目录，与 IdentityVNewExtractor / 前端 GamePreset 命名一致。
     if normalized == "IDENTITYV" {
-        return Some(root.join("IdentityV2"));
+        return Some(root.join("IdentityV"));
     }
 
     if let Ok(entries) = fs::read_dir(&root) {
@@ -81,17 +86,19 @@ fn external_game_type_folder(game_name: &str) -> Option<PathBuf> {
     exact.is_dir().then_some(exact)
 }
 
-fn load_external_game_type_list(game_name: &str) -> Result<Vec<D3D11GameType>, String> {
-    let Some(folder) = external_game_type_folder(game_name) else {
-        return Ok(Vec::new());
-    };
-
+/// 从指定 GameType 根目录加载一个游戏的全部 JSON 数据类型。
+fn load_game_type_list_from_folder(
+    folder: &Path,
+    game_name: &str,
+) -> Result<Vec<D3D11GameType>, String> {
     if !folder.is_dir() {
-        return Ok(Vec::new());
+        return Err(format!("GameType folder not found: {}", folder.display()));
     }
 
     let mut json_paths = Vec::new();
-    for entry in fs::read_dir(&folder).map_err(|e| format!("Failed to read GameType folder {}: {e}", folder.display()))? {
+    for entry in fs::read_dir(folder)
+        .map_err(|e| format!("Failed to read GameType folder {}: {e}", folder.display()))?
+    {
         let path = entry
             .map_err(|e| format!("Failed to read GameType entry in {}: {e}", folder.display()))?
             .path();
@@ -113,195 +120,128 @@ fn load_external_game_type_list(game_name: &str) -> Result<Vec<D3D11GameType>, S
     }
 
     if game_type_list.is_empty() {
-        return Ok(Vec::new());
+        return Err(format!(
+            "No GameType JSON files found in {}",
+            folder.display()
+        ));
     }
 
     println!(
-        "Loaded {} D3D11GameType entries from external files for {}",
+        "Loaded {} D3D11GameType entries from JSON files for {}",
         game_type_list.len(),
         game_name
     );
     Ok(game_type_list)
 }
 
+/// 从用户配置目录读取一个游戏的数据类型列表（JSON 是唯一数据源）。
 pub fn get_game_type_list(game_name: &str) -> Result<Vec<D3D11GameType>, String> {
     let normalized_game_name = game_name.trim().to_ascii_uppercase();
-
-    if let Ok(external_list) = load_external_game_type_list(&normalized_game_name) {
-        if !external_list.is_empty() {
-            return Ok(external_list);
-        }
-    }
-
-    match normalized_game_name.as_str() {
-        "AILIMIT" => Ok(type_ailimit::AILIMITGameType::initialize()),
-        "APMI" => Ok(type_apmi::APMIGameType::initialize()),
-        "DOAV" => Ok(type_doav::DOAVGameType::initialize()),
-        "EFMI" => Ok(type_efmi::EFMIGameType::initialize()),
-        "GF2" => Ok(type_gf2::GF2GameType::initialize()),
-        "GIMI" => Ok(type_gimi::GIMIGameType::initialize()),
-        "HIMI" => Ok(type_himi::HIMIGameType::initialize()),
-        "HOK" => Ok(type_hok::HOKGameType::initialize()),
-        "IDENTITYV" => Ok(type_identityv2::IdentityV2GameType::initialize()),
-        "MISIDE" => Ok(type_miside::MiSideGameType::initialize()),
-        "NARAKA" => Ok(type_naraka::NarakaGameType::initialize()),
-        "NARAKAM" => Ok(type_narakam::NarakaMGameType::initialize()),
-        "NEIRR" => Ok(type_neirr::NeirRGameType::initialize()),
-        "NIOH2" => Ok(type_nioh2::Nioh2GameType::initialize()),
-        "NTEMI" => Ok(type_ntemi::NTEMIGameType::initialize()),
-        "SNOWBREAK" => Ok(type_snowbreak::SnowBreakGameType::initialize()),
-        "SRMI" => Ok(type_srmi::SRMIGameType::initialize()),
-        "THEOUTCAST" => Ok(type_theoutcast::TheOutcastGameType::initialize()),
-        "WUWA" => Ok(type_wwmi::WWMIGameType::initialize()),
-        "WWMI" => Ok(type_wwmi::WWMIGameType::initialize()),
-        "YYSLS" => Ok(type_yysls::YYSLSGameType::initialize()),
-        "ZZMI" => Ok(type_zzmi::ZZMIGameType::initialize()),
-        "ZZMIDX12" => Ok(type_zzmidx12::ZZMIDX12GameType::initialize()),
-        other => Err(format!("Unsupported GameType preset: {}", other)),
-    }
+    let Some(folder) = external_game_type_folder(&normalized_game_name) else {
+        return Err(format!(
+            "GameType folder not found for {} under {}",
+            normalized_game_name,
+            PathManager::ssmt_gametype_folder().display()
+        ));
+    };
+    load_game_type_list_from_folder(&folder, &normalized_game_name)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::d3d11_element::D3D11Element;
 
-    fn internal_game_type_list(game_name: &str) -> Vec<D3D11GameType> {
-        match game_name {
-            "AILIMIT" => super::type_ailimit::AILIMITGameType::initialize(),
-            "APMI" => super::type_apmi::APMIGameType::initialize(),
-            "DOAV" => super::type_doav::DOAVGameType::initialize(),
-            "EFMI" => super::type_efmi::EFMIGameType::initialize(),
-            "GF2" => super::type_gf2::GF2GameType::initialize(),
-            "GIMI" => super::type_gimi::GIMIGameType::initialize(),
-            "HIMI" => super::type_himi::HIMIGameType::initialize(),
-            "HOK" => super::type_hok::HOKGameType::initialize(),
-            "IDENTITYV" => super::type_identityv2::IdentityV2GameType::initialize(),
-            "MISIDE" => super::type_miside::MiSideGameType::initialize(),
-            "NARAKA" => super::type_naraka::NarakaGameType::initialize(),
-            "NARAKAM" => super::type_narakam::NarakaMGameType::initialize(),
-            "NEIRR" => super::type_neirr::NeirRGameType::initialize(),
-            "NIOH2" => super::type_nioh2::Nioh2GameType::initialize(),
-            "NTEMI" => super::type_ntemi::NTEMIGameType::initialize(),
-            "SNOWBREAK" => super::type_snowbreak::SnowBreakGameType::initialize(),
-            "SRMI" => super::type_srmi::SRMIGameType::initialize(),
-            "THEOUTCAST" => super::type_theoutcast::TheOutcastGameType::initialize(),
-            "WUWA" | "WWMI" => super::type_wwmi::WWMIGameType::initialize(),
-            "YYSLS" => super::type_yysls::YYSLSGameType::initialize(),
-            "ZZMI" => super::type_zzmi::ZZMIGameType::initialize(),
-            "ZZMIDX12" => super::type_zzmidx12::ZZMIDX12GameType::initialize(),
-            other => panic!("missing internal GameType registry for {other}"),
-        }
+    fn bundled_gametype_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("GameType")
     }
 
-    fn same_d3d11_element(left: &D3D11Element, right: &D3D11Element) -> bool {
-        left.semantic_name == right.semantic_name
-            && left.format == right.format
-            && left.extract_slot == right.extract_slot
-            && left.extract_technique == right.extract_technique
-            && left.category == right.category
-            && left.draw_category == right.draw_category
-            && left.byte_width == right.byte_width
-    }
+    #[test]
+    fn all_game_type_folders_load_from_json() {
+        let root = bundled_gametype_root();
+        let mut loaded_any = false;
 
-    fn same_game_type(left: &D3D11GameType, right: &D3D11GameType) -> bool {
-        if left.game_type_name != right.game_type_name
-            || left.d3d11_element_list.len() != right.d3d11_element_list.len()
+        for entry in fs::read_dir(&root)
+            .expect("bundled GameType folder should exist")
+            .flatten()
         {
-            return false;
-        }
-
-        left.d3d11_element_list
-            .iter()
-            .zip(right.d3d11_element_list.iter())
-            .all(|(left_element, right_element)| {
-                same_d3d11_element(left_element, right_element)
-            })
-    }
-
-    #[test]
-    fn external_json_matches_internal_registry() {
-        for game_name in GAME_NAME_LIST {
-            let external =
-                load_external_game_type_list(game_name).expect("external GameType JSON should load");
-            let internal = internal_game_type_list(game_name);
-            assert_eq!(
-                external.len(),
-                internal.len(),
-                "{game_name} external JSON count should match internal registry"
-            );
-
-            let mut matched_internal = vec![false; internal.len()];
-            for external_type in &external {
-                let matched_index = internal
-                    .iter()
-                    .enumerate()
-                    .position(|(index, internal_type)| {
-                        !matched_internal[index] && same_game_type(external_type, internal_type)
-                    })
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "{game_name} external type {} has no internal match",
-                            external_type.game_type_name
-                        )
-                    });
-                matched_internal[matched_index] = true;
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
             }
-            assert!(
-                matched_internal.iter().all(|matched| *matched),
-                "{game_name} internal registry has types without external JSON"
-            );
+
+            let has_json = fs::read_dir(&path)
+                .map(|entries| {
+                    entries.flatten().any(|e| {
+                        e.path()
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| ext.eq_ignore_ascii_case("json"))
+                            .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+            if !has_json {
+                continue;
+            }
+
+            let folder_name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let list = load_game_type_list_from_folder(&path, &folder_name)
+                .unwrap_or_else(|error| panic!("{folder_name}: {error}"));
+            assert!(!list.is_empty(), "{folder_name} should load JSON types");
+            loaded_any = true;
         }
+
+        assert!(loaded_any, "no GameType folders found");
     }
 
     #[test]
-    fn external_game_type_json_is_loaded() {
-        let game_types = get_game_type_list("GIMI").expect("GIMI types should load");
-        assert!(!game_types.is_empty(), "GIMI external types should not be empty");
+    fn identityv_loads_user_added_split2_type() {
+        let folder = bundled_gametype_root().join("IdentityV");
+        let list = load_game_type_list_from_folder(&folder, "IdentityV")
+            .expect("IdentityV JSON should load");
         assert!(
-            game_types.iter().any(|gt| gt.game_type_name == "CPU_P12_N12_C4_T8_T1-8_T2-8_"),
-            "expected GIMI type from external JSON"
+            list.iter()
+                .any(|gt| gt.game_type_name == "CPU_P12_N12_TA12_C4_T8_T1-8_Split2"),
+            "IdentityV should include the user-added Split2 type"
         );
     }
 
     #[test]
-    fn all_external_game_type_folders_load() {
-        for game_name in GAME_NAME_LIST {
-            let game_types = load_external_game_type_list(game_name)
-                .unwrap_or_else(|error| panic!("{game_name}: {error}"));
-            assert!(
-                !game_types.is_empty(),
-                "{game_name} should load external GameType JSON"
-            );
-        }
-    }
+    fn sync_folder_copies_overwrites_and_preserves_user_files() {
+        let base = std::env::temp_dir().join(format!(
+            "ssmt4-gametype-sync-test-{}",
+            std::process::id()
+        ));
+        let source = base.join("source").join("GIMI");
+        let target = base.join("target").join("GIMI");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&target).unwrap();
 
-    #[test]
-    fn duplicate_game_type_variants_are_preserved() {
-        let apmi_external =
-            load_external_game_type_list("APMI").expect("APMI external types should load");
-        let apmi_internal = super::type_apmi::APMIGameType::initialize();
-        assert_eq!(apmi_external.len(), apmi_internal.len());
+        let first = source.join("a.json");
+        let second = source.join("b.json");
+        fs::write(&first, r#"{"D3D11ElementList":[]}"#).unwrap();
+        fs::write(&second, r#"{"D3D11ElementList":[]}"#).unwrap();
+
+        fs::write(target.join("a.json"), "old").unwrap();
+        fs::write(target.join("keep.json"), "user").unwrap();
+
+        let copied = sync_folder(&source, &target).expect("sync should succeed");
+        assert_eq!(copied, 2);
         assert_eq!(
-            apmi_external
-                .iter()
-                .filter(|gt| gt.game_type_name == "GPU_P12_N12_TA16_C4_T4_T1-8_BI4_")
-                .count(),
-            2,
-            "APMI duplicate GameType variants should both load"
+            fs::read_to_string(target.join("a.json")).unwrap(),
+            r#"{"D3D11ElementList":[]}"#
+        );
+        assert!(target.join("b.json").exists());
+        assert_eq!(
+            fs::read_to_string(target.join("keep.json")).unwrap(),
+            "user"
         );
 
-        let himi_external =
-            load_external_game_type_list("HIMI").expect("HIMI external types should load");
-        let himi_internal = super::type_himi::HIMIGameType::initialize();
-        assert_eq!(himi_external.len(), himi_internal.len());
-        assert_eq!(
-            himi_external
-                .iter()
-                .filter(|gt| gt.game_type_name == "CPU_P12_N12_TA16_C4_T8_")
-                .count(),
-            2,
-            "HIMI duplicate GameType variants should both load"
-        );
+        let _ = fs::remove_dir_all(&base);
     }
 }
