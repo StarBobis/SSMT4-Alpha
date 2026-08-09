@@ -783,6 +783,9 @@ const updateZoomPreviewBounds = () => {
 };
 
 const openZoomPreview = () => {
+	if (!mesh || previewZoomOpen.value) {
+		return;
+	}
 	previewZoomOpen.value = true;
 	void nextTick(() => {
 		updateZoomPreviewBounds();
@@ -1832,7 +1835,12 @@ onDeactivated(() => {
 			</el-button>
 		</div>
 
-		<div ref="previewHost" class="preview-canvas-wrap" :class="{ 'is-loading': isLoading || isBuildingPreview }">
+		<div
+			ref="previewHost"
+			class="preview-canvas-wrap"
+			:class="{ 'is-loading': isLoading || isBuildingPreview }"
+			@dblclick="openZoomPreview"
+		>
 			<div v-if="!hasPreviewTarget" class="preview-empty">{{ t('markTexture.preview.selectSubMesh') }}</div>
 			<div v-else-if="dataTypes.length === 0 && !isLoading" class="preview-empty">{{ t('markTexture.preview.noDataTypes') }}</div>
 			<div v-else-if="previewError" class="preview-empty is-error">{{ previewError }}</div>

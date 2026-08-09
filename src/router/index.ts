@@ -17,7 +17,7 @@ const NexusMods = () => import('../views/NexusMods/NexusMods.vue')
 const MarkTextureFull = () => import('../views/MarkTexture/MarkTextureFull.vue')
 const Settings = () => import('../views/Settings/Settings.vue')
 const XianZun = () => import('../views/XianZun/XianZun.vue')
-const UIBuilder = () => import('../views/UIBuilder/UIBuilder.vue')
+// const UIBuilder = () => import('../views/UIBuilder/UIBuilder.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home, meta: { title: 'Home', requiresGame: false } },

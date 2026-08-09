@@ -632,6 +632,9 @@ const previewImage = ref('')
 const promptDialogOpen = ref(false)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const chatListRef = ref<HTMLElement | null>(null)
+const isFollowingLatestOutput = ref(true)
+let lastChatScrollTop = 0
+const reasoningScrollStates = new WeakMap<HTMLElement, { isFollowing: boolean; lastScrollTop: number }>()
 let abortController: AbortController | null = null
 let idCounter = 0
 const toolRunning = ref(false)
@@ -1430,7 +1433,7 @@ const runAgentTurn = async () => {
       createdAt: Date.now(),
     })
     settingsOpen.value = true
-    void scrollToBottom()
+    void scrollToBottom(true)
     return
   }
 
@@ -1455,7 +1458,7 @@ const runAgentTurn = async () => {
   // Mutate through the reactive proxy from here on, otherwise Vue never
   // sees streaming/usage updates (raw-object writes bypass reactivity).
   const assistantMsg = messages.value[messages.value.length - 1] as ChatMessage
-  void scrollToBottom()
+  void scrollToBottom(true)
 
   const toolResultQueue: ApiMessage[] = []
   const model = appSettings.xianzunModel.trim() || 'deepseek-v4-flash'
@@ -1568,7 +1571,7 @@ const runAgentTurn = async () => {
               }
             }
           }
-          scrollToBottomIfNear()
+          scrollToBottomIfFollowing()
         },
       })
 
@@ -1742,7 +1745,7 @@ const sendMessage = async () => {
   draft.value = ''
   messages.value.push({ id: nextId(), role: 'user', content: text, createdAt: Date.now() })
   persist()
-  void scrollToBottom()
+  void scrollToBottom(true)
   await runAgentTurn()
 }
 
@@ -2058,20 +2061,59 @@ const renderMarkdown = (source: string): string => {
    Scroll & input behaviors
    ═══════════════════════════════════════════════ */
 
-const scrollToBottom = async () => {
+const SCROLL_BOTTOM_TOLERANCE_PX = 1
+
+const isAtBottom = (el: HTMLElement): boolean =>
+  el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_BOTTOM_TOLERANCE_PX
+
+const scrollToBottom = async (force = false) => {
   await nextTick()
+  if (!force && !isFollowingLatestOutput.value) return
   const el = chatListRef.value
-  if (el) el.scrollTop = el.scrollHeight
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+  lastChatScrollTop = el.scrollTop
+  isFollowingLatestOutput.value = true
 }
 
-const isNearBottom = (): boolean => {
-  const el = chatListRef.value
-  if (!el) return true
-  return el.scrollHeight - el.scrollTop - el.clientHeight < 160
+const scrollToBottomIfFollowing = () => {
+  if (isFollowingLatestOutput.value) void scrollToBottom()
 }
 
-const scrollToBottomIfNear = () => {
-  if (isNearBottom()) void scrollToBottom()
+const onChatScroll = (event: Event) => {
+  const el = event.currentTarget as HTMLElement
+  if (el.scrollTop < lastChatScrollTop) {
+    // Any upward movement is an explicit request to inspect earlier output.
+    isFollowingLatestOutput.value = false
+  } else if (isAtBottom(el)) {
+    isFollowingLatestOutput.value = true
+  }
+  lastChatScrollTop = el.scrollTop
+}
+
+const onReasoningScroll = (event: Event) => {
+  const el = event.currentTarget as HTMLElement
+  const state = reasoningScrollStates.get(el) ?? { isFollowing: true, lastScrollTop: el.scrollTop }
+  if (el.scrollTop < state.lastScrollTop) {
+    state.isFollowing = false
+  } else if (isAtBottom(el)) {
+    state.isFollowing = true
+  }
+  state.lastScrollTop = el.scrollTop
+  reasoningScrollStates.set(el, state)
+}
+
+const followStreamingReasoning = async () => {
+  await nextTick()
+  document
+    .querySelectorAll<HTMLElement>('.xz-msg.streaming .xz-reasoning-body')
+    .forEach((el) => {
+      const state = reasoningScrollStates.get(el) ?? { isFollowing: true, lastScrollTop: el.scrollTop }
+      if (!state.isFollowing) return
+      el.scrollTop = el.scrollHeight
+      state.lastScrollTop = el.scrollTop
+      reasoningScrollStates.set(el, state)
+    })
 }
 
 const autoResize = () => {
@@ -2237,7 +2279,6 @@ const isToolExpanded = (msgId: string) => expandedTools.value.includes(msgId)
    ═══════════════════════════════════════════════ */
 
 watch(draft, () => autoResize())
-watch(() => messages.value.length, () => void scrollToBottom())
 watch(
   () => {
     let total = 0
@@ -2246,14 +2287,9 @@ watch(
     }
     return total
   },
-  async () => {
+  () => {
     if (!isStreaming.value) return
-    await nextTick()
-    document
-      .querySelectorAll<HTMLElement>('.xz-msg.streaming .xz-reasoning-body')
-      .forEach((el) => {
-        el.scrollTop = el.scrollHeight
-      })
+    void followStreamingReasoning()
   },
 )
 
@@ -2272,7 +2308,7 @@ onMounted(() => {
   void setupProgressListeners()
   nextTick(() => {
     autoResize()
-    void scrollToBottom()
+    void scrollToBottom(true)
     if (messages.value.length === 0) inputRef.value?.focus()
   })
 })
@@ -2413,7 +2449,7 @@ onUnmounted(() => {
     </header>
 
     <!-- ═══ Chat list ═══ -->
-    <main ref="chatListRef" class="xz-chat glass-scrollbar">
+    <main ref="chatListRef" class="xz-chat glass-scrollbar" @scroll="onChatScroll">
       <!-- Empty state -->
       <div v-if="messages.length === 0" class="xz-empty">
         <div class="xz-empty-orb" aria-hidden="true">
@@ -2486,7 +2522,7 @@ onUnmounted(() => {
                       <span class="xz-reasoning-meta">{{ seg.text.length }} 字</span>
                       <span class="xz-reasoning-chevron">{{ isReasoningOpen(msg.id) ? '▾' : '▸' }}</span>
                     </button>
-                    <div v-if="isReasoningOpen(msg.id)" class="xz-reasoning-body">{{ seg.text }}</div>
+                    <div v-if="isReasoningOpen(msg.id)" class="xz-reasoning-body" @scroll="onReasoningScroll">{{ seg.text }}</div>
                   </div>
 
                   <div

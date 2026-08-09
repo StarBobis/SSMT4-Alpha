@@ -1886,6 +1886,7 @@ const loadGbPanelWidths = (): Record<GbResizablePanel, number> => {
 const gbLayoutRef = ref<HTMLElement | null>(null);
 const gbPanelWidths = reactive(loadGbPanelWidths());
 const activeGbPanelResize = ref<GbResizablePanel | null>(null);
+const isDetailFocusedLayout = computed(() => appSettings.uiScale <= 0.85);
 const gbLayoutColumnStyle = computed(() => ({
   '--gb-categories-width': `${gbPanelWidths.categories}px`,
   '--gb-detail-width': `${gbPanelWidths.detail}px`,
@@ -2144,7 +2145,10 @@ onBeforeUnmount(() => {
     <main
       ref="gbLayoutRef"
       class="gb-layout"
-      :class="{ 'is-resizing-columns': activeGbPanelResize }"
+      :class="{
+        'is-resizing-columns': activeGbPanelResize,
+        'is-detail-focused': isDetailFocusedLayout,
+      }"
       :style="gbLayoutColumnStyle"
     >
       <aside class="gb-panel gb-categories glass-panel">
@@ -2551,6 +2555,12 @@ onBeforeUnmount(() => {
   grid-template-columns: var(--gb-categories-width, 230px) 10px minmax(310px, 1fr) 10px var(--gb-detail-width, 360px);
   column-gap: 0;
   overflow: hidden;
+}
+
+/* At small UI scales, use the expanded logical canvas for the selected mod's
+   details instead of letting the results list absorb nearly all extra width. */
+.gb-layout.is-detail-focused {
+  grid-template-columns: var(--gb-categories-width, 230px) 10px minmax(310px, .85fr) 10px minmax(var(--gb-detail-width, 360px), 1.15fr);
 }
 
 .gb-panel { border-radius: 12px; overflow: hidden; }
