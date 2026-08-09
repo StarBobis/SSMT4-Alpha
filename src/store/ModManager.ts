@@ -31,6 +31,7 @@ export interface GroupInfo {
   path: string
   enabled: boolean
   modCount?: number
+  isDirectoryLink?: boolean
 }
 
 export interface ModInfo {
@@ -43,6 +44,7 @@ export interface ModInfo {
   group: string
   isDir: boolean
   lastModified: number
+  isDirectoryLink?: boolean
 }
 
 export interface DisabledParentGroupInfo {

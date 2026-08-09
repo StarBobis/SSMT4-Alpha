@@ -2,6 +2,8 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::fs;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Instant, UNIX_EPOCH};
@@ -27,6 +29,7 @@ pub struct ModInfo {
     pub group: String,
     pub is_dir: bool,
     pub last_modified: u64,
+    pub is_directory_link: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -38,6 +41,7 @@ pub struct GroupInfo {
     pub path: String,
     pub enabled: bool,
     pub mod_count: u64,
+    pub is_directory_link: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -131,6 +135,7 @@ fn open_db(install_dir: &str) -> Result<Connection, String> {
             path TEXT NOT NULL,
             enabled INTEGER NOT NULL,
             mod_count INTEGER NOT NULL DEFAULT 0,
+            is_directory_link INTEGER NOT NULL DEFAULT 0,
             updated_at INTEGER NOT NULL,
             PRIMARY KEY (game, id)
         );
@@ -147,6 +152,7 @@ fn open_db(install_dir: &str) -> Result<Connection, String> {
             group_path TEXT NOT NULL,
             is_dir INTEGER NOT NULL,
             last_modified INTEGER NOT NULL DEFAULT 0,
+            is_directory_link INTEGER NOT NULL DEFAULT 0,
             preview_images_json TEXT NOT NULL DEFAULT '[]',
             updated_at INTEGER NOT NULL,
             PRIMARY KEY (game, id)
@@ -179,6 +185,27 @@ fn open_db(install_dir: &str) -> Result<Connection, String> {
         )
         .map_err(|error| error.to_string())?;
     }
+    if user_version < 3 {
+        // New databases already include these columns; existing databases need
+        // the migration before cached scan results can carry link metadata.
+        let _ = conn.execute(
+            "ALTER TABLE groups ADD COLUMN is_directory_link INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE mods ADD COLUMN is_directory_link INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        conn.execute_batch(
+            r#"
+            DELETE FROM mods;
+            DELETE FROM groups;
+            DELETE FROM scan_state;
+            PRAGMA user_version = 3;
+            "#,
+        )
+        .map_err(|error| error.to_string())?;
+    }
 
     Ok(conn)
 }
@@ -192,6 +219,36 @@ fn strip_disabled_prefix(name: &str) -> (String, bool) {
     } else {
         (name.to_string(), false)
     }
+}
+
+fn is_directory_link(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        return metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0;
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+fn path_uses_directory_link(root: &Path, physical_group: &str) -> bool {
+    if is_directory_link(root) {
+        return true;
+    }
+    let mut current = root.to_path_buf();
+    for segment in physical_group.split('/').filter(|segment| !segment.is_empty()) {
+        current.push(segment);
+        if is_directory_link(&current) {
+            return true;
+        }
+    }
+    false
 }
 
 fn is_managed_backup_name(name: &str) -> bool {
@@ -470,6 +527,8 @@ fn scan_group_from_disk(install_dir: &str, group_path: &str) -> Result<ScanResul
         });
     }
 
+    let parent_uses_directory_link = path_uses_directory_link(&root, &physical_group);
+
     let mut mods = Vec::new();
     let mut groups = Vec::new();
     let entries = fs::read_dir(&target).map_err(|error| error.to_string())?;
@@ -505,6 +564,7 @@ fn scan_group_from_disk(install_dir: &str, group_path: &str) -> Result<ScanResul
         };
         let entry_group_id = join_rel(&logical_group, &logical_name);
         let entry_physical_path = join_rel(&physical_group, &dir_name);
+        let is_directory_link = parent_uses_directory_link || is_directory_link(&path);
         let entry_ms = t_entry.elapsed().as_millis();
 
         if is_leaf_mod {
@@ -536,6 +596,7 @@ fn scan_group_from_disk(install_dir: &str, group_path: &str) -> Result<ScanResul
                 group: parent_group_id.clone(),
                 is_dir: true,
                 last_modified: modified_unix_seconds(&path),
+                is_directory_link,
             });
         } else {
             log_scan!(
@@ -553,6 +614,7 @@ fn scan_group_from_disk(install_dir: &str, group_path: &str) -> Result<ScanResul
                 path: entry_physical_path,
                 enabled,
                 mod_count: 0, // lazy: filled by mod_library_get_mod_count
+                is_directory_link,
             });
         }
     }
@@ -618,8 +680,8 @@ fn index_group(
         tx.execute(
             r#"
             INSERT OR REPLACE INTO mods
-              (game, id, name, enabled, path, relative_path, group_path, is_dir, last_modified, preview_images_json, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+              (game, id, name, enabled, path, relative_path, group_path, is_dir, last_modified, is_directory_link, preview_images_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             "#,
             params![
                 game_name,
@@ -631,6 +693,7 @@ fn index_group(
                 item.group,
                 if item.is_dir { 1 } else { 0 },
                 item.last_modified as i64,
+                if item.is_directory_link { 1 } else { 0 },
                 preview_json,
                 now,
             ],
@@ -642,8 +705,8 @@ fn index_group(
         tx.execute(
             r#"
             INSERT OR REPLACE INTO groups
-              (game, id, parent, name, icon_path, path, enabled, mod_count, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+              (game, id, parent, name, icon_path, path, enabled, mod_count, is_directory_link, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             "#,
             params![
                 game_name,
@@ -654,6 +717,7 @@ fn index_group(
                 item.path,
                 if item.enabled { 1 } else { 0 },
                 item.mod_count as i64,
+                if item.is_directory_link { 1 } else { 0 },
                 now,
             ],
         )
@@ -713,7 +777,7 @@ fn query_group(conn: &Connection, game_name: &str, group_path: &str) -> Result<S
     let mut mods_stmt = conn
         .prepare(
             r#"
-            SELECT id, name, enabled, path, relative_path, group_path, is_dir, last_modified, preview_images_json
+            SELECT id, name, enabled, path, relative_path, group_path, is_dir, last_modified, is_directory_link, preview_images_json
             FROM mods
             WHERE game = ?1 AND group_path = ?2
             ORDER BY lower(name)
@@ -722,7 +786,7 @@ fn query_group(conn: &Connection, game_name: &str, group_path: &str) -> Result<S
         .map_err(|error| error.to_string())?;
     let mods = mods_stmt
         .query_map(params![game_name, key.as_str()], |row| {
-            let preview_json: String = row.get(8)?;
+            let preview_json: String = row.get(9)?;
             let preview_images =
                 serde_json::from_str::<Vec<String>>(&preview_json).unwrap_or_default();
             Ok(ModInfo {
@@ -734,6 +798,7 @@ fn query_group(conn: &Connection, game_name: &str, group_path: &str) -> Result<S
                 group: row.get(5)?,
                 is_dir: row.get::<_, i64>(6)? != 0,
                 last_modified: row.get::<_, i64>(7)? as u64,
+                is_directory_link: row.get::<_, i64>(8)? != 0,
                 preview_images,
             })
         })
@@ -744,7 +809,7 @@ fn query_group(conn: &Connection, game_name: &str, group_path: &str) -> Result<S
     let mut groups_stmt = conn
         .prepare(
             r#"
-            SELECT id, name, icon_path, path, enabled, mod_count
+            SELECT id, name, icon_path, path, enabled, mod_count, is_directory_link
             FROM groups
             WHERE game = ?1 AND parent = ?2
             ORDER BY lower(name)
@@ -760,6 +825,7 @@ fn query_group(conn: &Connection, game_name: &str, group_path: &str) -> Result<S
                 path: row.get(3)?,
                 enabled: row.get::<_, i64>(4)? != 0,
                 mod_count: row.get::<_, i64>(5)? as u64,
+                is_directory_link: row.get::<_, i64>(6)? != 0,
             })
         })
         .map_err(|error| error.to_string())?
@@ -867,6 +933,8 @@ pub async fn mod_library_stream_scan(
         });
     }
 
+    let parent_uses_directory_link = path_uses_directory_link(&root, &physical_group);
+
     let entries: Vec<_> = fs::read_dir(&target)
         .map_err(|error| error.to_string())?
         .flatten()
@@ -912,6 +980,7 @@ pub async fn mod_library_stream_scan(
             };
             let entry_group_id = join_rel(&logical_group, &logical_name);
             let entry_physical_path = join_rel(&physical_group, &dir_name);
+            let is_directory_link = parent_uses_directory_link || is_directory_link(&path);
 
             if is_leaf_mod {
                 chunk_mods.push(ModInfo {
@@ -924,6 +993,7 @@ pub async fn mod_library_stream_scan(
                     group: parent_group_id.clone(),
                     is_dir: true,
                     last_modified: modified_unix_seconds(&path),
+                    is_directory_link,
                 });
             } else {
                 chunk_groups.push(GroupInfo {
@@ -933,6 +1003,7 @@ pub async fn mod_library_stream_scan(
                     path: entry_physical_path,
                     enabled,
                     mod_count: 0, // lazy
+                    is_directory_link,
                 });
             }
         }
@@ -1119,7 +1190,7 @@ pub async fn mod_library_all_mods(
     let mut stmt = conn
         .prepare(
             r#"
-            SELECT id, name, enabled, path, relative_path, group_path, is_dir, last_modified, preview_images_json
+            SELECT id, name, enabled, path, relative_path, group_path, is_dir, last_modified, is_directory_link, preview_images_json
             FROM mods
             WHERE game = ?1
             ORDER BY lower(name)
@@ -1128,7 +1199,7 @@ pub async fn mod_library_all_mods(
         .map_err(|error| error.to_string())?;
     let mods = stmt
         .query_map(params![game_name], |row| {
-            let preview_json: String = row.get(8)?;
+            let preview_json: String = row.get(9)?;
             let preview_images =
                 serde_json::from_str::<Vec<String>>(&preview_json).unwrap_or_default();
             Ok(ModInfo {
@@ -1140,6 +1211,7 @@ pub async fn mod_library_all_mods(
                 group: row.get(5)?,
                 is_dir: row.get::<_, i64>(6)? != 0,
                 last_modified: row.get::<_, i64>(7)? as u64,
+                is_directory_link: row.get::<_, i64>(8)? != 0,
                 preview_images,
             })
         })
@@ -1150,7 +1222,7 @@ pub async fn mod_library_all_mods(
     let mut group_stmt = conn
         .prepare(
             r#"
-            SELECT id, name, icon_path, path, enabled, mod_count
+            SELECT id, name, icon_path, path, enabled, mod_count, is_directory_link
             FROM groups
             WHERE game = ?1
             ORDER BY lower(name)
@@ -1166,6 +1238,7 @@ pub async fn mod_library_all_mods(
                 path: row.get(3)?,
                 enabled: row.get::<_, i64>(4)? != 0,
                 mod_count: row.get::<_, i64>(5)? as u64,
+                is_directory_link: row.get::<_, i64>(6)? != 0,
             })
         })
         .map_err(|error| error.to_string())?

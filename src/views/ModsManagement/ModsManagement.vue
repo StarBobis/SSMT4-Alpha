@@ -2598,6 +2598,7 @@ const loadNode = async (node: { level: number; data: GroupInfo }, resolve: (data
                 icon: g.iconPath,
                 path: g.path,
                 enabled: g.enabled,
+                isDirectoryLink: g.isDirectoryLink,
                 name: g.name,
                 count: g.modCount ?? 0,
             }));
@@ -2629,6 +2630,7 @@ const loadNode = async (node: { level: number; data: GroupInfo }, resolve: (data
             icon: g.iconPath,
             path: g.path,
             enabled: g.enabled,
+            isDirectoryLink: g.isDirectoryLink,
             name: g.name,
             count: g.modCount ?? 0,
         }));
@@ -3494,7 +3496,7 @@ const {
                             @drop.stop.prevent="onDrop($event, data.id)"
                             :data-group-id="data.id"
                             :data-parent-id="data.id === MODS_TREE_ROOT_ID ? '' : getGroupParent(data.id)"
-                            :class="{ 'reorder-hover': groupHoverId === data.id, 'is-disabled': !data.enabled }"
+                            :class="{ 'reorder-hover': groupHoverId === data.id, 'is-disabled': !data.enabled, 'is-directory-link': data.isDirectoryLink }"
                             @mousedown.stop="onGroupMouseDown($event, data.id)"
                         >
                             <div class="node-content">
@@ -3603,7 +3605,7 @@ const {
                     v-for="group in visibleSubGroups"
                     :key="`group-${group.id}`"
                     class="subgroup-card glass-panel"
-                    :class="{ 'is-disabled': isDisabledGroup(group), 'reorder-hover': groupHoverId === group.id }"
+                    :class="{ 'is-disabled': isDisabledGroup(group), 'is-directory-link': group.isDirectoryLink, 'reorder-hover': groupHoverId === group.id }"
                     :data-group-id="group.id"
                     :data-parent-id="getGroupParent(group.id)"
                     @click="handleGroupClick({ id: group.id, name: group.name, path: group.path, enabled: group.enabled ?? true } as GroupInfo, { ensureExpanded: false, syncSidebar: false })"
@@ -3704,7 +3706,7 @@ const {
                     v-for="group in visibleSubGroups"
                     :key="`group-list-${group.id}`"
                     class="mod-list-row mod-list-row--group"
-                    :class="{ 'is-disabled': isDisabledGroup(group) }"
+                    :class="{ 'is-disabled': isDisabledGroup(group), 'is-directory-link': group.isDirectoryLink }"
                     :data-group-id="group.id"
                     @click="handleGroupClick({ id: group.id, name: group.name, path: group.path, enabled: group.enabled ?? true } as GroupInfo, { ensureExpanded: false, syncSidebar: false })"
                     @contextmenu.prevent.stop="showGroupContextMenu($event, group)"
@@ -3749,7 +3751,7 @@ const {
                     v-for="mod in filteredMods"
                     :key="`mod-list-${getStableModUiId(mod)}`"
                     class="mod-list-row"
-                    :class="{ 'is-disabled': !mod.enabled, 'reorder-hover': dragOverId === mod.id, 'state-pulse': !!modPulseState[mod.id] }"
+                    :class="{ 'is-disabled': !mod.enabled, 'is-directory-link': mod.isDirectoryLink, 'reorder-hover': dragOverId === mod.id, 'state-pulse': !!modPulseState[mod.id] }"
                     :data-mod-id="mod.id"
                     @contextmenu.prevent.stop="showModContextMenu($event, mod)"
                     @dblclick.stop="openModFolder(mod.path)"
@@ -6416,6 +6418,27 @@ const {
         linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.075), rgba(var(--theme-surface-tint-rgb), 0.028)),
         rgba(255, 255, 255, 0.035);
     border-color: rgba(var(--theme-surface-tint-rgb), 0.18);
+}
+
+.mod-manager .subgroup-card.is-directory-link,
+.mod-manager .mod-list-row.is-directory-link,
+.mod-manager :deep(.mod-card.is-directory-link) {
+    background:
+        linear-gradient(145deg, rgba(85, 174, 104, 0.16), rgba(85, 174, 104, 0.045)),
+        rgba(255, 255, 255, 0.035);
+    border-color: rgba(112, 208, 124, 0.38);
+}
+
+.mod-manager .custom-tree-node.is-directory-link {
+    background: rgba(85, 174, 104, 0.12);
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px rgba(112, 208, 124, 0.24);
+}
+
+.mod-manager .subgroup-card.is-directory-link:hover,
+.mod-manager .mod-list-row.is-directory-link:hover,
+.mod-manager :deep(.mod-card.is-directory-link:hover) {
+    border-color: rgba(142, 230, 152, 0.58);
 }
 
 .mod-manager :deep(.card-preview),
