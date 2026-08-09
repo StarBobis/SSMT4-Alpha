@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { fetch } from '@tauri-apps/plugin-http';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { invoke } from '@tauri-apps/api/core';
@@ -242,6 +242,7 @@ const loadingTranslationModels = ref(false);
 const translationModelsStatus = ref('');
 const translationModelOptions = ref<TranslationModelOption[]>([]);
 const errorMessage = ref('');
+const revealedImages = ref(new Set<string>());
 
 let modsRequestId = 0;
 let detailRequestId = 0;
@@ -295,6 +296,42 @@ const visibleMods = computed(() => appSettings.gamebananaNsfwMode === 'hide'
   : mods.value);
 const visibleCountText = computed(() => `${visibleMods.value.length}${appSettings.gamebananaNsfwMode === 'hide' && mods.value.length !== visibleMods.value.length ? ` / ${mods.value.length}` : ''}`);
 const currentGameName = computed(() => appSettings.CurrentGameName?.trim() || '');
+
+const isImageRevealed = (src: string): boolean => revealedImages.value.has(src);
+const isImageBlurred = (src: string): boolean =>
+  appSettings.gamebananaNsfwBlur && !!src && !revealedImages.value.has(src);
+const toggleImageBlur = (src: string) => {
+  if (!src) return;
+  const next = new Set(revealedImages.value);
+  if (next.has(src)) next.delete(src);
+  else next.add(src);
+  revealedImages.value = next;
+};
+const onModThumbClick = (event: MouseEvent, mod: GbModCard) => {
+  if (!appSettings.gamebananaNsfwBlur || !mod.thumbnailUrl) return;
+  event.stopPropagation();
+  toggleImageBlur(mod.thumbnailUrl);
+};
+const onScreenshotClick = (image: string) => {
+  if (appSettings.gamebananaNsfwBlur) toggleImageBlur(image);
+  else void openExternal(image);
+};
+const toggleRichTextImageBlur = (image: HTMLImageElement) => {
+  const src = image.currentSrc || image.src || '';
+  if (!src) return;
+  toggleImageBlur(src);
+  image.classList.toggle('is-blurred', appSettings.gamebananaNsfwBlur && !revealedImages.value.has(src));
+};
+const syncRichTextImageBlur = () => {
+  document.querySelectorAll<HTMLImageElement>('.gb-rich-text img, .gb-comment-body img').forEach((image) => {
+    const src = image.currentSrc || image.src || '';
+    image.classList.toggle(
+      'is-blurred',
+      appSettings.gamebananaNsfwBlur && !!src && !revealedImages.value.has(src),
+    );
+  });
+};
+
 const queryNumber = (value: unknown): number | null => {
   const parsed = Number(Array.isArray(value) ? value[0] : value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
@@ -573,6 +610,9 @@ const profileToDetail = (profile: GbProfile, sourceCard?: GbModCard): GbModDetai
   const files = profile._aArchivedFiles || profile._aFiles || [];
   return {
     ...base,
+    isNsfw: base.isNsfw
+      || (profile._aContentRatings ? Object.keys(profile._aContentRatings).length > 0 : false)
+      || sourceCard?.isNsfw === true,
     gameId: base.gameId ?? sourceCard?.gameId ?? null,
     gameName: base.gameName || sourceCard?.gameName || '',
     categoryTrail,
@@ -955,6 +995,13 @@ const historyLabel = (entry: GameBananaHistoryEntry): string => {
 
 const richTextClick = (event: MouseEvent) => {
   const target = event.target instanceof Element ? event.target : null;
+  const image = target?.closest('img') as HTMLImageElement | null;
+  if (image) {
+    if (!appSettings.gamebananaNsfwBlur) return;
+    event.preventDefault();
+    toggleRichTextImageBlur(image);
+    return;
+  }
   const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
   if (!anchor?.href) return;
   event.preventDefault();
@@ -1775,12 +1822,21 @@ watch(gameId, (value) => {
 
 watch(() => appSettings.gamebananaNsfwMode, (mode) => {
   const selected = mods.value.find((item) => item.id === selectedModId.value);
-  if (selected && mode === 'hide' && selected.isNsfw) {
+  const selectedIsNsfw = selected?.isNsfw === true || detail.value?.isNsfw === true;
+  if (selectedIsNsfw && mode === 'hide') {
     const fallback = visibleMods.value[0];
     selectedModId.value = null;
     detail.value = null;
     if (fallback) void selectMod(fallback);
   }
+});
+
+watch(() => appSettings.gamebananaNsfwBlur, () => {
+  void nextTick(syncRichTextImageBlur);
+});
+
+watch([detail, () => comments.value.length], () => {
+  void nextTick(syncRichTextImageBlur);
 });
 
 watch(() => appSettings.CurrentGameName, () => {
@@ -2004,6 +2060,17 @@ onBeforeUnmount(() => {
       <button type="button" class="gb-button" :class="{ active: showTranslationSettings }" @click="showTranslationSettings = !showTranslationSettings">
         {{ t('gameBanana.translationSettings') }}
       </button>
+      <button
+        type="button"
+        class="gb-button gb-nsfw-toggle-button"
+        :class="{ active: appSettings.gamebananaNsfwBlur }"
+        :title="t('gameBanana.nsfwImageBlurHint')"
+        :aria-pressed="appSettings.gamebananaNsfwBlur"
+        @click="appSettings.gamebananaNsfwBlur = !appSettings.gamebananaNsfwBlur"
+      >
+        <svg class="gb-nsfw-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>{{ t('gameBanana.nsfwImageBlur') }}</span>
+      </button>
     </section>
 
     <section v-if="showTranslationSettings" class="gb-translation-settings glass-panel">
@@ -2154,10 +2221,29 @@ onBeforeUnmount(() => {
             @keydown.enter.prevent="selectMod(mod)"
             @keydown.space.prevent="selectMod(mod)"
           >
-            <div class="gb-mod-thumb" :class="{ 'is-nsfw-blurred': appSettings.gamebananaNsfwMode === 'blur' && mod.isNsfw }">
+            <div
+              class="gb-mod-thumb"
+              :class="{
+                'is-nsfw-blurred': !appSettings.gamebananaNsfwBlur && appSettings.gamebananaNsfwMode === 'blur' && mod.isNsfw,
+                'is-image-blurred': isImageBlurred(mod.thumbnailUrl),
+                revealed: isImageRevealed(mod.thumbnailUrl),
+              }"
+              @click="onModThumbClick($event, mod)"
+            >
               <img v-if="mod.thumbnailUrl" :src="mod.thumbnailUrl" :alt="mod.title" loading="lazy" />
               <span v-else>{{ mod.title.slice(0, 1) }}</span>
               <span v-if="mod.isNsfw" class="gb-nsfw-badge">NSFW</span>
+              <button
+                v-if="appSettings.gamebananaNsfwBlur && mod.thumbnailUrl"
+                type="button"
+                class="gb-img-toggle"
+                :title="isImageRevealed(mod.thumbnailUrl) ? t('gameBanana.nsfwHideImage') : t('gameBanana.nsfwRevealImage')"
+                :aria-label="isImageRevealed(mod.thumbnailUrl) ? t('gameBanana.nsfwHideImage') : t('gameBanana.nsfwRevealImage')"
+                @click.stop="toggleImageBlur(mod.thumbnailUrl)"
+              >
+                <svg class="gb-eye gb-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="gb-eye gb-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
             </div>
             <span class="gb-mod-copy">
               <strong :title="mod.title" data-gb-translate>{{ mod.title }}</strong>
@@ -2215,8 +2301,23 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-if="detail.screenshots.length" class="gb-screenshots">
-            <button v-for="(image, index) in detail.screenshots.slice(0, 4)" :key="image" type="button" :class="{ 'is-nsfw-blurred': appSettings.gamebananaNsfwMode === 'blur' && detail.isNsfw }" @click="openExternal(image)">
+            <button
+              v-for="(image, index) in detail.screenshots.slice(0, 4)"
+              :key="image"
+              type="button"
+              :class="{
+                'gb-blur-active': appSettings.gamebananaNsfwBlur,
+                'is-nsfw-blurred': !appSettings.gamebananaNsfwBlur && appSettings.gamebananaNsfwMode === 'blur' && detail.isNsfw,
+                'is-image-blurred': isImageBlurred(image),
+                revealed: isImageRevealed(image),
+              }"
+              @click="onScreenshotClick(image)"
+            >
               <img :src="image" :alt="`${detail.title} ${index + 1}`" loading="lazy" />
+              <span v-if="appSettings.gamebananaNsfwBlur" class="gb-img-eye" aria-hidden="true">
+                <svg class="gb-eye gb-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="gb-eye gb-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </span>
             </button>
           </div>
 
@@ -2437,6 +2538,9 @@ onBeforeUnmount(() => {
 .gb-button:hover:not(:disabled) { background: rgba(var(--theme-surface-tint-rgb), 0.16); border-color: rgba(var(--theme-surface-tint-rgb), 0.38); transform: translateY(-1px); }
 .gb-button:disabled { opacity: 0.45; cursor: default; }
 .gb-button--primary { background: rgba(var(--theme-surface-tint-rgb), 0.2); border-color: rgba(var(--theme-surface-tint-rgb), 0.42); }
+.gb-nsfw-toggle-button { display: inline-flex; align-items: center; gap: 6px; }
+.gb-nsfw-toggle-button .gb-nsfw-toggle-icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.gb-nsfw-toggle-button.active { background: rgba(var(--theme-surface-tint-rgb), 0.2); border-color: rgba(var(--theme-surface-tint-rgb), 0.42); color: var(--theme-warning, #e6a23c); }
 
 .gb-error { margin: -3px 2px 0; color: #ffabab; font-size: 12px; }
 
@@ -2590,6 +2694,23 @@ onBeforeUnmount(() => {
 .gb-screenshots button.is-nsfw-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: rgba(8,9,14,.26); color: rgba(255,255,255,.9); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
 .gb-screenshots button.is-nsfw-blurred:hover img { filter: none; transform: scale(1.05); }
 .gb-screenshots button.is-nsfw-blurred:hover::after { opacity: 0; }
+.gb-mod-thumb.is-image-blurred img,
+.gb-screenshots button.is-image-blurred img { filter: blur(18px) saturate(.75); transform: scale(1.16); }
+.gb-mod-thumb.is-image-blurred::after,
+.gb-screenshots button.is-image-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: rgba(8,9,14,.24); color: rgba(255,255,255,.9); font-size: 11px; letter-spacing: .16em; text-shadow: 0 1px 7px rgba(0,0,0,.95); pointer-events: none; }
+.gb-img-toggle { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer; transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+.gb-img-toggle:hover { transform: scale(1.08); background: rgba(24,24,38,.78); border-color: rgba(255,255,255,.45); color: #fff; }
+.gb-img-toggle:active { transform: scale(.96); }
+.gb-eye { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.gb-eye-closed { display: none; }
+.gb-mod-thumb.revealed .gb-eye-open { display: none; }
+.gb-mod-thumb.revealed .gb-eye-closed { display: block; }
+.gb-screenshots button.gb-blur-active { cursor: pointer; }
+.gb-screenshots button .gb-img-eye { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: none; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none; }
+.gb-screenshots button.gb-blur-active .gb-img-eye { display: inline-flex; }
+.gb-screenshots button.revealed .gb-eye-open { display: none; }
+.gb-screenshots button.revealed .gb-eye-closed { display: block; }
+.gb-rich-text :deep(img.is-blurred), .gb-comment-body :deep(img.is-blurred) { filter: blur(14px) saturate(.8); transform: scale(1.04); cursor: zoom-in; }
 .gb-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gb-stats span { display: grid; gap: 3px; padding: 7px; border-radius: 6px; background: rgba(255,255,255,0.045); color: rgba(var(--theme-text-secondary-rgb), 0.6); font-size: 10px; }
 .gb-stats strong { color: rgba(var(--theme-text-primary-rgb), 0.9); font-size: 13px; }

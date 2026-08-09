@@ -199,6 +199,7 @@ export class AppSettings {
 	sidebarGameOrder: string[] = []
 	modsManagementBlurNsfw: boolean = true
 	gamebananaNsfwMode: GameBananaNsfwMode = 'blur'
+	gamebananaNsfwBlur: boolean = true
 	gamebananaTranslationEnabled: boolean = true
 	gamebananaTranslationRichText: boolean = false
 	gamebananaTranslationProvider: GameBananaTranslationProvider = 'openai'
@@ -264,6 +265,7 @@ export class AppSettings {
 		this.sidebarGameOrder = normalizeSidebarGameOrder(init?.sidebarGameOrder)
 		this.modsManagementBlurNsfw = init?.modsManagementBlurNsfw ?? this.modsManagementBlurNsfw
 		this.gamebananaNsfwMode = normalizeGameBananaNsfwMode(init?.gamebananaNsfwMode)
+		this.gamebananaNsfwBlur = init?.gamebananaNsfwBlur ?? this.gamebananaNsfwBlur
 		this.gamebananaTranslationEnabled = init?.gamebananaTranslationEnabled ?? this.gamebananaTranslationEnabled
 		this.gamebananaTranslationRichText = init?.gamebananaTranslationRichText ?? this.gamebananaTranslationRichText
 		this.gamebananaTranslationProvider = normalizeGameBananaTranslationProvider(init?.gamebananaTranslationProvider)
@@ -343,6 +345,7 @@ export class AppSettings {
 			sidebarGameOrder: this.sidebarGameOrder,
 			modsManagementBlurNsfw: this.modsManagementBlurNsfw,
 			gamebananaNsfwMode: this.gamebananaNsfwMode,
+			gamebananaNsfwBlur: this.gamebananaNsfwBlur,
 			gamebananaTranslationEnabled: this.gamebananaTranslationEnabled,
 			gamebananaTranslationRichText: this.gamebananaTranslationRichText,
 			gamebananaTranslationProvider: this.gamebananaTranslationProvider,
