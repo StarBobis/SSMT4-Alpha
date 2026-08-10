@@ -242,7 +242,8 @@
       "mods": "Mods",
       "gameBanana": "GameBanana",
       "nexusMods": "Nexus Mods",
-      "xianzun": "Cheese Cat"
+      "xianzun": "Cheese Cat",
+      "uiBuilder": "UI Builder"
     }
   },
   "xianzun": {
@@ -263,6 +264,10 @@
     "cancel": "Cancel",
     "copied": "Copied to clipboard",
     "copyFailed": "Copy failed",
+    "imagePasteUnsupported": "The current model does not support bitmap input. The image was not pasted.",
+    "imagePasteUnavailable": "Unable to read image data from the clipboard.",
+    "imagePasteCached": "The image was cached and inserted as a local reference.",
+    "imagePasteCacheFailed": "Failed to cache the pasted image.",
     "copy": "Copy",
     "welcomeTitle": "Hi, I'm Cheese Cat",
     "welcomeDesc": "The AI agent inside SSMT4. Chat, code, translate — or let me drive the app through registered commands.",

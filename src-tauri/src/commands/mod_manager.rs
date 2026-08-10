@@ -1258,6 +1258,17 @@ fn spawn_gamebanana_preview_fetch(mod_dir: PathBuf, preview_urls: Vec<String>) {
     });
 }
 
+fn ensure_gamebanana_mod_marker(mod_dir: &Path) -> Result<(), String> {
+    let marker_path = mod_dir.join("thisisa.mod");
+    fs::write(&marker_path, b"# SSMT GameBanana Mod Marker\n").map_err(|error| {
+        format!(
+            "Failed to write GameBanana Mod marker {}: {}",
+            marker_path.to_string_lossy(),
+            error
+        )
+    })
+}
+
 fn spawn_nexusmods_preview_fetch(mod_dir: PathBuf, preview_urls: Vec<String>) {
     if preview_urls.is_empty() {
         return;
@@ -1716,7 +1727,15 @@ pub async fn gamebanana_download_and_install_mod(
         } else {
             normalize_install_relative_path(target_group.trim(), "Target group", true, false)?
         };
-        resolve_physical_install_group_path(&mods_dir, &target_group_path).join(target_name_path)
+        let physical_group = resolve_physical_install_group_path(&mods_dir, &target_group_path);
+        let target = physical_group.join(&target_name_path);
+        println!(
+            "[GameBanana] install target logical_group={} physical_group={} target={}",
+            target_group,
+            physical_group.display(),
+            target.display(),
+        );
+        target
     };
 
     let install_result = install_mod_archive(
@@ -1731,10 +1750,10 @@ pub async fn gamebanana_download_and_install_mod(
     )
     .await;
     let _ = tokio::fs::remove_file(&archive_path).await;
-    if install_result.is_ok() {
-        spawn_gamebanana_preview_fetch(preview_target, preview_urls.unwrap_or_default());
-    }
-    install_result
+    install_result?;
+    ensure_gamebanana_mod_marker(&preview_target)?;
+    spawn_gamebanana_preview_fetch(preview_target, preview_urls.unwrap_or_default());
+    Ok(())
 }
 
 #[tauri::command]

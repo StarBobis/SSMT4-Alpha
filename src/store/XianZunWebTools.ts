@@ -33,6 +33,16 @@ const asNumber = (value: unknown): number => {
   return 0
 }
 
+const categoryId = (category: Record<string, unknown>): number => {
+  const direct = asNumber(category['_idRow'])
+  if (direct > 0) return direct
+  for (const key of ['_sUrl', '_sProfileUrl']) {
+    const match = asString(category[key]).match(/\/cats\/(\d+)(?:[/?#]|$)/i)
+    if (match) return asNumber(match[1])
+  }
+  return 0
+}
+
 const stripHtml = (value: string): string =>
   value
     .replace(/<[^>]*>/g, ' ')
@@ -75,11 +85,17 @@ interface GbModRecord {
   _sName?: unknown
   _sProfileUrl?: unknown
   _sDescription?: unknown
+  _bIsNsfw?: unknown
+  _bHasContentRatings?: unknown
   _nViewCount?: unknown
   _nLikeCount?: unknown
   _nDownloadCount?: unknown
+  _aContentRatings?: unknown
   _aPreviewMedia?: { _aImages?: Array<Record<string, unknown>> }
   _aSubmitter?: { _sName?: unknown }
+  _aRootCategory?: Record<string, unknown>
+  _aCategory?: Record<string, unknown>
+  _aSubCategory?: Record<string, unknown>
 }
 
 /** Resolve a game preset name (GIMI/WWMI/SRMI/ZZMI/HIMI) to a GameBanana game id. */
@@ -87,6 +103,18 @@ const resolveGameId = (gameName: string | undefined): number | null => {
   const name = (gameName ?? '').trim().toUpperCase()
   if (!name) return null
   return GAMEBANANA_ID_BY_PRESET[name] ?? null
+}
+
+const categoryTrail = (record: GbModRecord) => {
+  const seen = new Set<number>()
+  return [record._aRootCategory, record._aCategory, record._aSubCategory]
+    .filter((category): category is Record<string, unknown> => !!category)
+    .map((category) => ({
+      id: categoryId(category),
+      name: asString(category['_sName']),
+      iconUrl: asString(category['_sIconUrl']),
+    }))
+    .filter((category) => category.id > 0 && !seen.has(category.id) && Boolean(seen.add(category.id)))
 }
 
 /* ═══════════════════════════════════════════════
@@ -153,7 +181,7 @@ export const webTools: McpTool[] = [
   {
     name: 'gamebanana_get_mod_detail',
     description:
-      '获取某个 GameBanana Mod 的完整详情:名称、作者、描述、截图列表(大图 URL)、下载链接。拿到下载链接后可引导用户,或配合 gamebanana_download_and_install_mod 直接安装。',
+      '获取某个 GameBanana Mod 的完整详情:名称、作者、描述、截图列表(大图 URL)、可下载文件、NSFW 标记和分类路径。用户确认后使用 gamebanana_install_mod 安装。',
     category: 'GameBanana',
     risk: 'read',
     inputSchema: {
@@ -181,6 +209,7 @@ export const webTools: McpTool[] = [
         .filter((url) => url.length > 0)
         .slice(0, 8)
       const files = (profile._aArchivedFiles ?? profile._aFiles ?? []).map((file) => ({
+        id: asNumber(file['_idRow']),
         fileName: asString(file['_sFile']),
         downloadUrl: asString(file['_sDownloadUrl']),
         sizeBytes: asNumber(file['_nFilesize']),
@@ -196,6 +225,10 @@ export const webTools: McpTool[] = [
         downloads: asNumber(profile._nDownloadCount),
         views: asNumber(profile._nViewCount),
         likes: asNumber(profile._nLikeCount),
+        nsfw: profile._bIsNsfw === true
+          || profile._bHasContentRatings === true
+          || (profile._aContentRatings && typeof profile._aContentRatings === 'object' && Object.keys(profile._aContentRatings).length > 0),
+        categoryTrail: categoryTrail(profile),
         screenshots,
         files,
         description: description.slice(0, 2000),

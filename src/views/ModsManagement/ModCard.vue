@@ -64,6 +64,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
     class="mod-card"
     :class="{
       'is-disabled': !mod.enabled,
+      'is-directory-link': mod.isDirectoryLink,
       'reorder-hover': isDragOver,
       'state-pulse': isPulsing
     }"

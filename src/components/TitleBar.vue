@@ -43,6 +43,7 @@ const allNavItems = ref<NavItem[]>([
     { id: 'gamebanana', path: '/gamebanana', labelKey: 'titlebar.nav.gameBanana', iconType: 'gamebanana' },
     { id: 'nexusmods', path: '/nexusmods', labelKey: 'titlebar.nav.nexusMods', iconType: 'nexusmods' },
     { id: 'xianzun', path: '/xianzun', labelKey: 'titlebar.nav.xianzun', iconType: 'xianzun' },
+    { id: 'ui-builder', path: '/ui-builder', labelKey: 'titlebar.nav.uiBuilder', iconType: 'ui-builder' },
 ]);
 
 // Current order of IDs
@@ -308,6 +309,8 @@ const togglePin = async () => {
                 </svg>
 
                 <svg v-if="item.id === 'mark-texture-full'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"></path><path d="M9 9h6"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg>
+
+                <svg v-if="item.id === 'ui-builder'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 8h8v8H8z"></path><path d="M8 12h8M12 8v8"></path></svg>
 
                 <span class="nav-text">{{ item.label }}</span>
             </div>

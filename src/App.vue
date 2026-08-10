@@ -15,6 +15,7 @@ const shouldShowGlobalDimLayer = computed(() => (
   || route.path === '/work'
   || route.path === '/mark-texture-full'
   || route.path === '/xianzun'
+  || route.path === '/ui-builder'
   || route.path.startsWith('/gamebanana')
   || route.path.startsWith('/nexusmods')
 ));
