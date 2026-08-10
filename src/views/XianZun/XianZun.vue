@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -982,6 +982,9 @@ const inputRef = ref<HTMLTextAreaElement | null>(null)
 const chatListRef = ref<HTMLElement | null>(null)
 const isFollowingLatestOutput = ref(true)
 let lastChatScrollTop = 0
+let savedChatScrollTop: number | null = null
+let savedPageScrollTop: number | null = null
+let savedFollowingLatestOutput = true
 const reasoningScrollStates = new WeakMap<HTMLElement, { isFollowing: boolean; lastScrollTop: number }>()
 let abortController: AbortController | null = null
 let idCounter = 0
@@ -2440,6 +2443,32 @@ const onChatScroll = (event: Event) => {
   lastChatScrollTop = el.scrollTop
 }
 
+const getPageScrollContainer = (): HTMLElement | null =>
+  chatListRef.value?.closest<HTMLElement>('.content-scroll-wrapper') ?? null
+
+const saveScrollPosition = () => {
+  const chat = chatListRef.value
+  if (!chat) return
+  savedChatScrollTop = chat.scrollTop
+  savedPageScrollTop = getPageScrollContainer()?.scrollTop ?? null
+  savedFollowingLatestOutput = isFollowingLatestOutput.value
+}
+
+const restoreScrollPosition = async () => {
+  if (savedChatScrollTop === null && savedPageScrollTop === null) return
+  await nextTick()
+  requestAnimationFrame(() => {
+    const chat = chatListRef.value
+    const page = getPageScrollContainer()
+    if (page && savedPageScrollTop !== null) page.scrollTop = savedPageScrollTop
+    if (chat && savedChatScrollTop !== null) {
+      chat.scrollTop = savedChatScrollTop
+      lastChatScrollTop = chat.scrollTop
+    }
+    isFollowingLatestOutput.value = savedFollowingLatestOutput
+  })
+}
+
 const onReasoningScroll = (event: Event) => {
   const el = event.currentTarget as HTMLElement
   const state = reasoningScrollStates.get(el) ?? { isFollowing: true, lastScrollTop: el.scrollTop }
@@ -2657,9 +2686,15 @@ onMounted(() => {
   void setupProgressListeners()
   nextTick(() => {
     autoResize()
-    void scrollToBottom(true)
     if (messages.value.length === 0) inputRef.value?.focus()
   })
+})
+
+onBeforeRouteLeave(() => {
+  saveScrollPosition()
+})
+onActivated(() => {
+  void restoreScrollPosition()
 })
 
 onUnmounted(() => {
