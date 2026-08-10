@@ -44,6 +44,45 @@ import { useModTagStore } from '../../store/ModTagStore'
 import { useModPresetStore } from '../../store/ModPresetStore'
 import { useModStateStore } from '../../store/ModStateStore'
 import { useGameConfigStore } from '../../store/GameConfig'
+import Vditor from 'vditor'
+import 'vditor/dist/index.css'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+import hljs from 'highlight.js/lib/common'
+import latex from 'highlight.js/lib/languages/latex'
+import 'highlight.js/styles/github-dark.css'
+
+hljs.registerLanguage('latex', latex)
+hljs.registerAliases(['tex'], { languageName: 'latex' })
+
+const VDITOR_SPECIAL_LANGUAGE_HINTS = new Set([
+  'abc',
+  'plantuml',
+  'mermaid',
+  'flowchart',
+  'echarts',
+  'mindmap',
+  'graphviz',
+  'math',
+])
+const VDITOR_LANGUAGE_HINTS = Array.from(
+  new Set([...hljs.listLanguages(), 'tex']),
+).filter((language) => !VDITOR_SPECIAL_LANGUAGE_HINTS.has(language))
+
+type ComposerImageReferenceFormat = 'markdown' | 'html'
+
+// Image-capable endpoints are not enabled yet. Keeping the complete policy in
+// one place makes the eventual opt-in explicit and keeps clipboard bitmaps out
+// of Vditor while the active model only accepts text.
+const COMPOSER_IMAGE_PASTE_CONFIG: {
+  enabled: boolean
+  referenceFormat: ComposerImageReferenceFormat
+  cachePathSegments: readonly string[]
+} = {
+  enabled: false,
+  referenceFormat: 'markdown',
+  cachePathSegments: ['XianZun', 'ComposerImages'],
+}
 
 /* ═══════════════════════════════════════════════
    Types
@@ -972,13 +1011,23 @@ const commands: XianZunCommand[] = [
 
 const messages = ref<ChatMessage[]>([])
 const draft = ref('')
+const vditorHostRef = ref<HTMLElement | null>(null)
+const composerRef = ref<HTMLElement | null>(null)
+const chatBottomInset = ref(0)
+let vditor: Vditor | null = null
+let removeVditorImagePasteGuard: (() => void) | null = null
+type ComposerEditorMode = 'wysiwyg' | 'sv'
+const COMPOSER_EDITOR_MODE_STORAGE_KEY = 'xianzun.composer-editor-mode.v1'
+const composerEditorMode = ref<ComposerEditorMode>('wysiwyg')
+const composerEditorHeight = ref(96)
+let composerResizeCleanup: (() => void) | null = null
+let composerResizeObserver: ResizeObserver | null = null
 const isStreaming = ref(false)
 const settingsOpen = ref(false)
 const testing = ref(false)
 const expandedTools = ref<string[]>([])
 const previewImage = ref('')
 const promptDialogOpen = ref(false)
-const inputRef = ref<HTMLTextAreaElement | null>(null)
 const chatListRef = ref<HTMLElement | null>(null)
 const isFollowingLatestOutput = ref(true)
 let lastChatScrollTop = 0
@@ -992,6 +1041,69 @@ const toolRunning = ref(false)
 const stopAfterTool = ref(false)
 
 const nextId = () => `xz-${Date.now()}-${idCounter++}`
+
+const loadComposerEditorMode = () => {
+  try {
+    const stored = localStorage.getItem(COMPOSER_EDITOR_MODE_STORAGE_KEY)
+    if (stored === 'wysiwyg' || stored === 'sv') composerEditorMode.value = stored
+  } catch {
+    // Ignore unavailable storage and keep the default mode.
+  }
+}
+
+const persistComposerEditorMode = () => {
+  try {
+    localStorage.setItem(COMPOSER_EDITOR_MODE_STORAGE_KEY, composerEditorMode.value)
+  } catch {
+    // Ignore unavailable storage.
+  }
+}
+
+const updateChatBottomInset = () => {
+  const chat = chatListRef.value
+  const composer = composerRef.value
+  if (!chat || !composer) {
+    chatBottomInset.value = 0
+    return
+  }
+  const chatRect = chat.getBoundingClientRect()
+  const composerRect = composer.getBoundingClientRect()
+  // The composer is an overlay. Use its measured overlap when available, and
+  // its own height plus the footer's lower gap as a layout-reflow fallback.
+  const overlap = chatRect.bottom - composerRect.top
+  const fallbackInset = composerRect.height + 8
+  const nextInset = Math.max(0, Math.ceil(Math.max(overlap, fallbackInset)))
+  if (nextInset === chatBottomInset.value) return
+  chatBottomInset.value = nextInset
+  if (isFollowingLatestOutput.value) void scrollToBottom()
+}
+
+const startComposerResize = (event: PointerEvent) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  composerResizeCleanup?.()
+
+  const startY = event.clientY
+  const startHeight = composerEditorHeight.value
+  const maxHeight = Math.max(76, Math.min(440, window.innerHeight - 210))
+  const onPointerMove = (moveEvent: PointerEvent) => {
+    composerEditorHeight.value = Math.max(76, Math.min(maxHeight, startHeight + startY - moveEvent.clientY))
+    updateChatBottomInset()
+  }
+  const onPointerUp = () => composerResizeCleanup?.()
+
+  composerResizeCleanup = () => {
+    document.removeEventListener('pointermove', onPointerMove)
+    document.removeEventListener('pointerup', onPointerUp)
+    document.removeEventListener('pointercancel', onPointerUp)
+    document.body.classList.remove('xz-composer-resizing')
+    composerResizeCleanup = null
+  }
+  document.body.classList.add('xz-composer-resizing')
+  document.addEventListener('pointermove', onPointerMove)
+  document.addEventListener('pointerup', onPointerUp)
+  document.addEventListener('pointercancel', onPointerUp)
+}
 
 const lastAssistant = computed(() => {
   for (let i = messages.value.length - 1; i >= 0; i--) {
@@ -2092,9 +2204,10 @@ const runAgentTurn = async () => {
 }
 
 const sendMessage = async () => {
-  const text = draft.value.trim()
+  const text = (vditor?.getValue() ?? draft.value).trim()
   if (!text || isStreaming.value) return
   draft.value = ''
+  vditor?.setValue('')
   messages.value.push({ id: nextId(), role: 'user', content: text, createdAt: Date.now() })
   persist()
   void scrollToBottom(true)
@@ -2113,6 +2226,7 @@ const stopStreaming = () => {
 
 const sendSuggestion = (suggestion: string) => {
   draft.value = suggestion
+  vditor?.setValue(suggestion)
   void sendMessage()
 }
 
@@ -2236,10 +2350,180 @@ const escapeHtml = (value: string): string =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
+const isSafeCssColor = (value: string): boolean =>
+  /^(?:#[\da-f]{3,8}|[a-z]{3,20}|(?:rgb|hsl)a?\([\d.,%\s/+\-]+\))$/i.test(value)
+
+const decodeMathEntities = (value: string): string => {
+  const decoded: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+  }
+  // Markdown rendering escapes the whole message before block parsing. An
+  // entity typed by the model therefore arrives as &amp;gt; and needs two passes.
+  return [0, 1].reduce(
+    (result) => result.replace(/&(amp|lt|gt|quot|#39);/gi, (entity) => decoded[entity.toLowerCase()] ?? entity),
+    value,
+  )
+}
+
+const renderMath = (source: string, displayMode = false): string => {
+  const macros: Record<string, string> = {}
+  const expression = decodeMathEntities(source).trim().replace(
+    /\\let\\([A-Za-z]+)\\([A-Za-z]+)(?=\\|\s|$)/g,
+    (_match, name: string, target: string) => {
+      macros[`\\${name}`] = `\\${target}`
+      return ''
+    },
+  )
+  if (!expression) return ''
+  try {
+    return `<span class="xz-math${displayMode ? ' display' : ''}">${katex.renderToString(expression, {
+      displayMode,
+      throwOnError: true,
+      strict: 'ignore',
+      macros,
+    })}</span>`
+  } catch {
+    return `<code class="xz-math-source">${escapeHtml(expression)}</code>`
+  }
+}
+
+const CODE_LANGUAGE_ALIASES: Record<string, string> = {
+  latex: 'tex',
+  plain: 'plaintext',
+  text: 'plaintext',
+  sh: 'bash',
+  shell: 'bash',
+  yml: 'yaml',
+}
+
+const isMermaidSource = (body: string): boolean =>
+  /^(?:graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph|C4(?:Context|Container|Component|Dynamic))/i.test(
+    body.trimStart(),
+  )
+
+const getRenderableCodeLanguage = (language: string, body: string): string => {
+  const normalized = language.trim().toLowerCase()
+  if ((!normalized || normalized === 'text' || normalized === 'plaintext') && isMermaidSource(body)) {
+    return 'mermaid'
+  }
+  return normalized || 'text'
+}
+
+let mermaidRenderQueued = false
+const scheduleMermaidRendering = () => {
+  if (mermaidRenderQueued) return
+  mermaidRenderQueued = true
+  void nextTick(() => {
+    requestAnimationFrame(() => {
+      mermaidRenderQueued = false
+      const diagrams = Array.from(document.querySelectorAll<HTMLElement>('code.language-mermaid:not([data-processed="true"])'))
+      if (diagrams.length === 0) return
+      // Vditor's IR preview represents line breaks as <br>. Mermaid reads
+      // textContent, which would merge those lines, so restore the authoritative
+      // Markdown body immediately before passing the node to Vditor.
+      for (const diagram of diagrams) {
+        const source = diagram.dataset.xzMermaidSource
+        if (source !== undefined) diagram.textContent = decodeURIComponent(source)
+      }
+      Vditor.mermaidRender(document, 'https://cdn.jsdelivr.net/npm/vditor@3.11.2', 'dark')
+    })
+  })
+}
+
+// Highlight.js and Vditor both represent code lines as HTML. Replacing the
+// indentation prefix with explicit non-breaking spaces keeps it visible even
+// when a preview line is reconstructed with <br> or wrapped in a highlight span.
+const encodeCodeIndentation = (value: string): string =>
+  value
+    .split('\n')
+    .map((line) => line.replace(/^[ \t]+/, (indent) =>
+      Array.from(indent, (character) => character === '\t' ? '&nbsp;&nbsp;&nbsp;&nbsp;' : '&nbsp;').join(''),
+    ))
+    .join('\n')
+
+const highlightCode = (body: string, language: string): string => {
+  const requested = language.trim().toLowerCase()
+  const normalized = CODE_LANGUAGE_ALIASES[requested] ?? requested
+  if (!normalized || !hljs.getLanguage(normalized)) return encodeCodeIndentation(escapeHtml(body))
+  try {
+    // Use a private marker while highlighting so the generated HTML cannot
+    // collapse indentation before it is restored as visible nbsp entities.
+    const markedBody = body
+      .split('\n')
+      .map((line) => line.replace(/^[ \t]+/, (indent) =>
+        Array.from(indent, (character) => character === '\t' ? '\uE000\uE000\uE000\uE000' : '\uE000').join(''),
+      ))
+      .join('\n')
+    return hljs
+      .highlight(markedBody, { language: normalized, ignoreIllegals: true })
+      .value
+      .replace(/\uE000/g, '&nbsp;')
+  } catch {
+    return encodeCodeIndentation(escapeHtml(body))
+  }
+}
+
+const getFencedCodeBlocks = (source: string): Array<{ language: string; body: string }> => {
+  const fenceRe = /```([\w+-]*)[^\S\r\n]*(?:\r?\n|$)([\s\S]*?)```/g
+  return Array.from(source.matchAll(fenceRe), ([, languageRaw, bodyRaw]) => ({
+    language: String(languageRaw || 'text').trim() || 'text',
+    body: String(bodyRaw).replace(/\r?\n$/, ''),
+  }))
+}
+
+const highlightVditorCodePreviews = () => {
+  const host = vditorHostRef.value
+  if (!host) return
+  const blocks = getFencedCodeBlocks(vditor?.getValue() ?? draft.value)
+  host.querySelectorAll<HTMLElement>('.vditor-ir__preview pre > code, .vditor-wysiwyg__preview pre > code').forEach((code, index) => {
+    const fallbackLanguage = Array.from(code.classList)
+      .find((className) => className.startsWith('language-'))
+      ?.slice('language-'.length) ?? ''
+    const block = blocks[index]
+    const language = getRenderableCodeLanguage(block?.language ?? fallbackLanguage, block?.body ?? code.innerText)
+    // Vditor serializes preview newlines as <br>, which loses leading spaces
+    // when read back from the DOM. The Markdown source remains authoritative.
+    const source = block?.body ?? code.innerText
+    const cacheKey = `${language}\u0000${source}`
+    if (code.dataset.xzHighlightSource === cacheKey) return
+    if (language === 'mermaid') {
+      code.textContent = source
+      code.classList.remove('hljs')
+      code.classList.add('language-mermaid')
+      code.dataset.xzMermaidSource = encodeURIComponent(source)
+      code.removeAttribute('data-processed')
+      scheduleMermaidRendering()
+    } else {
+      code.innerHTML = highlightCode(source, language)
+      code.classList.add('hljs')
+    }
+    code.dataset.xzHighlightSource = cacheKey
+  })
+}
+
 const renderInline = (value: string): string => {
   let out = value
-  // inline code (content already escaped — protect it from other transforms)
-  out = out.replace(/`([^`]+)`/g, '<code class="xz-inline-code">$1</code>')
+  const protectedFragments: string[] = []
+  const protect = (html: string): string => {
+    protectedFragments.push(html)
+    return `\u0000INLINE${protectedFragments.length - 1}\u0000`
+  }
+
+  // Inline code, math, and supported HTML must not be touched by later Markdown transforms.
+  out = out.replace(/`([^`]+)`/g, (_m, code: string) => protect(`<code class="xz-inline-code">${code}</code>`))
+  out = out.replace(/\$([^$\n]+?)\$/g, (_m, math: string) => protect(renderMath(math)))
+  out = out.replace(
+    /&lt;span\s+style=&quot;([^&]*)&quot;\s*&gt;([\s\S]*?)&lt;\/span&gt;/gi,
+    (_m, rawStyle: string, content: string) => {
+      const color = rawStyle.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i)?.[1]?.trim()
+      if (!color || !isSafeCssColor(color)) return _m
+      return protect(`<span class="xz-inline-color" style="color:${color}">${content}</span>`)
+    },
+  )
   // markdown images — ![alt](url), must run before the link rule
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, href: string) => {
     const decoded = href.replace(/&amp;/g, '&')
@@ -2252,6 +2536,13 @@ const renderInline = (value: string): string => {
     return `<span class="xz-img-box${isBlurred ? ' blurred' : ''}${isRevealed ? ' revealed' : ''}${blurEnabled ? ' nsfw-on' : ''}" data-img="${encoded}"><img class="xz-img" src="${escapeHtml(decoded)}" alt="${altText}" loading="lazy"><button type="button" class="xz-img-toggle" data-reveal="${encoded}" title="${toggleLabel}" aria-label="${toggleLabel}"><svg class="xz-eye-icon xz-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="xz-eye-icon xz-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></span>`
   })
   // markdown links
+  out = out.replace(
+    /\(([^)\s]+)\)\[([^\]]+)\]/g,
+    (_m, href: string, label: string) => {
+      const decoded = href.replace(/&amp;/g, '&')
+      return `<a href="#" class="xz-link" data-href="${encodeURIComponent(decoded)}">${label}</a>`
+    },
+  )
   out = out.replace(
     /\[([^\]]+)\]\(([^)\s]+)\)/g,
     (_m, label: string, href: string) => {
@@ -2268,6 +2559,7 @@ const renderInline = (value: string): string => {
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   out = out.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>')
   out = out.replace(/~~([^~]+)~~/g, '<del>$1</del>')
+  out = out.replace(/\u0000INLINE(\d+)\u0000/g, (_m, idx: string) => protectedFragments[Number(idx)] ?? '')
   return out
 }
 
@@ -2277,13 +2569,18 @@ const renderMarkdown = (source: string): string => {
   const blocks: string[] = []
 
   // 1. extract fenced code blocks first (raw, unescaped)
-  const fenceRe = /```([\w+-]*)[ \t]*\r?\n?([\s\S]*?)```/g
+  const fenceRe = /```([\w+-]*)[^\S\r\n]*(?:\r?\n|$)([\s\S]*?)```/g
   let text = source.replace(fenceRe, (_m, langRaw: string, bodyRaw: string) => {
-    const lang = (langRaw || 'text').trim() || 'text'
+    const lang = getRenderableCodeLanguage((langRaw || '').trim(), bodyRaw)
     const body = bodyRaw.replace(/\r?\n$/, '')
-    blocks.push(
-      `<div class="xz-code"><div class="xz-code-head"><span class="xz-code-lang">${escapeHtml(lang)}</span><button type="button" class="xz-copy-btn" data-copy="${encodeURIComponent(body)}">${escapeHtml(copyLabel)}</button></div><pre><code>${escapeHtml(body)}</code></pre></div>`,
-    )
+    if (lang === 'mermaid') {
+      blocks.push(`<div class="xz-mermaid"><pre><code class="language-mermaid" data-xz-mermaid-source="${encodeURIComponent(body)}">${escapeHtml(body)}</code></pre></div>`)
+      scheduleMermaidRendering()
+    } else {
+      blocks.push(
+        `<div class="xz-code"><div class="xz-code-head"><span class="xz-code-lang">${escapeHtml(lang)}</span><button type="button" class="xz-copy-btn" data-copy="${encodeURIComponent(body)}">${escapeHtml(copyLabel)}</button></div><pre><code class="hljs language-${escapeHtml(lang)}">${highlightCode(body, lang)}</code></pre></div>`,
+      )
+    }
     return `\u0000BLOCK${blocks.length - 1}\u0000`
   })
 
@@ -2302,6 +2599,36 @@ const renderMarkdown = (source: string): string => {
 
     if (!trimmed) {
       i++
+      continue
+    }
+
+    // display math block
+    if (trimmed.startsWith('$$')) {
+      let math = trimmed.slice(2)
+      i++
+      if (math.endsWith('$$')) {
+        math = math.slice(0, -2)
+      } else {
+        const mathLines: string[] = [math]
+        let closed = false
+        while (i < lines.length) {
+          const candidate = lines[i]
+          if (candidate.trim().endsWith('$$')) {
+            mathLines.push(candidate.replace(/\$\$\s*$/, ''))
+            i++
+            closed = true
+            break
+          }
+          mathLines.push(candidate)
+          i++
+        }
+        if (!closed) {
+          out.push(`<p>${renderInline(`$$${mathLines.join('\n')}`)}</p>`)
+          continue
+        }
+        math = mathLines.join('\n')
+      }
+      out.push(renderMath(math, true))
       continue
     }
 
@@ -2494,18 +2821,442 @@ const followStreamingReasoning = async () => {
     })
 }
 
-const autoResize = () => {
-  const el = inputRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+/* Retired native-contenteditable composer implementation. */
+/*
+const htmlNodeToMarkdown = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  if (node.nodeType !== Node.ELEMENT_NODE) return ''
+  const element = node as HTMLElement
+  const children = () => Array.from(element.childNodes).map(htmlNodeToMarkdown).join('')
+  switch (element.tagName.toLowerCase()) {
+    case 'br': return '\n'
+    case 'strong':
+    case 'b': return `**${children()}**`
+    case 'em':
+    case 'i': return `*${children()}*`
+    case 'code': return element.parentElement?.tagName.toLowerCase() === 'pre' ? children() : `\`${children()}\``
+    case 'pre': return `\n\`\`\`\n${element.textContent ?? ''}\n\`\`\`\n`
+    case 'a': return `[${children()}](${element.getAttribute('href') ?? ''})`
+    case 'img': return `![${element.getAttribute('alt') ?? ''}](${element.getAttribute('src') ?? ''})`
+    case 'h1': return `\n# ${children()}\n`
+    case 'h2': return `\n## ${children()}\n`
+    case 'h3': return `\n### ${children()}\n`
+    case 'h4': return `\n#### ${children()}\n`
+    case 'h5': return `\n##### ${children()}\n`
+    case 'h6': return `\n###### ${children()}\n`
+    case 'blockquote': return `\n${children().split('\n').map((line) => `> ${line}`).join('\n')}\n`
+    case 'ul': return `\n${Array.from(element.children).map((item) => `- ${htmlNodeToMarkdown(item)}`).join('\n')}\n`
+    case 'ol': return `\n${Array.from(element.children).map((item, index) => `${index + 1}. ${htmlNodeToMarkdown(item)}`).join('\n')}\n`
+    case 'table': {
+      const rows = Array.from(element.querySelectorAll('tr')).map((row) => Array.from(row.children).map((cell) => htmlNodeToMarkdown(cell)).join(' | '))
+      if (rows.length === 0) return ''
+      const columns = Array.from(element.querySelector('thead tr')?.children ?? []).length || rows[0].split(' | ').length
+      return `\n| ${rows[0]} |\n| ${Array.from({ length: columns }, () => '---').join(' | ')} |\n${rows.slice(1).map((row) => `| ${row} |`).join('\n')}\n`
+    }
+    case 'li': return children()
+    case 'p':
+    case 'div': return `${children()}\n\n`
+    default: return children()
+  }
+}
+
+const htmlToMarkdown = (element: HTMLElement): string =>
+  htmlNodeToMarkdown(element).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+
+const syncVisualEditor = () => {
+  if (editorMode.value !== 'visual' || !editorRef.value) return
+  editorRef.value.innerHTML = markdownToEditorHtml(draft.value)
+}
+
+const shouldAutoFormatMarkdown = (markdown: string): boolean =>
+  /(^|\n)(#{1,6}\s+\S|>\s*\S|[-*+]\s+\S|\d+[.)]\s+\S)/.test(markdown)
+  || /\*\*[^*\n]+\*\*|(?<!\*)\*[^*\n]+\*(?!\*)|`[^`\n]+`|\[[^\]]+\]\([^)]*\)|\([^)\s]+\)\[[^\]]+\]/.test(markdown)
+  || /```[\s\S]*\n```/.test(markdown)
+  || /^\s*\|?.*\|.*\|?\s*\n\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*\n\s*\|?.*\|.*\|?\s*$/m.test(markdown)
+
+const getEditorCaretOffset = (editor: HTMLElement): number | null => {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return null
+  const range = selection.getRangeAt(0)
+  if (!editor.contains(range.endContainer)) return null
+  const beforeCaret = range.cloneRange()
+  beforeCaret.selectNodeContents(editor)
+  beforeCaret.setEnd(range.endContainer, range.endOffset)
+  return beforeCaret.toString().length
+}
+
+const setEditorCaret = (editor: HTMLElement, offset: number | null) => {
+  const range = document.createRange()
+  let remaining = offset ?? Number.MAX_SAFE_INTEGER
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+  let textNode = walker.nextNode()
+  while (textNode) {
+    const length = textNode.textContent?.length ?? 0
+    if (remaining <= length) {
+      range.setStart(textNode, remaining)
+      range.collapse(true)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return
+    }
+    remaining -= length
+    textNode = walker.nextNode()
+  }
+  range.selectNodeContents(editor)
+  range.collapse(false)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+}
+
+const autoFormatEditor = (markdown: string) => {
+  const editor = editorRef.value
+  if (!editor || !shouldAutoFormatMarkdown(markdown)) return
+  const trailingBlankParagraph = editor.lastElementChild?.tagName.toLowerCase() === 'p'
+    && !(editor.lastElementChild.textContent ?? '').trim()
+  const html = `${markdownToEditorHtml(markdown)}${trailingBlankParagraph ? '<p><br></p>' : ''}`
+  if (editor.innerHTML === html) return
+  const caretOffset = getEditorCaretOffset(editor)
+  editor.innerHTML = html
+  const lastBlock = editor.lastElementChild as HTMLElement | null
+  if (/```\s*$/.test(markdown) && lastBlock?.tagName.toLowerCase() === 'pre') {
+    insertPlainParagraphAfter(lastBlock)
+  } else {
+    setEditorCaret(editor, caretOffset)
+  }
+}
+
+const onEditorInput = () => {
+  if (!editorRef.value || editorMode.value !== 'visual') return
+  const markdown = htmlToMarkdown(editorRef.value)
+  draft.value = markdown
+  autoFormatEditor(markdown)
+}
+
+const onEditorPaste = (event: ClipboardEvent) => {
+  const markdown = event.clipboardData?.getData('text/plain')
+  if (!markdown) return
+  event.preventDefault()
+  if (getSelectedEditorBlock()?.tagName.toLowerCase() === 'pre') {
+    insertEditorText(markdown)
+    onEditorInput()
+    return
+  }
+  document.execCommand('insertHTML', false, markdownToEditorHtml(markdown))
+  onEditorInput()
+}
+
+const runEditorCommand = (command: string, value?: string) => {
+  if (editorMode.value !== 'visual' || !editorRef.value) return
+  editorRef.value.focus()
+  document.execCommand(command, false, value)
+  onEditorInput()
+}
+
+const insertEditorLink = () => {
+  const url = window.prompt('链接地址')?.trim()
+  if (!url) return
+  runEditorCommand('createLink', url)
+}
+
+const getSelectedEditorBlock = (): HTMLElement | null => {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return null
+  const node = selection.getRangeAt(0).startContainer
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as HTMLElement : node.parentElement
+  return element?.closest<HTMLElement>('pre, h1, h2, h3, h4, h5, h6') ?? null
+}
+
+const insertEditorText = (text: string) => {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+  range.deleteContents()
+  const textNode = document.createTextNode(text)
+  range.insertNode(textNode)
+  range.setStartAfter(textNode)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+const insertPlainParagraphAfter = (block: HTMLElement) => {
+  const paragraph = document.createElement('p')
+  paragraph.append(document.createElement('br'))
+  block.insertAdjacentElement('afterend', paragraph)
+  const range = document.createRange()
+  range.setStart(paragraph, 0)
+  range.collapse(true)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+}
+
+const createCodeBlock = () => {
+  if (editorMode.value !== 'visual' || !editorRef.value) return
+  editorRef.value.focus()
+  document.execCommand('formatBlock', false, 'pre')
+  const block = getSelectedEditorBlock()
+  if (block?.tagName.toLowerCase() === 'pre' && !block.nextElementSibling) {
+    insertPlainParagraphAfter(block)
+  }
+  onEditorInput()
+}
+
+const toggleEditorMode = () => {
+  if (editorMode.value === 'visual') {
+    onEditorInput()
+    editorMode.value = 'source'
+  } else {
+    editorMode.value = 'visual'
+    void nextTick(syncVisualEditor)
+  }
 }
 
 const onKeydown = (event: KeyboardEvent) => {
+  const block = getSelectedEditorBlock()
+  const inCodeBlock = block?.tagName.toLowerCase() === 'pre'
+  if (inCodeBlock) {
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      insertEditorText('\t')
+      onEditorInput()
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      insertEditorText('\n')
+      onEditorInput()
+      return
+    }
+    if ((event.ctrlKey || event.metaKey || event.altKey) && !['a', 'c', 'v', 'x'].includes(event.key.toLowerCase())) {
+      event.preventDefault()
+      return
+    }
+  }
+  if (event.key === 'Enter' && event.shiftKey) {
+    event.preventDefault()
+    if (block && /^h[1-6]$/.test(block.tagName.toLowerCase())) {
+      insertPlainParagraphAfter(block)
+    } else {
+      document.execCommand('insertLineBreak')
+    }
+    onEditorInput()
+    return
+  }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
     event.preventDefault()
     void sendMessage()
   }
+}
+
+*/
+
+const clipboardHasImage = (clipboard: DataTransfer | null): boolean => {
+  if (!clipboard) return false
+  if (Array.from(clipboard.files).some((file) => file.type.startsWith('image/'))) return true
+  if (Array.from(clipboard.items).some((item) => item.type.startsWith('image/'))) return true
+  return /<img\b/i.test(clipboard.getData('text/html'))
+}
+
+const clipboardImageFile = (clipboard: DataTransfer): File | null => {
+  const file = Array.from(clipboard.files).find((candidate) => candidate.type.startsWith('image/'))
+  if (file) return file
+  return Array.from(clipboard.items)
+    .find((item) => item.type.startsWith('image/'))
+    ?.getAsFile() ?? null
+}
+
+const imageFileExtension = (file: File): string => {
+  const extensionByMime: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/bmp': 'bmp',
+    'image/svg+xml': 'svg',
+  }
+  return extensionByMime[file.type.toLowerCase()] ?? 'png'
+}
+
+const toLocalFileUrl = (path: string): string =>
+  `file:///${path.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/')}`
+
+const escapeHtmlAttribute = (value: string): string =>
+  value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+const buildComposerImageReference = (path: string, name: string): string => {
+  const url = toLocalFileUrl(path)
+  if (COMPOSER_IMAGE_PASTE_CONFIG.referenceFormat === 'html') {
+    return `<img src="${escapeHtmlAttribute(url)}" alt="${escapeHtmlAttribute(name)}">`
+  }
+  return `![${name}](${url})`
+}
+
+const cacheComposerImage = async (file: File): Promise<string> => {
+  const cacheDir = await join(await appDataDir(), ...COMPOSER_IMAGE_PASTE_CONFIG.cachePathSegments)
+  await mkdir(cacheDir, { recursive: true })
+  const fileName = `clipboard-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${imageFileExtension(file)}`
+  const path = await join(cacheDir, fileName)
+  await writeFile(path, new Uint8Array(await file.arrayBuffer()))
+  return path
+}
+
+const insertComposerImageReference = (reference: string) => {
+  const currentValue = vditor?.getValue() ?? draft.value
+  const prefix = currentValue && !currentValue.endsWith('\n') ? '\n\n' : currentValue ? '\n' : ''
+  const nextValue = `${currentValue}${prefix}${reference}\n`
+  draft.value = nextValue
+  vditor?.setValue(nextValue)
+}
+
+const onVditorPaste = (event: ClipboardEvent) => {
+  const clipboard = event.clipboardData
+  if (!clipboardHasImage(clipboard)) return
+
+  // Vditor turns clipboard bitmaps into editor content synchronously. Stop it
+  // during capture, before its own handler can decode and freeze the composer.
+  event.preventDefault()
+  event.stopImmediatePropagation()
+
+  if (!COMPOSER_IMAGE_PASTE_CONFIG.enabled) {
+    ElMessage.error(t('xianzun.imagePasteUnsupported'))
+    return
+  }
+
+  const image = clipboard ? clipboardImageFile(clipboard) : null
+  if (!image) {
+    ElMessage.error(t('xianzun.imagePasteUnavailable'))
+    return
+  }
+
+  void cacheComposerImage(image)
+    .then((path) => {
+      insertComposerImageReference(buildComposerImageReference(path, image.name || 'clipboard-image'))
+      ElMessage.success(t('xianzun.imagePasteCached'))
+    })
+    .catch((error) => {
+      console.error('Failed to cache pasted composer image', error)
+      ElMessage.error(t('xianzun.imagePasteCacheFailed'))
+    })
+}
+
+const installVditorImagePasteGuard = () => {
+  removeVditorImagePasteGuard?.()
+  removeVditorImagePasteGuard = null
+  const host = vditorHostRef.value
+  if (!host) return
+  host.addEventListener('paste', onVditorPaste, true)
+  removeVditorImagePasteGuard = () => host.removeEventListener('paste', onVditorPaste, true)
+}
+
+const isVditorCodeBlockSelection = (): boolean => {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return false
+  const node = selection.getRangeAt(0).startContainer
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement
+  return Boolean(element?.closest('[data-type="code-block"]'))
+}
+
+const isVditorCodeFenceTrigger = (): boolean => {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return false
+  const node = selection.getRangeAt(0).startContainer
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement
+  const block = element?.closest('p')
+  return Boolean(block && /^\s*```[^\n]*$/.test(block.textContent ?? ''))
+}
+
+const syncComposerModeToggle = () => {
+  const toolbar = vditorHostRef.value?.querySelector<HTMLElement>('.vditor-toolbar')
+  if (!toolbar) return
+  toolbar.querySelector('.xz-vditor-mode-spacer')?.remove()
+  toolbar.querySelector('.xz-vditor-mode-button')?.parentElement?.remove()
+
+  const spacer = document.createElement('span')
+  spacer.className = 'xz-vditor-mode-spacer'
+  const wrapper = document.createElement('span')
+  wrapper.className = 'xz-vditor-mode-button-wrap'
+  const button = document.createElement('button')
+  const nextMode: ComposerEditorMode = composerEditorMode.value === 'sv' ? 'wysiwyg' : 'sv'
+  const nextModeLabel = nextMode === 'sv' ? 'Source-Target' : 'WYSIWYG'
+  button.type = 'button'
+  button.className = 'xz-vditor-mode-button'
+  button.title = `切换到 ${nextModeLabel}`
+  button.setAttribute('aria-label', `切换到 ${nextModeLabel}`)
+  button.textContent = nextModeLabel
+  button.addEventListener('click', () => {
+    void setComposerEditorMode(nextMode)
+  })
+  wrapper.append(button)
+  toolbar.append(spacer, wrapper)
+}
+
+const setComposerEditorMode = async (mode: ComposerEditorMode) => {
+  if (composerEditorMode.value === mode && vditor) return
+  const value = vditor?.getValue() ?? draft.value
+  draft.value = value
+  composerEditorMode.value = mode
+  persistComposerEditorMode()
+  removeVditorImagePasteGuard?.()
+  removeVditorImagePasteGuard = null
+  vditor?.destroy()
+  vditor = null
+  await nextTick()
+  initializeVditor()
+}
+
+const initializeVditor = () => {
+  if (!vditorHostRef.value) return
+  installVditorImagePasteGuard()
+  vditor = new Vditor(vditorHostRef.value, {
+    mode: composerEditorMode.value,
+    lang: 'zh_CN',
+    theme: 'dark',
+    value: draft.value,
+    minHeight: 76,
+    cache: { enable: false },
+    tab: '\t',
+    toolbar: ['headings', 'bold', 'italic', 'quote', 'list', 'code', 'inline-code', 'link', 'table'],
+    toolbarConfig: { pin: false },
+    preview: {
+      delay: 0,
+      mode: composerEditorMode.value === 'sv' ? 'both' : 'editor',
+      hljs: {
+        enable: true,
+        style: 'github-dark',
+        lineNumber: false,
+        langs: VDITOR_LANGUAGE_HINTS,
+      },
+      markdown: { gfmAutoLink: true, codeBlockPreview: false, sanitize: false },
+      theme: { current: 'dark' },
+    },
+    input: (value) => {
+      draft.value = value
+      requestAnimationFrame(highlightVditorCodePreviews)
+    },
+    after: () => requestAnimationFrame(() => {
+      highlightVditorCodePreviews()
+      vditorHostRef.value?.querySelector('.vditor-preview')?.setAttribute('contenteditable', 'false')
+      syncComposerModeToggle()
+    }),
+    keydown: (event) => {
+      if (
+        composerEditorMode.value !== 'sv'
+        &&
+        event.key === 'Enter'
+        && !event.shiftKey
+        && !event.isComposing
+        && event.keyCode !== 229
+        && !isVditorCodeBlockSelection()
+        && !isVditorCodeFenceTrigger()
+      ) {
+        event.preventDefault()
+        void sendMessage()
+      }
+    },
+  })
 }
 
 const onSendClick = () => {
@@ -2656,7 +3407,6 @@ const isToolExpanded = (msgId: string) => expandedTools.value.includes(msgId)
    Lifecycle
    ═══════════════════════════════════════════════ */
 
-watch(draft, () => autoResize())
 watch(
   () => {
     let total = 0
@@ -2682,11 +3432,17 @@ const onGlobalClick = (event: MouseEvent) => {
 onMounted(() => {
   loadMessages()
   loadLogs()
+  loadComposerEditorMode()
   document.addEventListener('click', onGlobalClick)
   void setupProgressListeners()
   nextTick(() => {
-    autoResize()
-    if (messages.value.length === 0) inputRef.value?.focus()
+    initializeVditor()
+    requestAnimationFrame(updateChatBottomInset)
+    if (composerRef.value && typeof ResizeObserver !== 'undefined') {
+      composerResizeObserver = new ResizeObserver(updateChatBottomInset)
+      composerResizeObserver.observe(composerRef.value)
+    }
+    window.addEventListener('resize', updateChatBottomInset)
   })
 })
 
@@ -2698,6 +3454,14 @@ onActivated(() => {
 })
 
 onUnmounted(() => {
+  composerResizeCleanup?.()
+  composerResizeObserver?.disconnect()
+  composerResizeObserver = null
+  window.removeEventListener('resize', updateChatBottomInset)
+  removeVditorImagePasteGuard?.()
+  removeVditorImagePasteGuard = null
+  vditor?.destroy()
+  vditor = null
   document.removeEventListener('click', onGlobalClick)
   for (const unlisten of unlistenProgress) {
     try {
@@ -2833,7 +3597,12 @@ onUnmounted(() => {
     </header>
 
     <!-- ═══ Chat list ═══ -->
-    <main ref="chatListRef" class="xz-chat glass-scrollbar" @scroll="onChatScroll">
+    <main
+      ref="chatListRef"
+      class="xz-chat glass-scrollbar"
+      :style="{ '--xz-chat-bottom-inset': `${chatBottomInset}px` }"
+      @scroll="onChatScroll"
+    >
       <!-- Empty state -->
       <div v-if="messages.length === 0" class="xz-empty">
         <div class="xz-empty-orb" aria-hidden="true">
@@ -2892,9 +3661,11 @@ onUnmounted(() => {
 
           <div class="xz-msg-main">
             <div class="xz-bubble" :class="{ error: msg.role === 'error' }" @click="onChatContentClick" @error.capture="onChatContentError">
-              <!-- User text is plain; assistant content is markdown -->
-              <template v-if="msg.role === 'user' || msg.role === 'error'">
+              <template v-if="msg.role === 'error'">
                 <div class="xz-plain-text">{{ msg.content }}</div>
+              </template>
+              <template v-else-if="msg.role === 'user'">
+                <div class="xz-markdown" v-html="renderMarkdown(msg.content)"></div>
               </template>
               <template v-else>
                 <template v-for="(seg, segIdx) in messageSegments(msg)" :key="segIdx">
@@ -2995,16 +3766,20 @@ onUnmounted(() => {
 
     <!-- ═══ Composer ═══ -->
     <footer class="xz-composer-wrap">
-      <div class="xz-composer" :class="{ streaming: isStreaming }">
-        <textarea
-          ref="inputRef"
-          v-model="draft"
-          class="xz-input"
-          rows="1"
-          :placeholder="t('xianzun.placeholder')"
-          @keydown="onKeydown"
-          @input="autoResize"
-        ></textarea>
+      <div
+        ref="composerRef"
+        class="xz-composer"
+        :class="{ streaming: isStreaming }"
+        :style="{ '--xz-composer-editor-height': `${composerEditorHeight}px` }"
+      >
+        <div
+          class="xz-composer-resizer"
+          role="separator"
+          aria-label="拖拽调整输入区高度"
+          aria-orientation="horizontal"
+          @pointerdown="startComposerResize"
+        ></div>
+        <div ref="vditorHostRef" class="xz-vditor-host"></div>
       <div class="xz-composer-bar">
           <div class="xz-composer-left">
             <span class="xz-hint">
@@ -3245,6 +4020,7 @@ onUnmounted(() => {
    ═══════════════════════════════════════════════ */
 
 .xz-page {
+  position: relative;
   height: 100%;
   min-height: 0;
   width: 100%;
@@ -3644,7 +4420,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 6px 16px;
+  padding: 10px 6px calc(10px + var(--xz-chat-bottom-inset, 0px));
 }
 
 .xz-msg {
@@ -4374,15 +5150,24 @@ onUnmounted(() => {
 
 /* ── Composer ── */
 .xz-composer-wrap {
-  flex: 0 0 auto;
-  padding: 10px 4px 14px;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding: 6px 4px 8px;
+  pointer-events: none;
 }
 
 .xz-composer {
+  width: min(100%, 822px);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px 10px;
+  gap: 4px;
+  padding: 7px 10px 7px;
   border-radius: 18px;
   background: var(--t-material-bg);
   border: var(--t-material-border);
@@ -4390,6 +5175,7 @@ onUnmounted(() => {
   backdrop-filter: var(--t-blur-medium);
   -webkit-backdrop-filter: var(--t-blur-medium);
   transition: border-color 180ms ease, box-shadow 180ms ease;
+  pointer-events: auto;
 }
 
 .xz-composer:focus-within {
@@ -4399,6 +5185,331 @@ onUnmounted(() => {
 
 .xz-composer.streaming {
   border-color: rgba(var(--theme-warning-rgb), 0.3);
+}
+
+.xz-composer-resizer {
+  flex: 0 0 8px;
+  width: min(100%, 800px);
+  align-self: center;
+  margin: -7px 0 0;
+  cursor: ns-resize;
+  touch-action: none;
+  position: relative;
+}
+
+.xz-composer-resizer::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 34px;
+  height: 2px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: rgba(var(--theme-text-secondary-rgb), 0.22);
+  transition: width 140ms ease, background-color 140ms ease;
+}
+
+.xz-composer-resizer:hover::after {
+  width: 54px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.7);
+}
+
+:global(body.xz-composer-resizing),
+:global(body.xz-composer-resizing *) {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+
+.xz-vditor-host :deep(.vditor) {
+  --toolbar-height: 24px;
+  --toolbar-divider-margin-top: 5px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.xz-vditor-host :deep(.vditor-toolbar) {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 0 2px;
+  border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+  background: transparent;
+}
+
+.xz-vditor-host :deep(.vditor-toolbar__item) {
+  margin: 0 1px 0 0;
+}
+
+.xz-vditor-host :deep(.vditor-toolbar__item > button) {
+  width: 24px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 4px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.74);
+}
+
+.xz-vditor-host :deep(.vditor-toolbar__item > button:hover),
+.xz-vditor-host :deep(.vditor-toolbar__item--current > button) {
+  color: rgba(var(--theme-text-primary-rgb), 0.96);
+  background: rgba(var(--theme-surface-tint-rgb), 0.12);
+}
+
+.xz-vditor-host :deep(.xz-vditor-mode-spacer) {
+  flex: 1 1 auto;
+}
+
+.xz-vditor-host :deep(.xz-vditor-mode-button-wrap) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+
+.xz-vditor-host :deep(.xz-vditor-mode-button) {
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.24);
+  border-radius: 4px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  color: rgba(var(--theme-text-secondary-rgb), 0.82);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.xz-vditor-host :deep(.xz-vditor-mode-button:hover) {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.45);
+  background: rgba(var(--theme-surface-tint-rgb), 0.16);
+  color: rgba(var(--theme-text-primary-rgb), 0.96);
+}
+
+.xz-vditor-host :deep(.vditor-content) {
+  background: transparent;
+  min-height: 0;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg),
+.xz-vditor-host :deep(.vditor-ir) {
+  min-height: 0;
+  background: transparent;
+}
+
+.xz-vditor-host :deep(.vditor-sv),
+.xz-vditor-host :deep(.vditor-preview) {
+  min-height: 76px;
+  max-height: 440px;
+  height: var(--xz-composer-editor-height, 96px);
+  box-sizing: border-box;
+}
+
+.xz-vditor-host :deep(.vditor-sv) {
+  padding: 7px 10px;
+  background: rgba(0, 0, 0, 0.12);
+  color: rgba(var(--theme-text-primary-rgb), 0.95);
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}
+
+.xz-vditor-host :deep(.vditor-preview) {
+  border-left-color: rgba(var(--theme-surface-tint-rgb), 0.18);
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(var(--theme-text-primary-rgb), 0.93);
+  cursor: default;
+  user-select: text;
+}
+
+.xz-vditor-host :deep(.vditor-preview > .vditor-reset) {
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg > pre.vditor-reset),
+.xz-vditor-host :deep(.vditor-ir > pre.vditor-reset) {
+  min-height: 76px;
+  max-height: 440px;
+  height: var(--xz-composer-editor-height, 96px);
+  box-sizing: border-box;
+  padding: 7px 2px 12px;
+  overflow-y: auto;
+  background: transparent;
+  color: rgba(var(--theme-text-primary-rgb), 0.95);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  outline: none;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg pre:not(.vditor-reset)),
+.xz-vditor-host :deep(.vditor-ir pre:not(.vditor-reset)) {
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.30);
+  border-radius: 7px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg pre:not(.vditor-reset) code),
+.xz-vditor-host :deep(.vditor-ir pre:not(.vditor-reset) code),
+.xz-vditor-host :deep(.vditor-wysiwyg code),
+.xz-vditor-host :deep(.vditor-ir code) {
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg code:not(.hljs)),
+.xz-vditor-host :deep(.vditor-ir code:not(.hljs)) {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.14);
+  color: rgba(var(--theme-text-primary-rgb), 0.94);
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg pre:not(.vditor-reset) code),
+.xz-vditor-host :deep(.vditor-ir pre:not(.vditor-reset) code) {
+  padding: 10px 12px;
+  background: transparent;
+  color: rgba(var(--theme-text-primary-rgb), 0.92);
+}
+
+.xz-vditor-host :deep(.vditor-ir__preview code),
+.xz-vditor-host :deep(.vditor-wysiwyg__preview code),
+.xz-vditor-host :deep(.vditor-ir__marker--pre code),
+.xz-vditor-host :deep(.vditor-wysiwyg__pre code),
+.xz-vditor-host :deep(.vditor code[class*="language-"]) {
+  display: block;
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  tab-size: 4 !important;
+  -moz-tab-size: 4 !important;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg table),
+.xz-vditor-host :deep(.vditor-ir table),
+.xz-vditor-host :deep(.vditor-preview table) {
+  width: fit-content;
+  max-width: 100%;
+  margin: 8px 0 12px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.28);
+  border-radius: 8px;
+  overflow: hidden;
+  color: rgba(var(--theme-text-primary-rgb), 0.92) !important;
+  background: rgba(var(--theme-surface-tint-rgb), 0.07) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg th),
+.xz-vditor-host :deep(.vditor-wysiwyg td),
+.xz-vditor-host :deep(.vditor-ir th),
+.xz-vditor-host :deep(.vditor-ir td),
+.xz-vditor-host :deep(.vditor-preview th),
+.xz-vditor-host :deep(.vditor-preview td) {
+  min-width: 72px;
+  padding: 5px 8px;
+  border: 0;
+  border-right: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  text-align: left;
+  vertical-align: top;
+  color: rgba(var(--theme-text-primary-rgb), 0.92) !important;
+  background: rgba(12, 15, 21, 0.24) !important;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg th),
+.xz-vditor-host :deep(.vditor-ir th),
+.xz-vditor-host :deep(.vditor-preview th) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.16) !important;
+  color: rgba(var(--theme-text-primary-rgb), 0.98);
+  font-weight: 650;
+}
+
+.xz-vditor-host :deep(.vditor-reset table tr),
+.xz-vditor-host :deep(.vditor-preview table tr) {
+  color: rgba(var(--theme-text-primary-rgb), 0.92) !important;
+  background: transparent !important;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg tr:nth-child(even) td),
+.xz-vditor-host :deep(.vditor-ir tr:nth-child(even) td),
+.xz-vditor-host :deep(.vditor-preview table tbody tr:nth-child(even) td) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.07) !important;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg th:last-child),
+.xz-vditor-host :deep(.vditor-wysiwyg td:last-child),
+.xz-vditor-host :deep(.vditor-ir th:last-child),
+.xz-vditor-host :deep(.vditor-ir td:last-child),
+.xz-vditor-host :deep(.vditor-preview th:last-child),
+.xz-vditor-host :deep(.vditor-preview td:last-child) {
+  border-right: 0;
+}
+
+.xz-vditor-host :deep(.vditor-wysiwyg tr:last-child th),
+.xz-vditor-host :deep(.vditor-wysiwyg tr:last-child td),
+.xz-vditor-host :deep(.vditor-ir tr:last-child th),
+.xz-vditor-host :deep(.vditor-ir tr:last-child td),
+.xz-vditor-host :deep(.vditor-preview tr:last-child th),
+.xz-vditor-host :deep(.vditor-preview tr:last-child td) {
+  border-bottom: 0;
+}
+
+.xz-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+}
+
+.xz-editor-tool,
+.xz-editor-mode {
+  width: 26px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(var(--theme-text-secondary-rgb), 0.72);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.xz-editor-tool:hover:not(:disabled),
+.xz-editor-mode:hover,
+.xz-editor-mode.active {
+  color: rgba(var(--theme-text-primary-rgb), 0.95);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.25);
+  background: rgba(var(--theme-surface-tint-rgb), 0.10);
+}
+
+.xz-editor-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.xz-editor-tool-separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: rgba(var(--theme-text-secondary-rgb), 0.18);
 }
 
 .xz-input {
@@ -4414,6 +5525,115 @@ onUnmounted(() => {
   font-size: 13.5px;
   line-height: 1.6;
   overflow-y: auto;
+}
+
+.xz-editor {
+  min-height: 28px;
+  max-height: 160px;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  outline: none;
+}
+
+.xz-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(var(--theme-text-secondary-rgb), 0.45);
+  pointer-events: none;
+}
+
+.xz-editor :deep(p),
+.xz-editor :deep(h1),
+.xz-editor :deep(h2),
+.xz-editor :deep(h3),
+.xz-editor :deep(h4),
+.xz-editor :deep(h5),
+.xz-editor :deep(h6),
+.xz-editor :deep(blockquote),
+.xz-editor :deep(pre),
+.xz-editor :deep(ul),
+.xz-editor :deep(ol) {
+  margin: 0 0 6px;
+}
+
+.xz-editor :deep(blockquote) {
+  padding-left: 10px;
+  border-left: 2px solid rgba(var(--theme-surface-tint-rgb), 0.55);
+  color: rgba(var(--theme-text-secondary-rgb), 0.82);
+}
+
+.xz-editor :deep(pre) {
+  padding: 9px 11px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.24);
+  border-radius: 6px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: rgba(var(--theme-text-primary-rgb), 0.92);
+  font-family: 'Cascadia Code', Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.xz-editor :deep(code) {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.12);
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.xz-editor :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.xz-editor :deep(a) {
+  color: rgba(var(--theme-surface-tint-rgb), 0.95);
+  text-decoration: underline;
+}
+
+.xz-editor :deep(table) {
+  width: fit-content;
+  max-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.28);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 6px 0;
+  font-size: 12px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+}
+
+.xz-editor :deep(th),
+.xz-editor :deep(td) {
+  padding: 5px 7px;
+  border: 0;
+  border-right: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  text-align: left;
+  background: rgba(12, 15, 21, 0.24);
+}
+
+.xz-editor :deep(th) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.16);
+  color: rgba(var(--theme-text-primary-rgb), 0.92);
+}
+
+.xz-editor :deep(th:last-child),
+.xz-editor :deep(td:last-child) {
+  border-right: 0;
+}
+
+.xz-editor :deep(tr:last-child th),
+.xz-editor :deep(tr:last-child td) {
+  border-bottom: 0;
+}
+
+.xz-editor :deep(tbody tr:nth-child(even) td) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+}
+
+.xz-source-input {
+  min-height: 28px;
+  resize: vertical;
 }
 
 .xz-input::placeholder {
@@ -4760,24 +5980,81 @@ onUnmounted(() => {
   color: rgba(var(--theme-text-primary-rgb), 0.94);
 }
 
-.xz-markdown table {
-  width: 100%;
+.xz-markdown .xz-math {
+  display: inline-block;
+  margin: 0 2px;
+  color: rgba(var(--theme-text-primary-rgb), 0.98);
+  user-select: text;
+}
+
+.xz-markdown .xz-math.display {
+  display: block;
   margin: 12px 0;
-  border-collapse: collapse;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.xz-markdown .xz-math .katex {
+  font-size: 1.06em;
+}
+
+.xz-markdown .xz-math-source {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(var(--theme-danger-rgb), 0.10);
+  color: var(--t-danger-text);
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.xz-markdown .xz-inline-color {
+  color: inherit;
+}
+
+.xz-markdown table {
+  width: fit-content;
+  max-width: 100%;
+  margin: 12px 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  color: rgba(var(--theme-text-primary-rgb), 0.94) !important;
+  background: rgba(var(--theme-surface-tint-rgb), 0.07) !important;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 4px 14px rgba(0, 0, 0, 0.12);
   font-size: 12.5px;
 }
 
 .xz-markdown th,
 .xz-markdown td {
-  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
+  border: 0;
+  border-right: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
   padding: 6px 10px;
   text-align: left;
+  color: rgba(var(--theme-text-primary-rgb), 0.94) !important;
+  background: rgba(12, 15, 21, 0.24) !important;
 }
 
 .xz-markdown th {
-  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+  background: rgba(var(--theme-surface-tint-rgb), 0.16) !important;
   font-weight: 650;
   color: rgba(var(--theme-text-primary-rgb), 0.92);
+}
+
+.xz-markdown tr:nth-child(even) td {
+  background: rgba(var(--theme-surface-tint-rgb), 0.07) !important;
+}
+
+.xz-markdown th:last-child,
+.xz-markdown td:last-child {
+  border-right: 0;
+}
+
+.xz-markdown tr:last-child th,
+.xz-markdown tr:last-child td {
+  border-bottom: 0;
 }
 
 .xz-markdown strong {
@@ -4831,6 +6108,9 @@ onUnmounted(() => {
   margin: 0;
   padding: 11px 13px;
   overflow-x: auto;
+  white-space: pre;
+  tab-size: 4;
+  -moz-tab-size: 4;
   scrollbar-width: thin;
 }
 
@@ -4848,8 +6128,40 @@ onUnmounted(() => {
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 12.5px;
   line-height: 1.65;
+  white-space: pre !important;
+  tab-size: 4 !important;
+  -moz-tab-size: 4 !important;
+  word-break: normal;
+  overflow-wrap: normal;
   color: rgba(255, 255, 255, 0.9);
   user-select: text;
+}
+
+.xz-mermaid {
+  margin: 12px 0;
+  overflow: auto;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.xz-mermaid pre {
+  margin: 0;
+  padding: 12px;
+}
+
+.xz-mermaid code.language-mermaid {
+  display: block;
+  min-width: max-content;
+  color: rgba(var(--theme-text-primary-rgb), 0.90);
+  font-family: 'Cascadia Code', Consolas, monospace;
+  white-space: pre;
+}
+
+.xz-mermaid code.language-mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 /* image lightbox (template element, global for overlay) */
