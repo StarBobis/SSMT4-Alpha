@@ -222,7 +222,7 @@ export class LaunchGame {
         const configuredLauncher = (migotoCfg.launcherExePath || '').trim();
         const isConfiguredLauncherValid = configuredLauncher.length > 0 && await exists(configuredLauncher);
         const gamePreset = (migotoCfg.gamePreset || '').trim().toUpperCase();
-        const supportsGameDiscovery = ['GIMI', 'SRMI', 'ZZMI', 'NTEMI'].includes(gamePreset);
+        const supportsGameDiscovery = ['GIMI', 'SRMI', 'ZZMI', 'NTEMI', 'WWMI'].includes(gamePreset);
 
         let configChanged = false;
         let configuredMigotoDir = (migotoCfg.installDir || '').trim();

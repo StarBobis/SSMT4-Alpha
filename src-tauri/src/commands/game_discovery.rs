@@ -217,6 +217,84 @@ fn resolve_ntemi_paths(launcher: PathBuf) -> Option<(PathBuf, PathBuf)> {
     scan_tree(install_dir, &["HTGame.exe"], false).map(|target| (target, launcher))
 }
 
+fn find_wwmi_launcher(install_dir: &Path) -> Option<PathBuf> {
+    let known_names = [
+        "launcher.exe",
+        "launcher_epic.exe",
+        "Wuthering Waves.exe",
+        "WutheringWaves.exe",
+        "wuwa.exe",
+    ];
+    if let Some(path) = first_existing(known_names.map(|name| install_dir.join(name))) {
+        return Some(path);
+    }
+
+    let mut executables: Vec<_> = fs::read_dir(install_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map(|kind| kind.is_file())
+                .unwrap_or(false)
+        })
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            name.ends_with(".exe")
+                && (name.contains("launcher")
+                    || name.contains("wuthering")
+                    || name.contains("wuwa"))
+        })
+        .collect();
+    executables.sort_by_key(|entry| entry.file_name());
+    executables.first().map(|entry| entry.path())
+}
+
+fn resolve_wwmi_paths(install_dir: PathBuf) -> Option<(PathBuf, PathBuf)> {
+    let launcher = find_wwmi_launcher(&install_dir)?;
+    let relative_targets = [
+        r"Wuthering Waves Game\Client\Binaries\Win64\Client-Win64-Shipping.exe",
+        r"Wuthering Wave Games\Client\WindowsNoEditor\Binary\Win64\Client-Win64-Shipping.exe",
+        r"Wuthering Wave Games\Client\WindowsNoEditor\Binaries\Win64\Client-Win64-Shipping.exe",
+    ];
+    let target = first_existing(relative_targets.map(|relative| install_dir.join(relative)))
+        .or_else(|| scan_tree(&install_dir, &["Client-Win64-Shipping.exe"], false))?;
+    Some((target, launcher))
+}
+
+fn find_wwmi_executables_sync() -> Option<(PathBuf, PathBuf)> {
+    let mut install_roots = vec![PathBuf::from(r"C:\Program Files\Wuthering Waves")];
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        let desktop = PathBuf::from(profile).join("Desktop");
+        if let Ok(entries) = fs::read_dir(desktop) {
+            install_roots.extend(entries.filter_map(Result::ok).filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                (name.starts_with("鸣潮")
+                    || name.starts_with("wuwa")
+                    || name.starts_with("wuthering"))
+                .then(|| entry.path())
+            }));
+        }
+    }
+    for drive in available_drive_roots() {
+        install_roots.push(drive.join("Wuthering Waves"));
+        if let Ok(entries) = fs::read_dir(&drive) {
+            install_roots.extend(entries.filter_map(Result::ok).filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                (entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
+                    && (name.starts_with("wuthering waves") || name.starts_with("鸣潮")))
+                .then(|| entry.path())
+            }));
+        }
+    }
+    install_roots.sort();
+    install_roots.dedup();
+    install_roots
+        .into_iter()
+        .filter(|root| root.is_dir())
+        .find_map(resolve_wwmi_paths)
+}
+
 fn find_ntemi_executables_sync() -> Option<(PathBuf, PathBuf)> {
     let known_launcher = PathBuf::from(r"D:\Neverness To Everness\NTELauncher.exe");
     if known_launcher.is_file() {
@@ -266,6 +344,9 @@ pub async fn find_game_executable(
     tauri::async_runtime::spawn_blocking(move || {
         if normalized_preset == "NTEMI" {
             return find_ntemi_executables_sync();
+        }
+        if normalized_preset == "WWMI" {
+            return find_wwmi_executables_sync();
         }
         spec_for_preset(&normalized_preset)
             .and_then(find_game_executable_sync)
