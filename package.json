@@ -25,7 +25,6 @@
     "element-plus": "^2.14.3",
     "gridstack": "^12.6.0",
     "highlight.js": "^11.11.1",
-    "katex": "^0.16.33",
     "pinia": "^2.3.1",
     "three": "^0.184.0",
     "vditor": "^3.11.2",

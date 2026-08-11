@@ -45,15 +45,60 @@ import { useModPresetStore } from '../../store/ModPresetStore'
 import { useModStateStore } from '../../store/ModStateStore'
 import { useGameConfigStore } from '../../store/GameConfig'
 import Vditor from 'vditor'
+import vditorLutePath from 'vditor/dist/js/lute/lute.min.js?url'
+import mathJaxBundleUrl from 'vditor/dist/js/mathjax/tex-svg-full.js?url'
+import 'vditor/dist/js/i18n/zh_CN.js'
+import 'vditor/dist/js/icons/ant.js'
 import 'vditor/dist/index.css'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
 import hljs from 'highlight.js/lib/common'
 import latex from 'highlight.js/lib/languages/latex'
 import 'highlight.js/styles/github-dark.css'
 
 hljs.registerLanguage('latex', latex)
 hljs.registerAliases(['tex'], { languageName: 'latex' })
+
+const VDITOR_ZH_CN_I18N = window.VditorI18n ?? {}
+const VDITOR_LUTE_PATH = vditorLutePath
+const MATHJAX_BUNDLE_URL = mathJaxBundleUrl
+
+type MathJaxRuntime = {
+  startup: { promise: Promise<void>; document: { clear: () => void; updateDocument: () => void } }
+  tex2svgPromise: (source: string, options: { display: boolean }) => Promise<HTMLElement>
+}
+
+let mathJaxLoadPromise: Promise<MathJaxRuntime> | null = null
+
+const ensureMathJax = (): Promise<MathJaxRuntime> => {
+  const mathJaxWindow = window as typeof window & { MathJax?: MathJaxRuntime & Record<string, unknown> }
+  if (mathJaxWindow.MathJax?.tex2svgPromise) return Promise.resolve(mathJaxWindow.MathJax)
+  if (mathJaxLoadPromise) return mathJaxLoadPromise
+  mathJaxLoadPromise = new Promise<MathJaxRuntime>((resolve, reject) => {
+    mathJaxWindow.MathJax = {
+      startup: { typeset: false } as never,
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+      } as never,
+    } as unknown as MathJaxRuntime & Record<string, unknown>
+    const script = document.createElement('script')
+    script.id = 'xz-mathjax-runtime'
+    script.src = MATHJAX_BUNDLE_URL
+    script.async = true
+    script.onload = () => {
+      const runtime = mathJaxWindow.MathJax
+      if (!runtime?.tex2svgPromise) {
+        reject(new Error('MathJax runtime did not initialize'))
+        return
+      }
+      void runtime.startup.promise.then(() => resolve(runtime), reject)
+    }
+    script.onerror = () => reject(new Error('Failed to load local MathJax runtime'))
+    document.head.appendChild(script)
+  })
+  mathJaxLoadPromise.catch(() => undefined)
+  return mathJaxLoadPromise
+}
 
 const VDITOR_SPECIAL_LANGUAGE_HINTS = new Set([
   'abc',
@@ -1015,6 +1060,10 @@ const vditorHostRef = ref<HTMLElement | null>(null)
 const composerRef = ref<HTMLElement | null>(null)
 const chatBottomInset = ref(0)
 let vditor: Vditor | null = null
+let mathPreviewObserver: MutationObserver | null = null
+let mathPreviewRenderQueued = false
+let messageMathObserver: MutationObserver | null = null
+let messageMathRenderQueued = false
 let removeVditorImagePasteGuard: (() => void) | null = null
 type ComposerEditorMode = 'wysiwyg' | 'sv'
 const COMPOSER_EDITOR_MODE_STORAGE_KEY = 'xianzun.composer-editor-mode.v1'
@@ -2370,25 +2419,10 @@ const decodeMathEntities = (value: string): string => {
 }
 
 const renderMath = (source: string, displayMode = false): string => {
-  const macros: Record<string, string> = {}
-  const expression = decodeMathEntities(source).trim().replace(
-    /\\let\\([A-Za-z]+)\\([A-Za-z]+)(?=\\|\s|$)/g,
-    (_match, name: string, target: string) => {
-      macros[`\\${name}`] = `\\${target}`
-      return ''
-    },
-  )
+  const expression = decodeMathEntities(source).trim()
   if (!expression) return ''
-  try {
-    return `<span class="xz-math${displayMode ? ' display' : ''}">${katex.renderToString(expression, {
-      displayMode,
-      throwOnError: true,
-      strict: 'ignore',
-      macros,
-    })}</span>`
-  } catch {
-    return `<code class="xz-math-source">${escapeHtml(expression)}</code>`
-  }
+  const encodedSource = escapeHtml(expression)
+  return `<span class="xz-math${displayMode ? ' display' : ''}" data-xz-math-source="${encodedSource}" data-xz-math-display="${displayMode ? 'true' : 'false'}"></span>`
 }
 
 const CODE_LANGUAGE_ALIASES: Record<string, string> = {
@@ -2505,6 +2539,126 @@ const highlightVditorCodePreviews = () => {
   })
 }
 
+const normalizeVditorMathSource = (value: string, isBlockNode: boolean) => {
+  const source = decodeMathEntities(value).trim()
+  if (source.startsWith('$$') && source.endsWith('$$') && source.length > 4) {
+    return { expression: source.slice(2, -2).trim(), displayMode: true }
+  }
+  if (source.startsWith('$') && source.endsWith('$') && source.length > 2) {
+    return { expression: source.slice(1, -1).trim(), displayMode: false }
+  }
+  return { expression: source, displayMode: isBlockNode }
+}
+
+// Render read-only preview nodes only. WYSIWYG keeps the authoritative editor
+// node beside its preview; Source-Target uses the separate right-hand preview.
+const getMathPreviewRoots = (): HTMLElement[] => {
+  const host = vditorHostRef.value
+  if (!host) return []
+  if (composerEditorMode.value === 'sv') {
+    const preview = host.querySelector<HTMLElement>('.vditor-preview')
+    return preview ? [preview] : []
+  }
+  return Array.from(host.querySelectorAll<HTMLElement>('.vditor-wysiwyg__preview, .vditor-ir__preview'))
+}
+
+const renderVditorMathPreview = () => {
+  const mathNodes = getMathPreviewRoots().flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>('.language-math')))
+    .filter((mathElement) => !mathElement.querySelector('mjx-container') && mathElement.dataset.xzMathRendered !== 'error')
+  if (mathNodes.length === 0) return
+  void ensureMathJax().then((runtime) => {
+    const render = async () => {
+      for (const mathElement of mathNodes) {
+        if (mathElement.querySelector('mjx-container')) continue
+        const source = mathElement.dataset.xzMathSource ?? mathElement.dataset.math ?? mathElement.textContent ?? ''
+        const { expression, displayMode } = normalizeVditorMathSource(
+          source,
+          mathElement.tagName === 'DIV' || mathElement.parentElement?.tagName === 'PRE',
+        )
+        if (!expression) continue
+        try {
+          const svg = await runtime.tex2svgPromise(expression, { display: displayMode })
+          if (mathElement.querySelector('mjx-container')) continue
+          mathElement.replaceChildren(svg)
+          mathElement.dataset.xzMathSource = source
+          mathElement.dataset.math = expression
+          mathElement.classList.remove('vditor-reset--error')
+        } catch {
+          mathElement.dataset.xzMathRendered = 'error'
+          // Leave the source marker untouched when the local renderer fails.
+        }
+      }
+      runtime.startup.document.clear()
+      runtime.startup.document.updateDocument()
+    }
+    void render()
+  }).catch(() => {
+    // Keep the source marker visible if the local runtime cannot initialize.
+  })
+}
+
+const installMathPreviewObserver = () => {
+  mathPreviewObserver?.disconnect()
+  mathPreviewObserver = null
+  const host = vditorHostRef.value
+  if (!host || typeof MutationObserver === 'undefined') return
+  mathPreviewObserver = new MutationObserver(() => {
+    if (mathPreviewRenderQueued) return
+    mathPreviewRenderQueued = true
+    requestAnimationFrame(() => {
+      mathPreviewRenderQueued = false
+      renderVditorMathPreview()
+    })
+  })
+  mathPreviewObserver.observe(host, { childList: true, subtree: true })
+}
+
+const renderMessageMath = () => {
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>('.xz-markdown .xz-math:not([data-xz-math-rendered])'))
+  if (nodes.length === 0) return
+  void ensureMathJax().then((runtime) => {
+    const render = async () => {
+      for (const mathElement of nodes) {
+        if (mathElement.dataset.xzMathRendered === 'true') continue
+        const source = mathElement.dataset.xzMathSource ?? ''
+        if (!source) continue
+        const display = mathElement.dataset.xzMathDisplay === 'true'
+        try {
+          const svg = await runtime.tex2svgPromise(source, { display })
+          if (mathElement.dataset.xzMathRendered === 'true') continue
+          mathElement.replaceChildren(svg)
+          mathElement.dataset.xzMathRendered = 'true'
+        } catch {
+          mathElement.dataset.xzMathRendered = 'error'
+          mathElement.classList.add('xz-math-source')
+          mathElement.textContent = source
+        }
+      }
+      runtime.startup.document.clear()
+      runtime.startup.document.updateDocument()
+    }
+    void render()
+  }).catch(() => {
+    // Keep the source visible if the local runtime cannot initialize.
+  })
+}
+
+const installMessageMathObserver = () => {
+  messageMathObserver?.disconnect()
+  messageMathObserver = null
+  if (typeof MutationObserver === 'undefined' || !document.body) return
+  messageMathObserver = new MutationObserver(() => {
+    if (messageMathRenderQueued) return
+    messageMathRenderQueued = true
+    requestAnimationFrame(() => {
+      messageMathRenderQueued = false
+      renderMessageMath()
+    })
+  })
+  messageMathObserver.observe(document.body, { childList: true, subtree: true })
+  renderMessageMath()
+}
+
 const renderInline = (value: string): string => {
   let out = value
   const protectedFragments: string[] = []
@@ -2515,7 +2669,15 @@ const renderInline = (value: string): string => {
 
   // Inline code, math, and supported HTML must not be touched by later Markdown transforms.
   out = out.replace(/`([^`]+)`/g, (_m, code: string) => protect(`<code class="xz-inline-code">${code}</code>`))
-  out = out.replace(/\$([^$\n]+?)\$/g, (_m, math: string) => protect(renderMath(math)))
+  // Consume display delimiters before inline delimiters. Otherwise the
+  // second `$` in `$$x$$` is mistaken for an inline opener and leaves the
+  // outer delimiters in the output. Unclosed delimiters stay as source text.
+  out = out.replace(/(?<!\\)\$\$([^$\n]+?)\$\$/g, (_m, math: string) =>
+    protect(renderMath(math, true)),
+  )
+  out = out.replace(/(?<!\\)(?<!\$)\$([^$\n]+?)\$(?!\$)/g, (_m, math: string) =>
+    protect(renderMath(math)),
+  )
   out = out.replace(
     /&lt;span\s+style=&quot;([^&]*)&quot;\s*&gt;([\s\S]*?)&lt;\/span&gt;/gi,
     (_m, rawStyle: string, content: string) => {
@@ -3203,6 +3365,8 @@ const setComposerEditorMode = async (mode: ComposerEditorMode) => {
   removeVditorImagePasteGuard = null
   vditor?.destroy()
   vditor = null
+  mathPreviewObserver?.disconnect()
+  mathPreviewObserver = null
   await nextTick()
   initializeVditor()
 }
@@ -3213,6 +3377,10 @@ const initializeVditor = () => {
   vditor = new Vditor(vditorHostRef.value, {
     mode: composerEditorMode.value,
     lang: 'zh_CN',
+    i18n: VDITOR_ZH_CN_I18N,
+    _lutePath: VDITOR_LUTE_PATH,
+    // Icons are imported above; an empty value prevents a second CDN request.
+    icon: '' as never,
     theme: 'dark',
     value: draft.value,
     minHeight: 76,
@@ -3223,6 +3391,10 @@ const initializeVditor = () => {
     preview: {
       delay: 0,
       mode: composerEditorMode.value === 'sv' ? 'both' : 'editor',
+      actions: [],
+      // Vditor's CDN math renderer is intentionally disabled. The local
+      // renderer above is limited to read-only preview nodes.
+      math: { engine: 'local' as never },
       hljs: {
         enable: true,
         style: 'github-dark',
@@ -3234,11 +3406,17 @@ const initializeVditor = () => {
     },
     input: (value) => {
       draft.value = value
-      requestAnimationFrame(highlightVditorCodePreviews)
+      requestAnimationFrame(() => {
+        highlightVditorCodePreviews()
+        renderVditorMathPreview()
+      })
     },
     after: () => requestAnimationFrame(() => {
       highlightVditorCodePreviews()
+      renderVditorMathPreview()
+      window.setTimeout(renderVditorMathPreview, 80)
       vditorHostRef.value?.querySelector('.vditor-preview')?.setAttribute('contenteditable', 'false')
+      installMathPreviewObserver()
       syncComposerModeToggle()
     }),
     keydown: (event) => {
@@ -3433,6 +3611,7 @@ onMounted(() => {
   loadMessages()
   loadLogs()
   loadComposerEditorMode()
+  installMessageMathObserver()
   document.addEventListener('click', onGlobalClick)
   void setupProgressListeners()
   nextTick(() => {
@@ -3462,6 +3641,10 @@ onUnmounted(() => {
   removeVditorImagePasteGuard = null
   vditor?.destroy()
   vditor = null
+  mathPreviewObserver?.disconnect()
+  mathPreviewObserver = null
+  messageMathObserver?.disconnect()
+  messageMathObserver = null
   document.removeEventListener('click', onGlobalClick)
   for (const unlisten of unlistenProgress) {
     try {
@@ -5327,6 +5510,42 @@ onUnmounted(() => {
   line-height: 1.65;
 }
 
+/* MathJax inherits from the Vditor math node. Keep the preview white while
+   allowing MathJax's own \color{...} output to remain authoritative. */
+.xz-vditor-host :deep(.language-math) {
+  color: rgba(var(--theme-text-primary-rgb), 0.98) !important;
+  background: transparent !important;
+  font-family: inherit !important;
+  white-space: normal !important;
+}
+
+.xz-vditor-host :deep(.language-math mjx-container) {
+  color: inherit;
+  display: inline-block;
+}
+
+.xz-vditor-host :deep(.language-math mjx-container[display="true"]) {
+  display: block;
+  margin: 0.65em 0;
+  text-align: center;
+}
+
+/* MathJax also emits an accessibility MathML copy. Keep it available to
+   assistive technology without allowing it to appear as duplicate text. */
+.xz-vditor-host :deep(mjx-assistive-mml),
+.xz-markdown :deep(mjx-assistive-mml) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: auto !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(1px, 1px, 1px, 1px) !important;
+  padding: 1px 0 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
 .xz-vditor-host :deep(.vditor-wysiwyg > pre.vditor-reset),
 .xz-vditor-host :deep(.vditor-ir > pre.vditor-reset) {
   min-height: 76px;
@@ -5994,7 +6213,7 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.xz-markdown .xz-math .katex {
+.xz-markdown .xz-math mjx-container {
   font-size: 1.06em;
 }
 

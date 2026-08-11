@@ -109,11 +109,10 @@ onUnmounted(() => {
     ></div>
   </transition>
 
-  <div class="app-ui-scale" :style="{ '--app-ui-scale': appUiScale }">
-    <el-config-provider>
-      <!-- Title Bar (fixed, outside flex flow so backdrop-filter always targets bg-layer) -->
-      <TitleBar />
+  <el-config-provider>
+    <TitleBar />
 
+    <div class="app-ui-scale" :style="{ '--app-ui-scale': appUiScale }">
       <!-- Use a Flex Layout Container -->
       <div class="app-layout">
         <!-- 1. Main Content Area (Flex grow, takes remaining space) -->
@@ -131,8 +130,8 @@ onUnmounted(() => {
           </main>
         </div>
       </div>
-    </el-config-provider>
-  </div>
+    </div>
+  </el-config-provider>
 </template>
 
 <style>
@@ -161,8 +160,11 @@ input, textarea {
 }
 
 #app {
-  height: 100%;
-  position: relative;
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
   overflow: hidden;
 }
 .bg-layer {
@@ -230,6 +232,7 @@ input, textarea {
   z-index: 0; /* Above bg-layer (0 via DOM order), below App Content (1) */
   pointer-events: none; /* Let clicks pass through if needed, though standard bg doesn't need interactions */
 }
+
 </style>
 
 <style scoped>
@@ -241,7 +244,7 @@ input, textarea {
   overflow: hidden;
   position: relative;
   z-index: 1; /* Above bg */
-  padding-top: 32px; /* Space for fixed TitleBar */
+  padding-top: calc(32px / var(--app-ui-scale, 1)); /* Space for fixed TitleBar */
   box-sizing: border-box;
 }
 
@@ -257,30 +260,28 @@ input, textarea {
 
 /* New wrapper for content area (flex item) */
 .app-content-area {
-  flex: 1;
-  width: 100%;
+  position: absolute;
+  inset: calc(32px / var(--app-ui-scale, 1)) 0 0;
+  min-height: 0;
   overflow: hidden; /* Clean cut */
-  position: relative;
   display: flex;
   flex-direction: column;
 }
 
 /* Main Content Styles */
 .app-main {
-  flex: 1;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
-  position: relative;
   background-color: rgba(0, 0, 0, var(--content-bg-opacity, 0.4));
   color: #ffffff;
 }
 
 .content-scroll-wrapper {
-  margin-top: 0;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   overflow-x: hidden; /* Prevent flash of horizontal bar during transitions */
 
