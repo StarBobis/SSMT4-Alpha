@@ -22,6 +22,11 @@ export interface ProgramToLaunch {
     waitOnly?: boolean;
 }
 
+interface DiscoveredGamePaths {
+    targetExePath: string;
+    launcherExePath: string;
+}
+
 type LaunchProgramPhase = 'preLaunchPrograms' | 'postLaunchPrograms';
 
 export class LaunchGame {
@@ -202,12 +207,69 @@ export class LaunchGame {
         throw new Error(t('launchGame.messages.configureMigotoPathFirst'));
     }
 
-    static async prepareLaunch(gameName: string, appSettings: AppSettings, onNeedsConfigureProcessPath?: () => void): Promise<{ migotoDir: string; config: GameConfig; targetExe: string } | null> {
+    static async prepareLaunch(
+        gameName: string,
+        appSettings: AppSettings,
+        onNeedsConfigureProcessPath?: () => void,
+        onNeedsPackageUpdate?: () => Promise<boolean | void> | boolean | void
+    ): Promise<{ migotoDir: string; config: GameConfig; targetExe: string } | null> {
         const config = await ResourceManager.loadGameConfig(gameName);
         const migotoCfg = config ?? {} as GameConfig;
         const pureMode = !!migotoCfg.pureMode;
 
-        const targetExe = (migotoCfg.targetExePath || '').trim();
+        let targetExe = (migotoCfg.targetExePath || '').trim();
+        const isConfiguredTargetValid = targetExe.length > 0 && await exists(targetExe);
+        const configuredLauncher = (migotoCfg.launcherExePath || '').trim();
+        const isConfiguredLauncherValid = configuredLauncher.length > 0 && await exists(configuredLauncher);
+        const gamePreset = (migotoCfg.gamePreset || '').trim().toUpperCase();
+        const supportsGameDiscovery = ['GIMI', 'SRMI', 'ZZMI', 'NTEMI'].includes(gamePreset);
+
+        let configChanged = false;
+        let configuredMigotoDir = (migotoCfg.installDir || '').trim();
+        const configuredD3dxIni = configuredMigotoDir ? await join(configuredMigotoDir, 'd3dx.ini') : '';
+        const isMigotoDirValid = configuredMigotoDir.length > 0
+            && await exists(configuredMigotoDir)
+            && await exists(configuredD3dxIni);
+        if (!isMigotoDirValid) {
+            const cacheRoot = await GlobalConfig.SSMT4CustomCacheFolder();
+            configuredMigotoDir = await join(cacheRoot, '3Dmigoto', gameName);
+            migotoCfg.installDir = configuredMigotoDir;
+            configChanged = true;
+            await ResourceManager.saveGameConfig(gameName, migotoCfg);
+            configChanged = false;
+
+            ElMessage.info(t('launchGame.messages.migotoDirectoryRestoring', { path: configuredMigotoDir }));
+            const updateHandled = await onNeedsPackageUpdate?.();
+            const restoredD3dxIni = await join(configuredMigotoDir, 'd3dx.ini');
+            if (updateHandled === false || !(await exists(restoredD3dxIni))) {
+                ElMessage.warning(t('launchGame.messages.migotoDirectoryRestoreFailed'));
+                return null;
+            }
+        }
+
+        if ((!isConfiguredTargetValid || !isConfiguredLauncherValid) && supportsGameDiscovery) {
+            targetExe = '';
+            debugLog('GameLauncher', `${gamePreset} target is missing or invalid; starting silent discovery.`);
+            const discovered = await invoke<DiscoveredGamePaths | null>('find_game_executable', { gamePreset });
+            if (discovered) {
+                targetExe = discovered.targetExePath;
+                migotoCfg.targetExePath = discovered.targetExePath;
+                migotoCfg.launcherExePath = discovered.launcherExePath;
+                configChanged = true;
+                ElMessage.info(t('launchGame.messages.gameTargetMatched', {
+                    path: discovered.targetExePath,
+                }));
+                ElMessage.info(t('launchGame.messages.gameLauncherMatched', {
+                    path: discovered.launcherExePath,
+                }));
+                debugLog('GameLauncher', `Discovered and saved ${gamePreset} paths.`, discovered);
+            }
+        }
+
+        if (configChanged) {
+            await ResourceManager.saveGameConfig(gameName, migotoCfg);
+        }
+
         if (!targetExe) {
             ElMessage.warning(t('launchGame.messages.targetProcessPathNotConfigured'));
             onNeedsConfigureProcessPath?.();
@@ -262,7 +324,7 @@ export class LaunchGame {
             const libsReady = await this.ensureXXMILibsReady(gameName, onNeedsDllUpdate);
             if (!libsReady) return;
 
-            const preflight = await this.prepareLaunch(gameName, appSettings, onNeedsConfigureProcessPath);
+            const preflight = await this.prepareLaunch(gameName, appSettings, onNeedsConfigureProcessPath, onNeedsUpdate);
             if (!preflight) return;
 
             const { migotoDir, config, targetExe } = preflight;
