@@ -189,6 +189,7 @@
       "selectDllFile": "Select DLL File",
       "selectFile": "Select File",
       "openLocation": "Open Location",
+      "autoMatchPath": "Auto-match Path",
       "setCurrentD3d11Dll": "Set as current d3d11.dll",
       "openPackageRepository": "Open Package GitHub Repository",
       "addProgram": "Add Program",
@@ -200,6 +201,11 @@
       "loadMoreVersions": "Load More Versions"
     },
     "messages": {
+      "selectPresetBeforeAutoMatch": "Select a game preset first",
+      "autoMatchExecutableNotFound": "No matching game path was found",
+      "autoMatchedTargetPath": "Target executable matched: {path}",
+      "autoMatchedLauncherPath": "Launcher executable matched: {path}",
+      "autoMatchExecutableFailed": "Automatic matching failed: {error}",
       "backgroundUpdated": "Background updated successfully!",
       "backgroundFileNotFound": "Current background file was not found",
       "revealBackgroundFileFailed": "Failed to reveal background file: {error}",

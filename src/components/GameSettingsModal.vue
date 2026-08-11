@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { h, ref, watch, reactive, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { join } from '@tauri-apps/api/path';
@@ -43,6 +44,7 @@ const dllReleaseListError = ref('');
 const dllReleaseListLoaded = ref(false);
 const installingDllVersion = ref('');
 const isPackageReleaseLoading = ref(false);
+const autoMatchingExeField = ref<'targetExePath' | 'launcherExePath' | null>(null);
 const packageReleaseList = ref<UpdateInfo[]>([]);
 const packageReleaseListError = ref('');
 const packageReleaseListLoaded = ref(false);
@@ -803,6 +805,45 @@ const openExeDir = async (field: 'targetExePath' | 'launcherExePath') => {
   }
 };
 
+type DiscoveredGamePaths = {
+  targetExePath: string;
+  launcherExePath: string;
+};
+
+const autoMatchExe = async (field: 'targetExePath' | 'launcherExePath') => {
+  const gamePreset = (config.gamePreset || '').trim().toUpperCase();
+  if (!gamePreset) {
+    ElMessage.warning(t('gameSettingsModal.messages.selectPresetBeforeAutoMatch'));
+    return;
+  }
+
+  autoMatchingExeField.value = field;
+  try {
+    const discovered = await invoke<DiscoveredGamePaths | null>('find_game_executable', { gamePreset });
+    if (!discovered) {
+      ElMessage.warning(t('gameSettingsModal.messages.autoMatchExecutableNotFound'));
+      return;
+    }
+
+    const matchedPath = field === 'targetExePath'
+      ? discovered.targetExePath
+      : discovered.launcherExePath;
+    config[field] = matchedPath;
+    await saveConfig();
+    ElMessage.info(t(
+      field === 'targetExePath'
+        ? 'gameSettingsModal.messages.autoMatchedTargetPath'
+        : 'gameSettingsModal.messages.autoMatchedLauncherPath',
+      { path: matchedPath }
+    ));
+  } catch (error) {
+    console.error('Failed to auto-match executable:', error);
+    ElMessage.error(t('gameSettingsModal.messages.autoMatchExecutableFailed', { error: String(error) }));
+  } finally {
+    autoMatchingExeField.value = null;
+  }
+};
+
 const ensureExtraDlls = (): string[] => {
   if (!Array.isArray(config.extraDlls)) {
     config.extraDlls = [];
@@ -1195,6 +1236,11 @@ defineExpose({
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                     </svg>
                   </button>
+                  <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('targetExePath')" :title="t('gameSettingsModal.actions.autoMatchPath')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
+                    </svg>
+                  </button>
                 </div>
 
                 <div class="settings-field-label">
@@ -1215,6 +1261,11 @@ defineExpose({
                   <button class="settings-sm-btn" @click="openExeDir('launcherExePath')" :title="t('gameSettingsModal.actions.openLocation')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                  </button>
+                  <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('launcherExePath')" :title="t('gameSettingsModal.actions.autoMatchPath')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
                     </svg>
                   </button>
                 </div>
