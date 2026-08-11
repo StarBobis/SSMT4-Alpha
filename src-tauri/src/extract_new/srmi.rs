@@ -1926,12 +1926,7 @@ impl SRMINewExtractor {
 
             if all_match && d3d11_game_type.gpu_pre_skinning {
                 if let Some(position_vertex_capacity) = gpu_position_vertex_capacity {
-                    if vertex_number == 0 {
-                        // Position-only GPU GameType: preserve the old behavior because
-                        // there is no independent per-mesh category to establish a
-                        // smaller logical vertex count.
-                        vertex_number = position_vertex_capacity;
-                    } else if position_vertex_capacity < vertex_number {
+                    if vertex_number != 0 && position_vertex_capacity < vertex_number {
                         println!(
                             "GameType {} skipped: Position resource capacity {} is less than logical vertex number {} from non-Position categories",
                             d3d11_game_type.game_type_name,
@@ -1939,7 +1934,7 @@ impl SRMINewExtractor {
                             vertex_number
                         );
                         all_match = false;
-                    } else {
+                    } else if vertex_number != 0 {
                         println!(
                             "GPU Position capacity match successful: resource capacity {} >= logical vertex number {}",
                             position_vertex_capacity,
