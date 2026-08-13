@@ -2316,15 +2316,6 @@ onBeforeUnmount(() => {
             <span>{{ t('gameBanana.likes') }}<strong>{{ formatNumber(detail.likes) }}</strong></span>
           </div>
 
-          <p v-if="detail.contentRatings.length" class="gb-ratings" data-gb-translate>{{ detail.contentRatings.join(' · ') }}</p>
-          <div
-            v-if="detail.descriptionHtml"
-            class="gb-rich-text gb-description"
-            @click="richTextClick"
-            v-html="detail.descriptionHtml"
-          />
-          <p v-else class="gb-description" data-gb-translate>{{ detail.description || t('gameBanana.noDescription') }}</p>
-
           <div v-if="detail.files.length" class="gb-files">
             <h3>{{ t('gameBanana.files') }}</h3>
             <label class="gb-install-group">
@@ -2351,6 +2342,15 @@ onBeforeUnmount(() => {
               </span>
             </div>
           </div>
+
+          <p v-if="detail.contentRatings.length" class="gb-ratings" data-gb-translate>{{ detail.contentRatings.join(' · ') }}</p>
+          <div
+            v-if="detail.descriptionHtml"
+            class="gb-rich-text gb-description"
+            @click="richTextClick"
+            v-html="detail.descriptionHtml"
+          />
+          <p v-else class="gb-description" data-gb-translate>{{ detail.description || t('gameBanana.noDescription') }}</p>
 
           <section class="gb-comments">
             <div class="gb-comments-head">
