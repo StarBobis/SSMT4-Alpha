@@ -3827,15 +3827,15 @@ watch(activeChannelPreviewItem, (item) => {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	flex: 1;
-	min-height: 0;
+	flex: 0 0 auto;
+	min-height: max-content;
 	min-width: 0;
-	overflow: hidden;
+	overflow: visible;
 }
 
 .right-preview-area {
-	flex: 1;
-	min-height: 0;
+	flex: 0 0 auto;
+	min-height: max-content;
 	display: grid;
 	grid-template-columns: 54px minmax(0, 1fr);
 	gap: 8px;
@@ -3844,8 +3844,9 @@ watch(activeChannelPreviewItem, (item) => {
 
 .right-preview-area :deep(.submesh-preview-panel) {
 	min-width: 0;
-	min-height: 0;
-	height: 100%;
+	min-height: max-content;
+	height: max-content;
+	overflow: visible;
 }
 
 .preview-visibility-matrix {
@@ -4038,14 +4039,7 @@ watch(activeChannelPreviewItem, (item) => {
 	overflow: hidden;
 }
 .menu-stack .el-button::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	height: 1px;
-	background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
-	pointer-events: none;
+	display: none;
 }
 .menu-stack .el-button:hover {
 	background: rgba(255,255,255,0.08);

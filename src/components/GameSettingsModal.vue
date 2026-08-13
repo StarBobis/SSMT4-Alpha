@@ -1200,21 +1200,27 @@ defineExpose({
                 <div class="settings-path-row">
                   <input v-model="config.installDir" type="text" class="settings-path-input"
                     :placeholder="t('gameSettingsModal.placeholders.selectOrEnterDirectory')" />
-                  <button class="settings-sm-btn" @click="pick3dmigotoDir" :title="t('gameSettingsModal.actions.selectFolder')">
+                  <el-tooltip :content="t('gameSettingsModal.actions.selectFolder')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn" @click="pick3dmigotoDir">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                     </svg>
                   </button>
-                  <button class="settings-sm-btn folder" @click="set3dmigotoDirToDefault" :title="t('gameSettingsModal.actions.setDefaultCacheMigotoFolder')">
+                  </el-tooltip>
+                  <el-tooltip :content="t('gameSettingsModal.actions.setDefaultCacheMigotoFolder')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn folder" @click="set3dmigotoDirToDefault">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                     </svg>
                   </button>
-                  <button class="settings-sm-btn" @click="open3dmigotoDir" :title="t('gameSettingsModal.actions.openFolder')">
+                  </el-tooltip>
+                  <el-tooltip :content="t('gameSettingsModal.actions.openFolder')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn" @click="open3dmigotoDir">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                     </svg>
                   </button>
+                  </el-tooltip>
                 </div>
 
                 <div class="settings-field-label">
@@ -1226,21 +1232,27 @@ defineExpose({
                 <div class="settings-path-row">
                   <input v-model="config.targetExePath" type="text" class="settings-path-input"
                     :placeholder="t('gameSettingsModal.placeholders.selectGameExecutable')" />
-                  <button class="settings-sm-btn" @click="pickExe('targetExePath')" :title="t('gameSettingsModal.actions.selectFile')">
+                  <el-tooltip :content="t('gameSettingsModal.actions.selectFile')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn" @click="pickExe('targetExePath')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
                   </button>
-                  <button class="settings-sm-btn" @click="openExeDir('targetExePath')" :title="t('gameSettingsModal.actions.openLocation')">
+                  </el-tooltip>
+                  <el-tooltip :content="t('gameSettingsModal.actions.openLocation')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn" @click="openExeDir('targetExePath')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                     </svg>
                   </button>
-                  <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('targetExePath')" :title="t('gameSettingsModal.actions.autoMatchPath')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
-                    </svg>
-                  </button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('gameSettingsModal.actions.autoMatchPath')" placement="top" :show-after="250">
+                    <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('targetExePath')">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
+                      </svg>
+                    </button>
+                  </el-tooltip>
                 </div>
 
                 <div class="settings-field-label">
@@ -1253,21 +1265,27 @@ defineExpose({
                 <div class="settings-path-row">
                   <input v-model="config.launcherExePath" type="text" class="settings-path-input"
                     :placeholder="t('gameSettingsModal.placeholders.selectLauncherOptional')" />
-                  <button class="settings-sm-btn" @click="pickExe('launcherExePath')" :title="t('gameSettingsModal.actions.selectFile')">
+                  <el-tooltip :content="t('gameSettingsModal.actions.selectFile')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn" @click="pickExe('launcherExePath')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
                   </button>
-                  <button class="settings-sm-btn" @click="openExeDir('launcherExePath')" :title="t('gameSettingsModal.actions.openLocation')">
+                  </el-tooltip>
+                  <el-tooltip :content="t('gameSettingsModal.actions.openLocation')" placement="top" :show-after="250">
+                  <button class="settings-sm-btn" @click="openExeDir('launcherExePath')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                     </svg>
                   </button>
-                  <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('launcherExePath')" :title="t('gameSettingsModal.actions.autoMatchPath')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
-                    </svg>
-                  </button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('gameSettingsModal.actions.autoMatchPath')" placement="top" :show-after="250">
+                    <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('launcherExePath')">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
+                      </svg>
+                    </button>
+                  </el-tooltip>
                 </div>
               </div>
 
@@ -1312,43 +1330,43 @@ defineExpose({
                   <div class="settings-field-label" style="margin-bottom:6px">{{ t('gameSettingsModal.fields.extraInjectedDll') }}</div>
                   <div v-for="(_dll, index) in config.extraDlls" :key="index" class="settings-path-row" style="margin-bottom:6px">
                     <input v-model="config.extraDlls![index]" type="text" class="settings-path-input" :placeholder="t('gameSettingsModal.placeholders.selectOrLeaveEmpty')" @input="syncPrimaryExtraDll" />
-                    <button class="settings-sm-btn" @click="pickDllForIndex(index)" :title="t('gameSettingsModal.actions.selectFile')">
+                    <el-tooltip :content="t('gameSettingsModal.actions.selectFile')" placement="top" :show-after="250"><button class="settings-sm-btn" @click="pickDllForIndex(index)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                       </svg>
-                    </button>
-                    <button class="settings-sm-btn" @click="moveExtraDll(index, -1)" :disabled="index === 0" title="Move up">
+                    </button></el-tooltip>
+                    <el-tooltip :content="t('gameSettingsModal.actions.moveUp')" placement="top" :show-after="250"><button class="settings-sm-btn" @click="moveExtraDll(index, -1)" :disabled="index === 0">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="m18 15-6-6-6 6"/>
                       </svg>
-                    </button>
-                    <button class="settings-sm-btn" @click="moveExtraDll(index, 1)" :disabled="index === (config.extraDlls?.length || 0) - 1" title="Move down">
+                    </button></el-tooltip>
+                    <el-tooltip :content="t('gameSettingsModal.actions.moveDown')" placement="top" :show-after="250"><button class="settings-sm-btn" @click="moveExtraDll(index, 1)" :disabled="index === (config.extraDlls?.length || 0) - 1">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="m6 9 6 6 6-6"/>
                       </svg>
-                    </button>
-                    <button class="settings-sm-btn danger" @click="removeExtraDll(index)" title="Remove">
+                    </button></el-tooltip>
+                    <el-tooltip :content="t('gameSettingsModal.actions.remove')" placement="top" :show-after="250"><button class="settings-sm-btn danger" @click="removeExtraDll(index)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>
                       </svg>
-                    </button>
+                    </button></el-tooltip>
                   </div>
                   <div class="settings-path-row">
-                    <button class="settings-sm-btn highlight" @click="addExtraDll()" :title="t('gameSettingsModal.actions.selectDllFile')">
+                    <el-tooltip :content="t('gameSettingsModal.actions.addDll')" placement="top" :show-after="250"><button class="settings-sm-btn highlight" @click="addExtraDll()">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 5v14"/><path d="M5 12h14"/>
                       </svg>
-                    </button>
-                    <button class="settings-sm-btn" @click="pickDllForIndex(config.extraDlls?.length || 0)" :title="t('gameSettingsModal.actions.selectFile')">
+                    </button></el-tooltip>
+                    <el-tooltip :content="t('gameSettingsModal.actions.selectFile')" placement="top" :show-after="250"><button class="settings-sm-btn" @click="pickDllForIndex(config.extraDlls?.length || 0)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                       </svg>
-                    </button>
-                    <button class="settings-sm-btn" @click="setDefaultDll" :title="t('gameSettingsModal.actions.setCurrentD3d11Dll')">
+                    </button></el-tooltip>
+                    <el-tooltip :content="t('gameSettingsModal.actions.setCurrentD3d11Dll')" placement="top" :show-after="250"><button class="settings-sm-btn" @click="setDefaultDll">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                       </svg>
-                    </button>
+                    </button></el-tooltip>
                   </div>
                 </div>
               </div>

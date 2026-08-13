@@ -142,17 +142,20 @@
 
 /* ── el-input-number (used by el-slider show-input) ── */
 .el-input-number {
-  width: 120px;
+  width: 156px;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .el-input-number .el-input__wrapper {
-  padding-right: 32px;
+  padding-right: 38px;
+  padding-left: 38px;
 }
 
 .el-input-number__decrease,
 .el-input-number__increase {
-  width: 26px;
-  height: calc(50% - 1px);
+  width: 36px;
+  height: 100%;
   line-height: 1;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -164,20 +167,22 @@
   align-items: center;
   justify-content: center;
   position: absolute;
-  right: 1px;
+  top: 0;
   box-sizing: border-box;
 }
 
 .el-input-number__decrease {
-  bottom: 1px;
-  border-radius: 0 0 4px 0;
-  border-top: none;
+  left: 0;
+  right: auto;
+  border-radius: 8px 0 0 8px;
+  border-width: 0 1px 0 0;
 }
 
 .el-input-number__increase {
-  top: 1px;
-  border-radius: 0 4px 0 0;
-  border-bottom: none;
+  right: 0;
+  border-radius: 0 8px 0 0;
+  border-radius: 0 8px 8px 0;
+  border-width: 0 0 0 1px;
 }
 
 .el-input-number__decrease:hover,

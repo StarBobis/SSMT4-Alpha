@@ -609,15 +609,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
 }
 
 .specific-ib-dump-toggle::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(var(--theme-surface-tint-rgb), 0.16), transparent);
-  pointer-events: none;
-  border-radius: 8px 8px 0 0;
+  display: none;
 }
 
 .specific-ib-dump-toggle__header {

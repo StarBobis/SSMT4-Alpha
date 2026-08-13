@@ -1922,7 +1922,7 @@ onDeactivated(() => {
 	background: rgba(var(--theme-surface-tint-rgb), 0.045);
 	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.018);
 	overflow-x: hidden;
-	overflow-y: hidden;
+	overflow-y: visible;
 }
 
 .preview-heading {
@@ -2123,7 +2123,7 @@ onDeactivated(() => {
 	color: rgba(244, 247, 255, 0.82);
 	border-color: rgba(var(--theme-surface-tint-rgb), 0.15);
 	background: rgba(var(--theme-surface-tint-rgb), 0.045);
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+	box-shadow: none;
 }
 
 .preview-actions .el-button:not(.is-disabled):hover {
@@ -2135,10 +2135,10 @@ onDeactivated(() => {
 .preview-canvas-wrap {
 	box-sizing: border-box;
 	position: relative;
-	flex: 0 1 auto;
+	flex: 0 0 auto;
 	width: 100%;
 	aspect-ratio: 1 / 1;
-	min-height: 0;
+	min-height: auto;
 	overflow: hidden;
 	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
 	border-radius: 10px;

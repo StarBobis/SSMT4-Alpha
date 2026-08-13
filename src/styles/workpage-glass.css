@@ -57,9 +57,9 @@
   --el-table-text-color: var(--work-glass-text);
   --el-table-header-text-color: var(--work-glass-text-strong);
   background: rgba(var(--theme-surface-tint-rgb), 0.026) !important;
-  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.11) !important;
+  border: 0 !important;
   border-radius: 8px !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.11) !important;
   overflow: hidden !important;
   backdrop-filter: var(--work-glass-blur) !important;
   -webkit-backdrop-filter: var(--work-glass-blur) !important;
@@ -117,6 +117,10 @@
   border-right: 0 !important;
 }
 
+.work-page-container .model-table .model-table-actions-column {
+  border-right: 0 !important;
+}
+
 .work-page-container .glass-table .el-table__body tr:hover > td.el-table__cell {
   background: rgba(var(--theme-surface-tint-rgb), 0.07) !important;
 }
@@ -125,7 +129,7 @@
 .work-page-container .glass-table.el-table::after,
 .work-page-container .glass-table .el-table__inner-wrapper::before,
 .work-page-container .glass-table .el-table__inner-wrapper::after {
-  background-color: rgba(var(--theme-surface-tint-rgb), 0.10) !important;
+  display: none !important;
 }
 
 .work-page-container .el-input__wrapper,

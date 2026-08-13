@@ -219,8 +219,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   border: 1px solid rgba(255,255,255,0.22);
   box-shadow:
     0 0 20px rgba(var(--theme-surface-tint-rgb), 0.16),
-    0 12px 32px rgba(0,0,0,0.15),
-    0 0 0 1px rgba(255,255,255,0.10) inset;
+    0 12px 32px rgba(0,0,0,0.15);
   animation: none;
 }
 
@@ -230,6 +229,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   width: 100%;
   overflow: hidden;
   border-radius: 12px;
+	clip-path: inset(0 round 11px);
 }
 
 .mod-card:not(.is-disabled) {
@@ -653,6 +653,9 @@ const onModCardMouseLeave = (e: MouseEvent) => {
 }
 
 .card-info {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
   padding: 12px 14px 14px;
   background: rgba(255,255,255,0.03);
   backdrop-filter: blur(6px);
@@ -664,6 +667,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   min-height: 96px;
   position: relative;
   z-index: 2;
+	overflow: hidden;
 }
 
 .header-row {
@@ -671,6 +675,12 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+	min-width: 0;
+	width: 100%;
+}
+
+.header-row :deep(.el-switch) {
+	flex: 0 0 auto;
 }
 
 .text-content {

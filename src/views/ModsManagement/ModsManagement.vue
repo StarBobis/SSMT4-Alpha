@@ -3326,27 +3326,20 @@ const {
                     <div class="tb-divider"></div>
 
                     <!-- Sort controls -->
-                    <select
-                        class="tb-select"
-                        v-model="sortBy"
-                        :title="t('modsManagement.ui.sortBy')"
-                        :aria-label="t('modsManagement.ui.sortBy')"
-                    >
-                        <option value="manual">{{ t('modsManagement.ui.sortManual') }}</option>
-                        <option value="name">{{ t('modsManagement.ui.sortByName') }}</option>
-                        <option value="modified">{{ t('modsManagement.ui.sortByModified') }}</option>
-                        <option value="tag">{{ t('modsManagement.ui.sortByTag') }}</option>
-                    </select>
-                    <select
-                        v-if="sortBy === 'tag'"
-                        class="tb-select"
-                        v-model="sortTagId"
-                        :title="t('modsManagement.ui.selectSortTag')"
-                        :aria-label="t('modsManagement.ui.selectSortTag')"
-                    >
-                        <option value="">{{ t('modsManagement.ui.selectSortTag') }}</option>
-                        <option v-for="tag in tagDefinitions" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-                    </select>
+                    <el-tooltip :content="t('modsManagement.ui.sortBy')" placement="bottom">
+                        <el-select v-model="sortBy" class="tb-select" popper-class="gamebanana-select-popper" :aria-label="t('modsManagement.ui.sortBy')">
+                            <el-option value="manual" :label="t('modsManagement.ui.sortManual')" />
+                            <el-option value="name" :label="t('modsManagement.ui.sortByName')" />
+                            <el-option value="modified" :label="t('modsManagement.ui.sortByModified')" />
+                            <el-option value="tag" :label="t('modsManagement.ui.sortByTag')" />
+                        </el-select>
+                    </el-tooltip>
+                    <el-tooltip v-if="sortBy === 'tag'" :content="t('modsManagement.ui.selectSortTag')" placement="bottom">
+                        <el-select v-model="sortTagId" class="tb-select" popper-class="gamebanana-select-popper" :aria-label="t('modsManagement.ui.selectSortTag')">
+                            <el-option value="" :label="t('modsManagement.ui.selectSortTag')" />
+                            <el-option v-for="tag in tagDefinitions" :key="tag.id" :value="tag.id" :label="tag.name" />
+                        </el-select>
+                    </el-tooltip>
                     <button
                         type="button"
                         class="tb-btn tb-btn--icon tb-sort-order-btn"
@@ -4563,6 +4556,10 @@ const {
 }
 .tb-btn svg { flex-shrink: 0; }
 
+.tb-btn--icon::before {
+    display: none;
+}
+
 .tb-action-group {
     display: inline-flex;
     align-items: center;
@@ -5170,16 +5167,12 @@ const {
     border: 1px solid rgba(255,255,255,0.20);
     box-shadow:
         0 0 16px rgba(var(--theme-surface-tint-rgb), 0.14),
-        0 8px 24px rgba(0,0,0,0.12),
-        0 0 0 1px rgba(255,255,255,0.08) inset;
+        0 8px 24px rgba(0,0,0,0.12);
 }
 
 /* Top hairline */
 .subgroup-card::before {
-    content: ''; position: absolute;
-    top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
-    pointer-events: none; z-index: 5;
+    display: none;
 }
 
 /* Sheen sweep — always active */
@@ -5235,8 +5228,7 @@ const {
     box-shadow:
         0 0 32px rgba(var(--theme-surface-tint-rgb), 0.22),
         0 0 48px rgba(142, 230, 255, 0.10),
-        0 14px 36px rgba(0,0,0,0.16),
-        0 0 0 1px rgba(255,255,255,0.10) inset;
+        0 14px 36px rgba(0,0,0,0.16);
 }
 .subgroup-card:hover .subgroup-bg-preview {
     opacity: 0.85;
@@ -6071,7 +6063,11 @@ const {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding-right: 6px;
+    min-height: 30px;
+    padding: 4px 9px;
+    margin: 2px 3px;
+    box-sizing: border-box;
+    border-radius: 7px;
     overflow: hidden;
 }
 
@@ -6261,6 +6257,37 @@ const {
         0 14px 36px rgba(0, 0, 0, 0.18),
         0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.035) inset;
 }
+.tb-select.el-select {
+    width: 110px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    background-image: none;
+}
+.tb-select.el-select :deep(.el-select__wrapper) {
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 9px;
+    background: rgba(255,255,255,0.04);
+    box-shadow: none;
+}
+.tb-select.el-select :deep(.el-select__selected-item) {
+    color: rgba(255,255,255,0.70);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* One physical edge per main panel; inner highlights made these borders look doubled. */
+.mod-manager .mod-manager-layout-content,
+.mod-manager .tb-bar,
+.mod-manager .mod-card {
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
+}
+
+.mod-manager .tb-bar::before {
+    display: none;
+}
 
 .mod-manager .tb-bar {
     border-bottom-color: rgba(var(--theme-surface-tint-rgb), 0.14);
@@ -6402,8 +6429,7 @@ const {
     border-color: rgba(var(--theme-surface-tint-rgb), 0.32);
     box-shadow:
         0 0 32px rgba(var(--theme-surface-tint-rgb), 0.20),
-        0 14px 36px rgba(0, 0, 0, 0.18),
-        0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.07) inset;
+        0 14px 36px rgba(0, 0, 0, 0.18);
 }
 
 .mod-manager .subgroup-bg-preview::after {

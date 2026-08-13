@@ -539,6 +539,10 @@ const openUsageDocs = async () => {
   --el-slider-button-size: 16px;
 }
 
+.settings-page :deep(.el-button::before) {
+  display: none;
+}
+
 .ui-scale-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;
@@ -561,7 +565,7 @@ const openUsageDocs = async () => {
 
 .mask-opacity-control :deep(.el-slider__input),
 .mask-opacity-control :deep(.el-input-number) {
-  width: 104px;
+  width: 156px;
 }
 
 .mask-opacity-control :deep(.el-input-number__decrease),
@@ -572,7 +576,7 @@ const openUsageDocs = async () => {
 
 .settings-sidebar {
   position: sticky;
-  top: 20px;
+  top: 0;
   min-width: 0;
 }
 

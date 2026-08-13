@@ -26,6 +26,33 @@
   padding: 0;
 }
 
+/* Teleported acrylic select panels used by compact page toolbars. */
+.gamebanana-select-popper.el-select__popper.el-popper {
+  --el-bg-color-overlay: transparent;
+  --el-fill-color-light: rgba(var(--theme-surface-tint-rgb), 0.12);
+  overflow: hidden !important;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.24) !important;
+  border-radius: 10px !important;
+  background-color: rgba(38, 46, 60, 0.34) !important;
+  background-image: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.13), rgba(255, 255, 255, 0.035)) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: blur(22px) saturate(1.35) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.35) !important;
+}
+
+.gamebanana-select-popper.el-popper .el-popper__arrow::before {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.20) !important;
+  background: rgba(38, 46, 60, 0.62) !important;
+}
+
+.gamebanana-select-popper .el-select-dropdown,
+.gamebanana-select-popper .el-scrollbar,
+.gamebanana-select-popper .el-scrollbar__wrap,
+.gamebanana-select-popper .el-scrollbar__view {
+  background: transparent !important;
+  border-radius: inherit;
+}
+
 .el-select__popper .el-select-dropdown {
   box-sizing: border-box;
   max-width: 100%;

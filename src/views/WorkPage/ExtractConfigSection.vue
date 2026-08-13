@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { FolderOpened, Download, ArrowUp, ArrowDown, Delete } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { ModelRow } from './WorkPage.types';
 import type { FullExtractDataTypeFilter } from './WorkPage.Extract';
 
@@ -32,6 +33,90 @@ const emit = defineEmits<{
   extractModels: [];
   fullExtract: [];
 }>();
+
+type ResizableColumn = { minWidth?: number | string; width?: number | string; realWidth?: number | null };
+
+// DrawIB 表格的初始列宽比例在这里调整。数值只表示相对比例；
+// 表格首次显示和容器尺寸变化时会按比例铺满可用宽度。
+const DRAW_IB_INITIAL_COLUMN_RATIOS = {
+  drawIB: 180,
+  aliasName: 254,
+  order: 66,
+} as const;
+
+const modelTable = ref<any>();
+const modelTableHost = ref<HTMLElement>();
+let resizeObserver: ResizeObserver | undefined;
+let resizePair: { next?: ResizableColumn; nextStart: number } | undefined;
+const fitColumnsToContainer = () => {
+  const available = modelTableHost.value?.clientWidth || 0;
+  const columns = modelTable.value?.store?.states?.columns?.value as ResizableColumn[] | undefined;
+  if (!columns?.length || !available) return;
+  const fixedWidth = Number(columns.at(-1)?.realWidth ?? columns.at(-1)?.width) || 56;
+  const resizable = columns.slice(0, -1);
+  const currentTotal = resizable.reduce((sum, item) => sum + (Number(item.realWidth ?? item.width) || 0), 0);
+  if (available <= fixedWidth || currentTotal <= 0) return;
+  const scale = (available - fixedWidth) / currentTotal;
+  let used = fixedWidth;
+  resizable.forEach((item, index) => {
+    const width = index === resizable.length - 1 ? available - used : Math.round((Number(item.realWidth ?? item.width) || 0) * scale);
+    item.width = width;
+    item.realWidth = width;
+    used += width;
+  });
+  modelTable.value.store.scheduleLayout(false, true);
+};
+const keepDraggedColumnWidth = (newWidth: number, _oldWidth: number, column: ResizableColumn) => {
+  const minimum = Number(column.minWidth) || 60;
+  const resolvedWidth = Math.max(minimum, newWidth);
+  column.width = resolvedWidth;
+  column.realWidth = resolvedWidth;
+  if (resizePair?.next) {
+    const nextWidth = resizePair.nextStart - (resolvedWidth - _oldWidth);
+    resizePair.next.width = nextWidth;
+    resizePair.next.realWidth = nextWidth;
+  }
+  resizePair = undefined;
+};
+
+let stopResizePreview: (() => void) | undefined;
+const constrainResizePreview = (event: MouseEvent, tableInstance: any) => {
+  const headerCell = (event.target as HTMLElement | null)?.closest('th.el-table__cell') as HTMLElement | null;
+  const table = headerCell?.closest('.el-table') as HTMLElement | null;
+  if (!headerCell || !table || headerCell.classList.contains('model-table-actions-column')) return;
+  const classMinimum = [...headerCell.classList].find((name) => name.startsWith('column-min-'));
+  const minimum = Number(classMinimum?.slice('column-min-'.length)) || 80;
+  const tableLeft = table.getBoundingClientRect().left;
+  const minimumLeft = headerCell.getBoundingClientRect().left - tableLeft + minimum;
+  const headers = [...headerCell.parentElement!.children] as HTMLElement[];
+  const columnIndex = headers.indexOf(headerCell);
+  const columns = tableInstance?.store?.states?.columns?.value as ResizableColumn[] | undefined;
+  const current = columns?.[columnIndex];
+  const next = columns?.[columnIndex + 1];
+  if (!current || !next) return;
+  const currentStart = Number(current.realWidth ?? current.width) || headerCell.offsetWidth;
+  const nextStart = Number(next.realWidth ?? next.width) || headers[columnIndex + 1]?.offsetWidth || 0;
+  const nextMinimum = Number(next.minWidth) || 56;
+  const maximumLeft = headerCell.getBoundingClientRect().left - tableLeft + currentStart + nextStart - nextMinimum;
+  resizePair = { next, nextStart };
+  const move = () => requestAnimationFrame(() => {
+    const proxy = table.querySelector('.el-table__column-resize-proxy') as HTMLElement | null;
+    if (proxy) proxy.style.left = `${Math.min(maximumLeft, Math.max(minimumLeft, Number.parseFloat(proxy.style.left)))}px`;
+  });
+  document.addEventListener('mousemove', move, true);
+  const stop = () => { document.removeEventListener('mousemove', move, true); document.removeEventListener('mouseup', stop, true); };
+  document.addEventListener('mouseup', stop, true);
+  stopResizePreview = stop;
+};
+onMounted(() => nextTick(() => {
+  resizeObserver = new ResizeObserver(fitColumnsToContainer);
+  if (modelTableHost.value) resizeObserver.observe(modelTableHost.value);
+  fitColumnsToContainer();
+}));
+onBeforeUnmount(() => {
+  stopResizePreview?.();
+  resizeObserver?.disconnect();
+});
 </script>
 
 <template>
@@ -89,9 +174,9 @@ const emit = defineEmits<{
   <section class="inner-panel extract-tabs-panel">
     <el-tabs v-model="extractPanelTab" class="extract-tabs">
       <el-tab-pane :label="t('workPage.tabs.extractByDrawIB')" name="drawib">
-        <div class="table-row">
-          <el-table :data="modelRows" border size="small" class="model-table glass-table">
-            <el-table-column :label="t('workPage.columns.drawIB')" width="220">
+        <div ref="modelTableHost" class="table-row">
+          <el-table ref="modelTable" :data="modelRows" border size="small" class="model-table glass-table" @mousedown.capture="constrainResizePreview($event, modelTable)" @header-dragend="keepDraggedColumnWidth">
+            <el-table-column :label="t('workPage.columns.drawIB')" :width="DRAW_IB_INITIAL_COLUMN_RATIOS.drawIB" min-width="130" label-class-name="column-min-130">
               <template #default="{ $index }">
                 <el-input
                   v-model="modelRows[$index].drawIB"
@@ -99,7 +184,7 @@ const emit = defineEmits<{
                 />
               </template>
             </el-table-column>
-            <el-table-column :label="t('workPage.columns.aliasName')">
+            <el-table-column :label="t('workPage.columns.aliasName')" :width="DRAW_IB_INITIAL_COLUMN_RATIOS.aliasName" min-width="140" label-class-name="column-min-140">
               <template #default="{ $index }">
                 <el-input
                   v-model="modelRows[$index].aliasName"
@@ -107,7 +192,7 @@ const emit = defineEmits<{
                 />
               </template>
             </el-table-column>
-            <el-table-column :label="t('workPage.columns.order')" width="66" align="center">
+            <el-table-column :label="t('workPage.columns.order')" :width="DRAW_IB_INITIAL_COLUMN_RATIOS.order" min-width="60" align="center" label-class-name="column-min-60">
               <template #default="{ $index }">
                 <div class="row-move-actions">
                   <el-button
@@ -127,7 +212,7 @@ const emit = defineEmits<{
                 </div>
               </template>
             </el-table-column>
-            <el-table-column width="56" align="center">
+            <el-table-column width="56" align="center" :resizable="false" class-name="model-table-actions-column" label-class-name="model-table-actions-column">
               <template #default="{ $index }">
                 <el-tooltip :content="t('workPage.common.delete')" placement="left">
                   <button
@@ -266,6 +351,27 @@ const emit = defineEmits<{
   background: rgba(var(--theme-surface-tint-rgb), 0.045) !important;
   border-color: rgba(var(--theme-surface-tint-rgb), 0.14) !important;
   color: rgba(var(--theme-text-secondary-rgb), 0.72) !important;
+  display: inline-grid !important;
+  place-items: center;
+  line-height: 1;
+}
+
+.row-move-btn :deep(.el-icon) {
+  width: 14px;
+  height: 14px;
+  margin: 0 !important;
+  display: grid;
+  place-items: center;
+}
+
+.row-move-btn :deep(.el-icon svg) {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.model-table :deep(.model-table-actions-column) {
+  cursor: default !important;
 }
 
 .row-move-btn:hover {

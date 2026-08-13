@@ -2632,7 +2632,14 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   min-width: 18px;
   height: 18px;
   padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   color: rgba(255, 178, 178, 0.86);
+}
+
+.workspace-tab-delete::before {
+  display: none !important;
 }
 
 .workspace-tab-input {
