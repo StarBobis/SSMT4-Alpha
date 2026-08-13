@@ -263,6 +263,73 @@ const translationBlocksByAnchor = new Map<HTMLElement, HTMLElement>();
 const translationAnchorsByBlock = new Map<HTMLElement, HTMLElement>();
 const translationCache = new Map<string, string>();
 const translationRequestCount = ref(0);
+const translationFontStyleOptions = ['regular', 'italic', 'bold', 'bold-italic'] as const;
+const translationFailureModeOptions = ['retry', 'message', 'silent'] as const;
+const translationFontWarning = ref<'missing' | 'limited' | ''>('');
+const translationColorWarning = ref(false);
+let translationFontCheckRevision = 0;
+
+const quotedFontFamily = (family: string): string => `"${family.replace(/["\\]/g, '\\$&')}"`;
+const measureFontSample = (font: string, sample: string): number => {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return 0;
+  context.font = `32px ${font}`;
+  return context.measureText(sample).width;
+};
+
+const checkTranslationFont = async () => {
+  const revision = ++translationFontCheckRevision;
+  const family = appSettings.gamebananaTranslationFontFamily.trim();
+  if (!family || typeof document === 'undefined') {
+    translationFontWarning.value = '';
+    return;
+  }
+  await document.fonts.ready;
+  if (revision !== translationFontCheckRevision) return;
+  const font = quotedFontFamily(family);
+  const sample = '中文測試日本語한글';
+  await document.fonts.load(`16px ${font}`).catch(() => []);
+  const asciiProbe = 'mmmmmmmmmmWWWWWWWWWW';
+  const fallbackFamilies = ['monospace', 'serif', 'sans-serif'];
+  const exists = fallbackFamilies.some((fallback) => Math.abs(
+    measureFontSample(`${font}, ${fallback}`, asciiProbe) - measureFontSample(fallback, asciiProbe),
+  ) >= 0.5);
+  if (revision !== translationFontCheckRevision) return;
+  if (!exists) {
+    translationFontWarning.value = 'missing';
+    return;
+  }
+  const fallback = 'monospace';
+  const specifiedWidth = measureFontSample(`${font}, ${fallback}`, sample);
+  const fallbackWidth = measureFontSample(fallback, sample);
+  translationFontWarning.value = Math.abs(specifiedWidth - fallbackWidth) < 0.5 ? 'limited' : '';
+};
+
+watch(
+  [() => appSettings.gamebananaTranslationFontFamily, showTranslationSettings],
+  ([, isOpen]) => { if (isOpen) void checkTranslationFont(); },
+  { immediate: true },
+);
+
+const normalizedTranslationColor = (value: string): string | null => {
+  const normalized = value.trim();
+  if (!normalized) return '#FFFFFFB3';
+  if (/^#[\da-f]{3,4}$/i.test(normalized) || /^#[\da-f]{6}([\da-f]{2})?$/i.test(normalized)) return normalized;
+  return null;
+};
+
+watch(() => appSettings.gamebananaTranslationColor, (value) => {
+  translationColorWarning.value = normalizedTranslationColor(value) === null;
+}, { immediate: true });
+
+const applyTranslationTextStyle = (element: HTMLElement) => {
+  element.style.fontFamily = appSettings.gamebananaTranslationFontFamily.trim() || 'inherit';
+  element.style.fontSize = appSettings.gamebananaTranslationFontSize.trim() || 'inherit';
+  element.style.color = normalizedTranslationColor(appSettings.gamebananaTranslationColor) || '#FFFFFFB3';
+  element.style.fontStyle = appSettings.gamebananaTranslationFontStyle.includes('italic') ? 'italic' : 'normal';
+  element.style.fontWeight = appSettings.gamebananaTranslationFontStyle.includes('bold') ? '700' : '400';
+};
 
 const allCategories = computed(() => {
   const flattened: GbCategoryNode[] = [];
@@ -487,6 +554,32 @@ const sanitizeRichText = (value: unknown): string => {
     }
   }
 
+  if (!root.querySelector('p, li, blockquote, pre, h1, h2, h3, h4, h5, h6, td, th')) {
+    const paragraphs: Node[][] = [[]];
+    let consecutiveBreaks = 0;
+    for (const node of Array.from(root.childNodes)) {
+      if (node instanceof HTMLBRElement) {
+        consecutiveBreaks += 1;
+        if (consecutiveBreaks >= 2) {
+          if (paragraphs.at(-1)?.length) paragraphs.push([]);
+          consecutiveBreaks = 0;
+        }
+        continue;
+      }
+      if (consecutiveBreaks === 1 && paragraphs.at(-1)?.length) {
+        paragraphs.at(-1)?.push(document.createElement('br'));
+      }
+      consecutiveBreaks = 0;
+      paragraphs.at(-1)?.push(node);
+    }
+    root.replaceChildren();
+    for (const nodes of paragraphs.filter((items) => items.some((node) => node.textContent?.trim() || node instanceof Element))) {
+      const paragraph = document.createElement('p');
+      paragraph.append(...nodes);
+      root.append(paragraph);
+    }
+  }
+
   return root.innerHTML.trim();
 };
 
@@ -496,6 +589,15 @@ const sanitizeTranslatedRichText = (value: string): string => sanitizeRichText(
     .replace(/^```(?:html)?\s*/i, '')
     .replace(/\s*```$/i, ''),
 );
+
+const translatedParagraphHtml = (value: string): string => {
+  const sanitized = sanitizeTranslatedRichText(value);
+  const parsed = new DOMParser().parseFromString(`<article>${sanitized}</article>`, 'text/html');
+  const root = parsed.body.firstElementChild;
+  return root?.children.length === 1 && root.firstElementChild?.tagName === 'P'
+    ? root.firstElementChild.innerHTML
+    : sanitized;
+};
 
 const restoreGamebananaScreenshotVariant = (value: string): string => {
   const normalized = value.trim();
@@ -1403,64 +1505,41 @@ const registerTranslationBlock = (anchor: HTMLElement, block: HTMLElement) => {
 };
 
 const appendTranslation = (anchor: HTMLElement, translation: string, richText: boolean) => {
-  const block = document.createElement('aside');
+  const block = document.createElement('p');
   block.className = 'gb-inline-translation';
-  const header = document.createElement('div');
-  header.className = 'gb-inline-translation-head';
-  const title = document.createElement('strong');
-  title.textContent = t('gameBanana.translationResult');
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = '×';
-  close.addEventListener('click', () => removeTranslationBlock(block));
-  const content = document.createElement('div');
-  content.className = 'gb-inline-translation-content';
+  applyTranslationTextStyle(block);
   if (richText) {
-    content.innerHTML = sanitizeTranslatedRichText(translation);
+    block.innerHTML = translatedParagraphHtml(translation);
   } else {
-    content.textContent = translation;
+    block.textContent = translation;
   }
-  header.append(title, close);
-  block.append(header, content);
   anchor.insertAdjacentElement('afterend', block);
   registerTranslationBlock(anchor, block);
   return block;
 };
 
 const appendTranslationLoading = (anchor: HTMLElement) => {
-  const block = document.createElement('aside');
-  block.className = 'gb-inline-translation';
-  const header = document.createElement('div');
-  header.className = 'gb-inline-translation-head';
-  const title = document.createElement('strong');
-  title.textContent = t('gameBanana.translationResult');
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = '×';
-  close.addEventListener('click', () => removeTranslationBlock(block));
-  const content = document.createElement('div');
-  content.className = 'gb-inline-translation-content is-loading';
+  const block = document.createElement('p');
+  block.className = 'gb-inline-translation is-loading';
+  applyTranslationTextStyle(block);
   const spinner = document.createElement('i');
   spinner.className = 'gb-translation-spinner';
   spinner.setAttribute('aria-hidden', 'true');
   const label = document.createElement('span');
   label.textContent = t('gameBanana.translationWorking');
-  content.append(spinner, label);
-  header.append(title, close);
-  block.append(header, content);
+  block.append(spinner, label);
   anchor.insertAdjacentElement('afterend', block);
   registerTranslationBlock(anchor, block);
   return block;
 };
 
 const resolveTranslationLoading = (block: HTMLElement, translation: string, richText: boolean) => {
-  const content = block.querySelector('.gb-inline-translation-content');
-  if (!(content instanceof HTMLElement) || !block.isConnected) return;
-  content.classList.remove('is-loading');
+  if (!block.isConnected) return;
+  block.classList.remove('is-loading');
   if (richText) {
-    content.innerHTML = sanitizeTranslatedRichText(translation);
+    block.innerHTML = translatedParagraphHtml(translation);
   } else {
-    content.textContent = translation;
+    block.textContent = translation;
   }
 };
 
@@ -1581,14 +1660,22 @@ const onTranslationProviderChange = () => {
   void fetchTranslationModels();
 };
 
-const translateWithConfiguredProvider = async (source: string, targetLanguage: string, richText: boolean): Promise<string> => {
+const translateWithConfiguredProvider = async (
+  source: string,
+  targetLanguage: string,
+  richText: boolean,
+  context = '',
+): Promise<string> => {
   const provider = appSettings.gamebananaTranslationProvider;
   const apiKey = appSettings.gamebananaTranslationApiKey.trim();
   const baseUrl = appSettings.gamebananaTranslationApiUrl.trim().replace(/\/$/, '');
   const model = appSettings.gamebananaTranslationModel.trim() || 'gpt-4o-mini';
   const translationInstruction = richText
-    ? `Translate the following GameBanana HTML fragment into ${targetLanguage}. Preserve its meaningful HTML structure, links, and inline formatting. Return only valid translated HTML with no Markdown code fences or explanation.`
-    : `Translate the following GameBanana text into ${targetLanguage}. Return only the translation and preserve meaning.`;
+    ? `Translate only the TARGET GameBanana HTML fragment into ${targetLanguage}. Use the FULL CONTENT only as context. Preserve the target's meaningful HTML structure, links, and inline formatting. Return only the translated TARGET as valid HTML, with no markers, Markdown fences, explanation, or translation of other paragraphs.`
+    : `Translate only the TARGET GameBanana paragraph into ${targetLanguage}. Use the FULL CONTENT only as context. Return only the translated TARGET, with no markers, explanation, or translation of other paragraphs.`;
+  const contextualSource = context
+    ? `<FULL_CONTENT>\n${context}\n</FULL_CONTENT>\n\n<TARGET>\n${source}\n</TARGET>`
+    : source;
 
   if (provider === 'claude') {
     const endpoint = /\/messages$/i.test(baseUrl) ? baseUrl : `${baseUrl}/messages`;
@@ -1603,7 +1690,7 @@ const translateWithConfiguredProvider = async (source: string, targetLanguage: s
         model,
         max_tokens: 2048,
         system: translationInstruction,
-        messages: [{ role: 'user', content: source }],
+        messages: [{ role: 'user', content: contextualSource }],
       }),
     });
     const payload = await response.json() as { content?: Array<{ text?: string }>; error?: { message?: string } };
@@ -1617,7 +1704,7 @@ const translateWithConfiguredProvider = async (source: string, targetLanguage: s
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `${translationInstruction}\n\n${source}` }] }],
+        contents: [{ parts: [{ text: `${translationInstruction}\n\n${contextualSource}` }] }],
         generationConfig: { temperature: 0.2 },
       }),
     });
@@ -1651,7 +1738,7 @@ const translateWithConfiguredProvider = async (source: string, targetLanguage: s
       temperature: 0.2,
       messages: [
         { role: 'system', content: translationInstruction },
-        { role: 'user', content: source },
+        { role: 'user', content: contextualSource },
       ],
     }),
   });
@@ -1662,8 +1749,14 @@ const translateWithConfiguredProvider = async (source: string, targetLanguage: s
 
 const isRichTextContainer = (element: HTMLElement) => element.matches('.gb-rich-text, .gb-comment-body');
 
+const translationContextForContainer = (container: HTMLElement, richText: boolean): string => {
+  const clone = container.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('.gb-inline-translation').forEach((node) => node.remove());
+  return richText ? clone.innerHTML.trim() : clone.innerText.trim();
+};
+
 const translationTargetsForAnchor = (anchor: HTMLElement): HTMLElement[] => {
-  if (!appSettings.gamebananaTranslationRichText || !isRichTextContainer(anchor)) return [anchor];
+  if (!isRichTextContainer(anchor)) return [anchor];
   const candidates = Array.from(anchor.querySelectorAll(richTextBlockSelector))
     .filter((block): block is HTMLElement => block instanceof HTMLElement && Boolean(block.innerText.trim()));
   // Prefer leaf blocks: list items and table cells may themselves contain a
@@ -1678,6 +1771,10 @@ const translateAnchor = async (anchor: HTMLElement) => {
   const source = richText
     ? anchor.innerHTML.trim()
     : anchor.innerText.trim();
+  const contextContainer = anchor.closest('.gb-rich-text, .gb-comment-body') as HTMLElement | null;
+  const fullContext = appSettings.gamebananaTranslationUseContext && contextContainer
+    ? translationContextForContainer(contextContainer, richText)
+    : '';
   if (!source || !anchor.isConnected) {
     return;
   }
@@ -1695,7 +1792,7 @@ const translateAnchor = async (anchor: HTMLElement) => {
 
   const targetLanguage = appSettings.gamebananaTranslationTargetLanguage.trim() || '简体中文';
   const model = appSettings.gamebananaTranslationModel.trim() || 'gpt-4o-mini';
-  const cacheKey = `${appSettings.gamebananaTranslationProvider}|${baseUrl}|${model}|${targetLanguage}|${richText ? 'html' : 'text'}|${source}`;
+  const cacheKey = `${appSettings.gamebananaTranslationProvider}|${baseUrl}|${model}|${targetLanguage}|${richText ? 'html' : 'text'}|${fullContext}|${source}`;
   const cached = translationCache.get(cacheKey);
   if (cached) {
     appendTranslation(anchor, cached, richText);
@@ -1706,12 +1803,31 @@ const translateAnchor = async (anchor: HTMLElement) => {
   translationStatus.value = t('gameBanana.translationWorking');
   const loadingBlock = appendTranslationLoading(anchor);
   try {
-    const translated = await translateWithConfiguredProvider(source.slice(0, 12000), targetLanguage, richText);
-    if (!translated) throw new Error(t('gameBanana.errors.translationEmpty'));
+    const maxAttempts = appSettings.gamebananaTranslationFailureMode === 'retry' ? 5 : 1;
+    let translated = '';
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        translated = await translateWithConfiguredProvider(
+          source.slice(0, 12000), targetLanguage, richText,
+          appSettings.gamebananaTranslationProvider === 'google' ? '' : fullContext.slice(0, 24000),
+        );
+        if (!translated) throw new Error(t('gameBanana.errors.translationEmpty'));
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!translated) throw lastError || new Error(t('gameBanana.errors.translationEmpty'));
     translationCache.set(cacheKey, translated);
     resolveTranslationLoading(loadingBlock, translated, richText);
   } catch (error) {
-    removeTranslationBlock(loadingBlock);
+    if (appSettings.gamebananaTranslationFailureMode === 'message') {
+      loadingBlock.classList.remove('is-loading');
+      loadingBlock.textContent = t('gameBanana.translationFailedInline');
+    } else {
+      removeTranslationBlock(loadingBlock);
+    }
     translationStatus.value = t('gameBanana.errors.translationFailed', { error: String(error) });
     ElMessage.error(translationStatus.value);
   } finally {
@@ -2059,7 +2175,8 @@ onBeforeUnmount(() => {
       </button>
     </section>
 
-    <section v-if="showTranslationSettings" class="gb-translation-settings glass-panel">
+    <el-dialog v-model="showTranslationSettings" class="glass-dialog gb-translation-dialog" :title="t('gameBanana.translationSettings')" width="620px" align-center>
+    <div class="gb-translation-settings">
       <div class="gb-translation-settings-head">
         <strong>{{ t('gameBanana.translationSettings') }}</strong>
         <span>{{ t('gameBanana.translationHint', { shortcut: appSettings.gamebananaTranslationShortcut || 'Ctrl' }) }}</span>
@@ -2071,6 +2188,36 @@ onBeforeUnmount(() => {
       <label class="gb-field gb-translation-enabled" :title="t('gameBanana.translationRichTextHint')">
         <span>{{ t('gameBanana.translationRichText') }}</span>
         <el-switch v-model="appSettings.gamebananaTranslationRichText" />
+      </label>
+      <label class="gb-field gb-translation-enabled">
+        <span>{{ t('gameBanana.translationUseContext') }}</span>
+        <el-switch v-model="appSettings.gamebananaTranslationUseContext" />
+      </label>
+      <label class="gb-field" :class="{ 'has-font-warning': translationFontWarning }">
+        <span>{{ t('gameBanana.translationFontFamily') }}</span>
+        <input v-model="appSettings.gamebananaTranslationFontFamily" type="text" :placeholder="t('gameBanana.translationDefault')" />
+        <small v-if="translationFontWarning">{{ t(`gameBanana.translationFontWarnings.${translationFontWarning}`) }}</small>
+      </label>
+      <label class="gb-field">
+        <span>{{ t('gameBanana.translationFontSize') }}</span>
+        <input v-model="appSettings.gamebananaTranslationFontSize" type="text" :placeholder="t('gameBanana.translationDefault')" />
+      </label>
+      <label class="gb-field" :class="{ 'has-font-warning': translationColorWarning }">
+        <span>{{ t('gameBanana.translationColor') }}</span>
+        <input v-model="appSettings.gamebananaTranslationColor" type="text" placeholder="#FFFFFFB3" spellcheck="false" />
+        <small v-if="translationColorWarning">{{ t('gameBanana.translationColorInvalid') }}</small>
+      </label>
+      <label class="gb-field">
+        <span>{{ t('gameBanana.translationFontStyle') }}</span>
+        <el-select v-model="appSettings.gamebananaTranslationFontStyle" class="gb-select">
+          <el-option v-for="style in translationFontStyleOptions" :key="style" :value="style" :label="t(`gameBanana.translationFontStyles.${style}`)" />
+        </el-select>
+      </label>
+      <label class="gb-field">
+        <span>{{ t('gameBanana.translationFailureMode') }}</span>
+        <el-select v-model="appSettings.gamebananaTranslationFailureMode" class="gb-select">
+          <el-option v-for="mode in translationFailureModeOptions" :key="mode" :value="mode" :label="t(`gameBanana.translationFailureModes.${mode}`)" />
+        </el-select>
       </label>
       <label class="gb-field">
         <span>{{ t('gameBanana.translationProvider') }}</span>
@@ -2123,7 +2270,9 @@ onBeforeUnmount(() => {
         <input v-model="appSettings.gamebananaTranslationShortcut" type="text" placeholder="Ctrl" />
       </label>
       <span v-if="translationStatus || translationModelsStatus" class="gb-translation-status">{{ translationStatus || translationModelsStatus }}</span>
-    </section>
+    </div>
+    <template #footer><el-button type="primary" @click="showTranslationSettings = false">{{ t('gameBanana.done') }}</el-button></template>
+    </el-dialog>
 
     <p v-if="errorMessage" class="gb-error">{{ errorMessage }}</p>
 
@@ -2512,12 +2661,17 @@ onBeforeUnmount(() => {
 .gb-nsfw-mode :deep(.el-radio-button__inner),.gb-nsfw-visibility :deep(.el-radio-button__inner) { border:none!important; outline:none!important; box-shadow:none!important; }
 .gb-nsfw-mode :deep(.el-radio-button.is-active .el-radio-button__inner),.gb-nsfw-visibility :deep(.el-radio-button.is-active .el-radio-button__inner) { box-shadow:none!important; }
 
-.gb-translation-settings { display: grid; grid-template-columns: 1.15fr 1fr 1fr .8fr .8fr .8fr; align-items: end; gap: 9px; padding: 10px 12px 12px; border-radius: 12px; }
-.gb-translation-settings-head { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; color: rgba(var(--theme-text-primary-rgb),.88); font-size: 12px; }
+.gb-translation-settings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; gap:12px; }
+.gb-translation-settings-head { grid-column:1 / -1; display:flex; align-items:baseline; gap:10px; color:rgba(var(--theme-text-primary-rgb),.88); font-size:12px; }
 .gb-translation-settings-head span, .gb-translation-status { color: rgba(var(--theme-text-secondary-rgb),.62); font-size: 10px; }
 .gb-translation-enabled { width: 86px; }
 .gb-translation-url { min-width: 190px; }
 .gb-translation-model { min-width: 145px; }
+.gb-field.has-font-warning>span,.gb-field.has-font-warning>small { color:#e6a23c; }
+.gb-field.has-font-warning input { border-color:rgba(230,162,60,.72); background:rgba(230,162,60,.08); box-shadow:0 0 0 1px rgba(230,162,60,.16); }
+.gb-field>small { margin-top:1px; color:rgba(var(--theme-text-secondary-rgb),.58); font-size:9px; line-height:1.3; }
+:global(.gb-translation-dialog.el-dialog) { overflow:hidden; border:1px solid rgba(var(--theme-surface-tint-rgb),.18); border-radius:14px; background:rgba(24,28,38,.88); box-shadow:0 22px 60px rgba(0,0,0,.42); backdrop-filter:blur(24px) saturate(1.25); -webkit-backdrop-filter:blur(24px) saturate(1.25); }
+:global(.gb-translation-dialog .el-dialog__body) { max-height:min(68vh,650px); overflow:auto; padding-top:8px; }
 .gb-model-control { display: flex; align-items: stretch; gap: 5px; min-width: 0; text-transform: none; }
 .gb-model-refresh { width: 30px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,.13); border-radius: 7px; background: rgba(255,255,255,.055); color: rgba(var(--theme-text-primary-rgb),.82); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }.gb-model-refresh:hover:not(:disabled) { background: rgba(var(--theme-surface-tint-rgb),.16); border-color: rgba(var(--theme-surface-tint-rgb),.38); }.gb-model-refresh:disabled { opacity:.45; cursor: default; }
 
@@ -2758,15 +2912,11 @@ onBeforeUnmount(() => {
 .gb-file-install-action > span { position: relative; z-index: 2; }
 .gb-comments { display: grid; gap: 8px; padding-top: 3px; }.gb-comments-head { display: flex; align-items: center; justify-content: space-between; }.gb-comments h3 { margin: 0; color: rgba(var(--theme-text-primary-rgb),.84); font-size: 13px; }.gb-comments-empty { margin: 0; color: rgba(var(--theme-text-secondary-rgb),.56); font-size: 11px; }
 .gb-comment-list { display: grid; gap: 7px; }.gb-comment { margin-left: calc(var(--comment-depth) * 11px); padding: 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; background: rgba(255,255,255,.025); }.gb-comment header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }.gb-comment header img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }.gb-comment time { margin-left: auto; color: rgba(var(--theme-text-secondary-rgb),.5); font-size: 10px; }.gb-comment-score { color: #a5eabf; font-size: 10px; }.gb-comment-body { color: rgba(var(--theme-text-primary-rgb),.72); font-size: 11px; line-height: 1.5; }.gb-comment-body :deep(p:last-child) { margin-bottom: 0; }.gb-comment-replies { margin-top: 5px; padding: 0; border: 0; background: none; color: rgba(var(--theme-surface-tint-rgb),.9); font: inherit; font-size: 10px; cursor: pointer; }.gb-comments-more { justify-self: start; }
-:global(.gb-inline-translation) { display: grid; gap: 5px; margin: 7px 0 10px; padding: 8px 9px; border: 1px solid rgba(var(--theme-surface-tint-rgb),.36); border-radius: 7px; background: rgba(var(--theme-surface-tint-rgb),.1); color: rgba(var(--theme-text-primary-rgb),.83); }
-:global(.gb-inline-translation-head) { display: flex; align-items: center; justify-content: space-between; color: rgba(var(--theme-surface-tint-rgb),.95); font-size: 10px; }
-:global(.gb-inline-translation-head button) { width: 18px; height: 18px; border: 0; border-radius: 4px; background: rgba(0,0,0,.16); color: inherit; cursor: pointer; }
-:global(.gb-inline-translation-content) { white-space: pre-wrap; font-size: 11px; line-height: 1.5; }
-:global(.gb-inline-translation-content p) { margin: 0 0 7px; }
-:global(.gb-inline-translation-content p:last-child) { margin-bottom: 0; }
-:global(.gb-inline-translation-content ul), :global(.gb-inline-translation-content ol) { margin: 4px 0; padding-left: 18px; }
-:global(.gb-inline-translation-content a) { color: inherit; text-decoration: underline; }
-:global(.gb-inline-translation-content.is-loading) { display: flex; align-items: center; gap: 7px; color: rgba(var(--theme-text-secondary-rgb), .75); }
+:global(p.gb-inline-translation) { margin:-3px 0 9px!important; padding:0; border:0; background:none; color:rgba(var(--theme-surface-tint-rgb),.86); font:inherit; line-height:inherit; white-space:pre-wrap; }
+:global(p.gb-inline-translation.is-loading) { display:flex; align-items:center; gap:7px; color:rgba(var(--theme-text-secondary-rgb),.62); }
+:global(p.gb-inline-translation p) { margin:0; }
+:global(p.gb-inline-translation ul),:global(p.gb-inline-translation ol) { margin:4px 0; padding-left:18px; }
+:global(p.gb-inline-translation a) { color:inherit; text-decoration:underline; }
 :global(.gb-translation-spinner) { width: 12px; height: 12px; flex: 0 0 auto; border: 2px solid rgba(var(--theme-surface-tint-rgb), .2); border-top-color: rgba(var(--theme-surface-tint-rgb), .95); border-radius: 50%; animation: gb-translation-spin .7s linear infinite; }
 @keyframes gb-translation-spin { to { transform: rotate(360deg); } }
 .gb-detail-actions { padding-top: 2px; }

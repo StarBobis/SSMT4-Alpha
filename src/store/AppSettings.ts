@@ -19,6 +19,8 @@ const normalizeLocale = (value: unknown): SSMTLocale => {
 export type TextureMarkStylePreference = 'Hash' | 'Slot' | 'SharedSlot'
 export type ImageBlurMode = 'all' | 'nsfw' | 'none'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
+export type GameBananaTranslationFontStyle = 'regular' | 'italic' | 'bold' | 'bold-italic'
+export type GameBananaTranslationFailureMode = 'retry' | 'message' | 'silent'
 
 export const APP_UI_SCALE_MIN = 0.7
 export const APP_UI_SCALE_MAX = 1.2
@@ -222,6 +224,12 @@ export class AppSettings {
 	gamebananaTranslationModel: string = 'gpt-4o-mini'
 	gamebananaTranslationTargetLanguage: string = '简体中文'
 	gamebananaTranslationShortcut: string = 'Ctrl'
+	gamebananaTranslationUseContext: boolean = true
+	gamebananaTranslationFontFamily: string = ''
+	gamebananaTranslationFontSize: string = ''
+	gamebananaTranslationColor: string = ''
+	gamebananaTranslationFontStyle: GameBananaTranslationFontStyle = 'regular'
+	gamebananaTranslationFailureMode: GameBananaTranslationFailureMode = 'message'
 	showWindowShortcutEnabled: boolean = true
 	// Nexus Mods uses a per-user API key and a game URL-domain (for example,
 	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
@@ -293,6 +301,12 @@ export class AppSettings {
 		this.gamebananaTranslationApiKey = init?.gamebananaTranslationApiKey ?? this.gamebananaTranslationApiKey
 		this.gamebananaTranslationModel = init?.gamebananaTranslationModel ?? this.gamebananaTranslationModel
 		this.gamebananaTranslationTargetLanguage = init?.gamebananaTranslationTargetLanguage ?? this.gamebananaTranslationTargetLanguage
+		this.gamebananaTranslationUseContext = init?.gamebananaTranslationUseContext ?? this.gamebananaTranslationUseContext
+		this.gamebananaTranslationFontFamily = init?.gamebananaTranslationFontFamily ?? this.gamebananaTranslationFontFamily
+		this.gamebananaTranslationFontSize = init?.gamebananaTranslationFontSize ?? this.gamebananaTranslationFontSize
+		this.gamebananaTranslationColor = init?.gamebananaTranslationColor ?? this.gamebananaTranslationColor
+		this.gamebananaTranslationFontStyle = ['regular', 'italic', 'bold', 'bold-italic'].includes(init?.gamebananaTranslationFontStyle || '') ? init!.gamebananaTranslationFontStyle! : 'regular'
+		this.gamebananaTranslationFailureMode = ['retry', 'message', 'silent'].includes(init?.gamebananaTranslationFailureMode || '') ? init!.gamebananaTranslationFailureMode! : 'message'
 		const savedTranslationShortcut = init?.gamebananaTranslationShortcut?.trim()
 		this.gamebananaTranslationShortcut = !savedTranslationShortcut || savedTranslationShortcut.toLowerCase() === 'ctrl+shift+t'
 			? 'Ctrl'
@@ -376,6 +390,12 @@ export class AppSettings {
 			gamebananaTranslationModel: this.gamebananaTranslationModel,
 			gamebananaTranslationTargetLanguage: this.gamebananaTranslationTargetLanguage,
 			gamebananaTranslationShortcut: this.gamebananaTranslationShortcut,
+			gamebananaTranslationUseContext: this.gamebananaTranslationUseContext,
+			gamebananaTranslationFontFamily: this.gamebananaTranslationFontFamily,
+			gamebananaTranslationFontSize: this.gamebananaTranslationFontSize,
+			gamebananaTranslationColor: this.gamebananaTranslationColor,
+			gamebananaTranslationFontStyle: this.gamebananaTranslationFontStyle,
+			gamebananaTranslationFailureMode: this.gamebananaTranslationFailureMode,
 			showWindowShortcutEnabled: this.showWindowShortcutEnabled,
 			nexusModsApiKey: this.nexusModsApiKey,
 			nexusModsGameDomain: this.nexusModsGameDomain,
