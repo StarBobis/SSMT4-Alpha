@@ -216,11 +216,13 @@ const onOverlayClick = (e: MouseEvent) => {
     min-width: 220px;
     max-width: 300px;
     border-radius: 12px;
-    background: var(--t-material-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: var(--t-material-border);
-    box-shadow: var(--t-material-shadow);
+    background:
+        linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.13), rgba(255, 255, 255, 0.035)),
+        rgba(38, 46, 60, 0.34);
+    backdrop-filter: blur(22px) saturate(1.35);
+    -webkit-backdrop-filter: blur(22px) saturate(1.35);
+    border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.24);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
     padding: 8px 0;
     overflow: hidden;
 }

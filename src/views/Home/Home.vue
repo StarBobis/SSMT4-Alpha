@@ -973,10 +973,6 @@ watch(
 }
 
 :deep(.version-info-popper) {
-  border: var(--t-material-border) !important;
-  background: var(--t-material-bg) !important;
-  box-shadow: var(--t-material-shadow) !important;
-  border-radius: 14px !important;
   padding: 16px 20px !important;
 }
 

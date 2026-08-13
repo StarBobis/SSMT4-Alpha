@@ -23,8 +23,7 @@
   border: 1px solid var(--work-glass-border) !important;
   border-radius: 8px !important;
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
+    0 10px 28px rgba(0, 0, 0, 0.08) !important;
   backdrop-filter: var(--work-glass-blur) !important;
   -webkit-backdrop-filter: var(--work-glass-blur) !important;
 }
@@ -59,7 +58,7 @@
   background: rgba(var(--theme-surface-tint-rgb), 0.026) !important;
   border: 0 !important;
   border-radius: 8px !important;
-  box-shadow: inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.11) !important;
+  box-shadow: none !important;
   overflow: hidden !important;
   backdrop-filter: var(--work-glass-blur) !important;
   -webkit-backdrop-filter: var(--work-glass-blur) !important;
@@ -113,6 +112,11 @@
   border-right: 1px solid rgba(var(--theme-surface-tint-rgb), 0.075) !important;
 }
 
+.work-page-container .glass-table th.el-table__cell:first-child,
+.work-page-container .glass-table td.el-table__cell:first-child {
+  border-left: 0 !important;
+}
+
 .work-page-container .glass-table .el-table__cell:last-child {
   border-right: 0 !important;
 }
@@ -129,6 +133,10 @@
 .work-page-container .glass-table.el-table::after,
 .work-page-container .glass-table .el-table__inner-wrapper::before,
 .work-page-container .glass-table .el-table__inner-wrapper::after {
+  display: none !important;
+}
+
+.work-page-container .glass-table .el-table__border-left-patch {
   display: none !important;
 }
 

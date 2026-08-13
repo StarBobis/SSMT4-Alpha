@@ -3073,7 +3073,7 @@ watch(activeChannelPreviewItem, (item) => {
 		rgba(255, 255, 255, 0.035);
 	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
 	border-radius: 14px;
-	box-shadow: 0 16px 38px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.035) inset;
+	box-shadow: 0 16px 38px rgba(0, 0, 0, 0.18);
 }
 
 .left-card {

@@ -58,8 +58,8 @@
   --t-blur-minimal: blur(2px);
 
   /* Shadows */
-  --t-shadow: 0 24px 64px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
-  --t-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  --t-shadow: 0 24px 64px rgba(0, 0, 0, 0.30);
+  --t-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.10);
   --t-shadow-section: 0 4px 24px rgba(0, 0, 0, 0.06);
   --t-shadow-btn: 0 4px 12px rgba(0, 0, 0, 0.08);
   --t-shadow-btn-primary: 0 4px 16px rgba(var(--crystal-rgb), 0.10);
@@ -84,7 +84,7 @@
     linear-gradient(145deg, rgba(var(--crystal-rgb), 0.07), rgba(var(--crystal-rgb), 0.025)),
     rgba(255, 255, 255, 0.035);
   --t-card-dark-border: 1px solid rgba(var(--crystal-rgb), 0.12);
-  --t-card-dark-shadow: 0 16px 38px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(var(--crystal-rgb), 0.035) inset;
+  --t-card-dark-shadow: 0 16px 38px rgba(0, 0, 0, 0.18);
 
   /* Semantic backgrounds */
   --t-danger-bg: rgba(var(--theme-danger-rgb), 0.08);

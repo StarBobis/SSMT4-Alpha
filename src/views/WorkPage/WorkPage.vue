@@ -2774,7 +2774,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   border-radius: 8px !important;
   overflow: hidden !important;
   background: rgba(var(--theme-surface-tint-rgb), 0.022) !important;
-  box-shadow: 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.10) inset;
+  box-shadow: none !important;
 }
 
 .workspace-tabs-shell :deep(.glass-table .el-table__inner-wrapper),

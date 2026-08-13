@@ -265,6 +265,30 @@
   border-radius: 12px 12px 0 0;
 }
 
+/* Flat surfaces: container depth comes from one border and an outer shadow.
+   Disable the legacy 1px top highlight copied across page-level panels. */
+.glass-panel::before,
+.glass-section::before,
+.glass-card::before,
+.glass-toggle-box::before,
+.settings-window::before,
+.settings-card::before,
+.settings-group::before,
+.about-panel::before,
+.version-info-chip::before,
+.version-info-popper::before,
+.context-menu-surface::before,
+.custom-context-menu::before,
+.work-page-container .panel::before,
+.work-page-container .inner-panel::before,
+.work-page-container .specific-ib-dump-toggle::before,
+.mod-manager .tb-bar::before,
+.mod-manager .sidebar::before,
+.mod-manager .subgroup-card::before,
+.ek-card::before {
+  display: none !important;
+}
+
 .glass-toggle-box__header {
   display: flex;
   align-items: center;

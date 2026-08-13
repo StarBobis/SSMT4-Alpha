@@ -3,13 +3,21 @@
    ═══════════════════════════════════════════════
    Simple, functional styling — no glass effects. */
 
-/* ── Popper / dropdown container ── */
+/* ── Unified acrylic popper / dropdown container ── */
 .el-select__popper.el-popper,
-.el-dropdown__popper.el-popper {
-  background: var(--t-popper-bg);
-  border: var(--t-popper-border);
-  border-radius: 8px;
-  box-shadow: var(--t-popper-shadow);
+.el-dropdown__popper.el-popper,
+.el-cascader__dropdown.el-popper,
+.el-autocomplete__popper.el-popper,
+.el-picker__popper.el-popper {
+  --el-bg-color-overlay: transparent;
+  --el-fill-color-light: rgba(var(--theme-surface-tint-rgb), 0.12);
+  background-color: rgba(38, 46, 60, 0.34) !important;
+  background-image: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.13), rgba(255, 255, 255, 0.035)) !important;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.24) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: blur(22px) saturate(1.35) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.35) !important;
   box-sizing: border-box;
   max-width: calc(100vw - 24px);
   max-height: min(400px, calc(100vh - 80px));
@@ -24,6 +32,15 @@
 .el-select__popper.el-popper {
   width: auto;
   padding: 0;
+}
+
+.el-select__popper.el-popper .el-popper__arrow::before,
+.el-dropdown__popper.el-popper .el-popper__arrow::before,
+.el-cascader__dropdown.el-popper .el-popper__arrow::before,
+.el-autocomplete__popper.el-popper .el-popper__arrow::before,
+.el-picker__popper.el-popper .el-popper__arrow::before {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.22) !important;
+  background: rgba(38, 46, 60, 0.62) !important;
 }
 
 /* Teleported acrylic select panels used by compact page toolbars. */
@@ -58,6 +75,17 @@
   max-width: 100%;
   min-width: 0;
   text-align: left;
+}
+
+.el-select__popper .el-select-dropdown,
+.el-select__popper .el-scrollbar,
+.el-select__popper .el-scrollbar__wrap,
+.el-select__popper .el-scrollbar__view,
+.el-dropdown__popper .el-dropdown-menu,
+.el-cascader__dropdown .el-cascader-panel,
+.el-autocomplete__popper .el-autocomplete-suggestion,
+.el-picker__popper .el-picker-panel {
+  background: transparent !important;
 }
 
 /* ── Select dropdown items ── */

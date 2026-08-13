@@ -572,10 +572,6 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-container nexusmods-page">
     <section class="nexus-controls glass-panel">
-      <div class="nexus-title-block">
-        <strong>Nexus Mods</strong>
-        <span>{{ gameTargetLabel || t('nexusMods.installTarget') }}</span>
-      </div>
       <label v-if="showGameDomainInput" class="nexus-field nexus-domain-field">
         <span>{{ t('nexusMods.gameDomain') }}</span>
         <input v-model.trim="appSettings.nexusModsGameDomain" :placeholder="t('nexusMods.gameDomainPlaceholder')" @keyup.enter="() => loadMods(1)" />
@@ -700,7 +696,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .nexusmods-page { height:100%; min-height:0; box-sizing:border-box; display:flex; flex-direction:column; gap:12px; overflow:hidden; padding:46px 18px 18px; color:rgba(var(--theme-text-primary-rgb),.9); }
-.glass-panel { background:linear-gradient(145deg,rgba(var(--theme-surface-tint-rgb),.07),rgba(var(--theme-surface-tint-rgb),.025)),rgba(255,255,255,.035); border:1px solid rgba(var(--theme-surface-tint-rgb),.12); box-shadow:0 14px 36px rgba(0,0,0,.18),inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb),.035); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
+.glass-panel { background:linear-gradient(145deg,rgba(var(--theme-surface-tint-rgb),.07),rgba(var(--theme-surface-tint-rgb),.025)),rgba(255,255,255,.035); border:1px solid rgba(var(--theme-surface-tint-rgb),.12); box-shadow:0 14px 36px rgba(0,0,0,.18); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
 .nexus-controls { display:flex; align-items:end; gap:10px; padding:10px 12px; border-radius:12px; }.nexus-title-block { display:grid; flex:0 0 auto; min-width:112px; gap:2px; }.nexus-title-block strong { color:rgba(var(--theme-text-primary-rgb),.94); font-size:16px; }.nexus-title-block span { color:rgba(var(--theme-text-secondary-rgb),.6); font-size:10px; }
 .nexus-field { display:grid; min-width:90px; gap:4px; }.nexus-field>span { color:rgba(var(--theme-text-secondary-rgb),.64); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }.nexus-domain-field { width:155px; }.nexus-key-field { flex:1 1 230px; min-width:180px; }.nexus-feed-field { width:112px; }.nexus-adult-field { min-width:188px; }
 .nexus-field input,.nexus-field select,.nexus-filter input { width:100%; min-height:30px; box-sizing:border-box; padding:0 9px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:7px; outline:none; background:rgba(var(--theme-surface-tint-rgb),.055); color:rgba(var(--theme-text-primary-rgb),.92); font:inherit; font-size:12px; }.nexus-field input:focus,.nexus-field select:focus,.nexus-filter input:focus { border-color:rgba(var(--theme-surface-tint-rgb),.62); box-shadow:0 0 0 2px rgba(var(--theme-surface-tint-rgb),.11); }

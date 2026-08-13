@@ -6447,12 +6447,6 @@ onUnmounted(() => {
 /* usage & context popover */
 .xz-usage-popover.el-popper {
   --el-popover-padding: 0;
-  border-radius: 14px;
-  background: var(--t-material-bg);
-  border: var(--t-material-border);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
-  backdrop-filter: var(--t-blur-medium);
-  -webkit-backdrop-filter: var(--t-blur-medium);
 }
 
 .xz-usage-popover .el-popover__title {

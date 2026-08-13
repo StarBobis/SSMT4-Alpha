@@ -10,24 +10,24 @@
   border: 1px solid color-mix(in srgb, rgb(var(--theme-surface-tint-rgb)) 34%, #334155);
   border-radius: 10px;
   background:
-    linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.12), rgba(15, 23, 42, 0.08)),
-    rgba(15, 23, 42, 0.72);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.13), rgba(255, 255, 255, 0.035)),
+    rgba(38, 46, 60, 0.34) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
   color: rgba(var(--theme-text-primary-rgb), 0.94);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
   letter-spacing: 0;
   text-align: center;
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
 }
 
 .el-popper.is-dark[role='tooltip']:not(.el-select__popper):not(.el-dropdown__popper):not(.el-picker__popper):not(.el-cascader__dropdown):not(.el-autocomplete__popper) .el-popper__arrow::before,
 .el-popper.is-light[role='tooltip']:not(.el-select__popper):not(.el-dropdown__popper):not(.el-picker__popper):not(.el-cascader__dropdown):not(.el-autocomplete__popper) .el-popper__arrow::before,
 .el-popover.el-popper .el-popper__arrow::before {
   border-color: color-mix(in srgb, rgb(var(--theme-surface-tint-rgb)) 34%, #334155);
-  background: rgba(15, 23, 42, 0.82);
+  background: rgba(38, 46, 60, 0.62) !important;
 }
 
 .el-popper.is-dark[role='tooltip']:not(.el-select__popper):not(.el-dropdown__popper):not(.el-picker__popper):not(.el-cascader__dropdown):not(.el-autocomplete__popper),
@@ -37,6 +37,20 @@
 
 .el-popper.game-tooltip {
   padding: 8px 10px;
+}
+
+/* Named page popovers inherit the same acrylic shell even when their
+   component-scoped rules were emitted later in the bundle. */
+.el-popper.version-info-popper,
+.el-popper.xz-usage-popover {
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.24) !important;
+  border-radius: 10px !important;
+  background:
+    linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.13), rgba(255, 255, 255, 0.035)),
+    rgba(38, 46, 60, 0.34) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: blur(22px) saturate(1.35) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.35) !important;
 }
 
 @keyframes glass-tooltip-fade-in {

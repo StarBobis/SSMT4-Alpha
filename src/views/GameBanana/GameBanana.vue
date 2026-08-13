@@ -2025,10 +2025,6 @@ onBeforeUnmount(() => {
       </button>
     </nav>
     <section class="gb-controls glass-panel">
-      <div class="gb-title-block">
-        <strong>GameBanana</strong>
-        <span>{{ gameTargetLabel }}</span>
-      </div>
       <label class="gb-field gb-search-field">
         <span>{{ t('gameBanana.search') }}</span>
         <input v-model="searchQuery" type="search" :placeholder="t('gameBanana.searchPlaceholder')" @keyup.enter="loadMods(1)" />
@@ -2424,7 +2420,7 @@ onBeforeUnmount(() => {
 .glass-panel {
   background: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)), rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.035);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
