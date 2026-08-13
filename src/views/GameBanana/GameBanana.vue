@@ -14,6 +14,7 @@ import { ResourceManager } from '../../store/ResourceManager';
 import { ModManager } from '../../store/ModManager';
 import { PathHelper } from '../../helper/PathHelper';
 import { gameBananaHistory, type GameBananaHistoryEntry } from './gameBananaHistory';
+import { setGameBananaBlurMode, setGameBananaHideNsfw } from './gameBananaBlurSettings';
 
 type GbImage = Record<string, unknown>;
 
@@ -291,15 +292,16 @@ const selectedCategoryName = computed(() =>
     : allCategories.value.find((item) => item._idRow === selectedCategoryId.value)?._sName || t('gameBanana.allCategories'),
 );
 
-const visibleMods = computed(() => appSettings.gamebananaNsfwMode === 'hide'
-  ? mods.value.filter((item) => !item.isNsfw)
-  : mods.value);
-const visibleCountText = computed(() => `${visibleMods.value.length}${appSettings.gamebananaNsfwMode === 'hide' && mods.value.length !== visibleMods.value.length ? ` / ${mods.value.length}` : ''}`);
+const visibleMods = computed(() => appSettings.gamebananaHideNsfw ? mods.value.filter((item) => !item.isNsfw) : mods.value);
+const visibleCountText = computed(() => `${visibleMods.value.length}${appSettings.gamebananaHideNsfw ? ` / ${mods.value.length}` : ''}`);
+const gameBananaBlurMode = computed({ get: () => appSettings.gamebananaBlurMode, set: (mode) => setGameBananaBlurMode(appSettings, mode) });
 const currentGameName = computed(() => appSettings.CurrentGameName?.trim() || '');
 
 const isImageRevealed = (src: string): boolean => revealedImages.value.has(src);
-const isImageBlurred = (src: string): boolean =>
-  appSettings.gamebananaNsfwBlur && !!src && !revealedImages.value.has(src);
+const shouldBlurImage = (isNsfw: boolean): boolean =>
+  appSettings.gamebananaBlurMode === 'all' || (appSettings.gamebananaBlurMode === 'nsfw' && isNsfw);
+const isImageBlurred = (src: string, isNsfw: boolean): boolean =>
+  shouldBlurImage(isNsfw) && !!src && !revealedImages.value.has(src);
 const toggleImageBlur = (src: string) => {
   if (!src) return;
   const next = new Set(revealedImages.value);
@@ -308,27 +310,29 @@ const toggleImageBlur = (src: string) => {
   revealedImages.value = next;
 };
 const onModThumbClick = (event: MouseEvent, mod: GbModCard) => {
-  if (!appSettings.gamebananaNsfwBlur || !mod.thumbnailUrl) return;
+  if (!shouldBlurImage(mod.isNsfw) || !mod.thumbnailUrl) return;
   event.stopPropagation();
   toggleImageBlur(mod.thumbnailUrl);
 };
 const onScreenshotClick = (image: string) => {
-  if (appSettings.gamebananaNsfwBlur) toggleImageBlur(image);
+  if (shouldBlurImage(detail.value?.isNsfw === true)) toggleImageBlur(image);
   else void openExternal(image);
 };
 const toggleRichTextImageBlur = (image: HTMLImageElement) => {
   const src = image.currentSrc || image.src || '';
   if (!src) return;
   toggleImageBlur(src);
-  image.classList.toggle('is-blurred', appSettings.gamebananaNsfwBlur && !revealedImages.value.has(src));
+  image.classList.toggle('is-blurred', shouldBlurImage(detail.value?.isNsfw === true) && !revealedImages.value.has(src));
+  image.classList.toggle('can-hover-reveal', appSettings.revealBlurredImagesOnHover);
 };
 const syncRichTextImageBlur = () => {
   document.querySelectorAll<HTMLImageElement>('.gb-rich-text img, .gb-comment-body img').forEach((image) => {
     const src = image.currentSrc || image.src || '';
     image.classList.toggle(
       'is-blurred',
-      appSettings.gamebananaNsfwBlur && !!src && !revealedImages.value.has(src),
+      shouldBlurImage(detail.value?.isNsfw === true) && !!src && !revealedImages.value.has(src),
     );
+    image.classList.toggle('can-hover-reveal', appSettings.revealBlurredImagesOnHover);
   });
 };
 
@@ -997,7 +1001,7 @@ const richTextClick = (event: MouseEvent) => {
   const target = event.target instanceof Element ? event.target : null;
   const image = target?.closest('img') as HTMLImageElement | null;
   if (image) {
-    if (!appSettings.gamebananaNsfwBlur) return;
+    if (!shouldBlurImage(detail.value?.isNsfw === true)) return;
     event.preventDefault();
     toggleRichTextImageBlur(image);
     return;
@@ -1820,18 +1824,7 @@ watch(gameId, (value) => {
   localStorage.setItem(`gamebanana:game-id:${currentGameName.value || 'default'}`, String(normalized));
 });
 
-watch(() => appSettings.gamebananaNsfwMode, (mode) => {
-  const selected = mods.value.find((item) => item.id === selectedModId.value);
-  const selectedIsNsfw = selected?.isNsfw === true || detail.value?.isNsfw === true;
-  if (selectedIsNsfw && mode === 'hide') {
-    const fallback = visibleMods.value[0];
-    selectedModId.value = null;
-    detail.value = null;
-    if (fallback) void selectMod(fallback);
-  }
-});
-
-watch(() => appSettings.gamebananaNsfwBlur, () => {
+watch([() => appSettings.gamebananaBlurMode, () => appSettings.revealBlurredImagesOnHover], () => {
   void nextTick(syncRichTextImageBlur);
 });
 
@@ -2042,31 +2035,21 @@ onBeforeUnmount(() => {
           <el-option v-for="size in PAGE_SIZE_OPTIONS" :key="size" :label="String(size)" :value="size" />
         </el-select>
       </label>
-      <label class="gb-field gb-nsfw-field" :title="t('gameBanana.nsfwShown')">
-        <span>{{ t('gameBanana.nsfwShown') }}</span>
-        <el-radio-group v-model="appSettings.gamebananaNsfwMode" class="gb-nsfw-mode">
-          <el-radio-button value="show">{{ t('gameBanana.nsfwShow') }}</el-radio-button>
-          <el-radio-button value="blur">{{ t('gameBanana.nsfwBlur') }}</el-radio-button>
-          <el-radio-button value="hide">{{ t('gameBanana.nsfwHide') }}</el-radio-button>
+      <label class="gb-field gb-nsfw-field" :title="t('gameBanana.nsfwImageBlur')">
+        <span>{{ t('gameBanana.nsfwImageBlur') }}</span>
+        <el-radio-group v-model="gameBananaBlurMode" class="gb-nsfw-mode">
+          <el-radio-button value="all">{{ t('gameBanana.blurAllImages') }}</el-radio-button>
+          <el-radio-button value="nsfw" :disabled="appSettings.gamebananaHideNsfw">{{ t('gameBanana.blurNsfwImages') }}</el-radio-button>
+          <el-radio-button value="none">{{ t('gameBanana.blurNoImages') }}</el-radio-button>
         </el-radio-group>
       </label>
+      <el-switch :model-value="appSettings.gamebananaHideNsfw" :active-text="t('gameBanana.hideNsfw')" :inactive-text="t('gameBanana.showNsfw')" @change="(value: string | number | boolean) => setGameBananaHideNsfw(appSettings, value === true)" />
       <button type="button" class="gb-button" :disabled="loadingCategories || loadingMods" @click="applyTarget">
         {{ t('gameBanana.refresh') }}
       </button>
       <button type="button" class="gb-button" @click="openExternal(gameUrl)">{{ t('gameBanana.openGamePage') }}</button>
       <button type="button" class="gb-button" :class="{ active: showTranslationSettings }" @click="showTranslationSettings = !showTranslationSettings">
         {{ t('gameBanana.translationSettings') }}
-      </button>
-      <button
-        type="button"
-        class="gb-button gb-nsfw-toggle-button"
-        :class="{ active: appSettings.gamebananaNsfwBlur }"
-        :title="t('gameBanana.nsfwImageBlurHint')"
-        :aria-pressed="appSettings.gamebananaNsfwBlur"
-        @click="appSettings.gamebananaNsfwBlur = !appSettings.gamebananaNsfwBlur"
-      >
-        <svg class="gb-nsfw-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        <span>{{ t('gameBanana.nsfwImageBlur') }}</span>
       </button>
     </section>
 
@@ -2224,8 +2207,8 @@ onBeforeUnmount(() => {
             <div
               class="gb-mod-thumb"
               :class="{
-                'is-nsfw-blurred': !appSettings.gamebananaNsfwBlur && appSettings.gamebananaNsfwMode === 'blur' && mod.isNsfw,
-                'is-image-blurred': isImageBlurred(mod.thumbnailUrl),
+                'is-image-blurred': isImageBlurred(mod.thumbnailUrl, mod.isNsfw),
+                'can-hover-reveal': appSettings.revealBlurredImagesOnHover,
                 revealed: isImageRevealed(mod.thumbnailUrl),
               }"
               @click="onModThumbClick($event, mod)"
@@ -2234,7 +2217,7 @@ onBeforeUnmount(() => {
               <span v-else>{{ mod.title.slice(0, 1) }}</span>
               <span v-if="mod.isNsfw" class="gb-nsfw-badge">NSFW</span>
               <button
-                v-if="appSettings.gamebananaNsfwBlur && mod.thumbnailUrl"
+                v-if="shouldBlurImage(mod.isNsfw) && mod.thumbnailUrl"
                 type="button"
                 class="gb-img-toggle"
                 :title="isImageRevealed(mod.thumbnailUrl) ? t('gameBanana.nsfwHideImage') : t('gameBanana.nsfwRevealImage')"
@@ -2306,15 +2289,15 @@ onBeforeUnmount(() => {
               :key="image"
               type="button"
               :class="{
-                'gb-blur-active': appSettings.gamebananaNsfwBlur,
-                'is-nsfw-blurred': !appSettings.gamebananaNsfwBlur && appSettings.gamebananaNsfwMode === 'blur' && detail.isNsfw,
-                'is-image-blurred': isImageBlurred(image),
+                'gb-blur-active': shouldBlurImage(detail.isNsfw),
+                'is-image-blurred': isImageBlurred(image, detail.isNsfw),
+                'can-hover-reveal': appSettings.revealBlurredImagesOnHover,
                 revealed: isImageRevealed(image),
               }"
               @click="onScreenshotClick(image)"
             >
               <img :src="image" :alt="`${detail.title} ${index + 1}`" loading="lazy" />
-              <span v-if="appSettings.gamebananaNsfwBlur" class="gb-img-eye" aria-hidden="true">
+              <span v-if="shouldBlurImage(detail.isNsfw)" class="gb-img-eye" aria-hidden="true">
                 <svg class="gb-eye gb-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 <svg class="gb-eye gb-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
               </span>
@@ -2676,12 +2659,10 @@ onBeforeUnmount(() => {
 .gb-mod-card:hover { background: rgba(255,255,255,0.055); }
 .gb-mod-card.active { background: rgba(var(--theme-surface-tint-rgb), 0.12); border-color: rgba(var(--theme-surface-tint-rgb), 0.32); }
 .gb-mod-thumb { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 6px; background: rgba(0,0,0,0.22); display: grid; place-items: center; color: rgba(var(--theme-surface-tint-rgb), 0.7); font-size: 24px; font-weight: 800; }
-.gb-mod-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .22s ease; }
+.gb-mod-thumb img { width: 100%; height: 100%; object-fit: cover; transition: filter .22s ease, transform .22s ease; }
 .gb-mod-card:hover .gb-mod-thumb img { transform: scale(1.04); }
 .gb-mod-thumb.is-nsfw-blurred img { filter: blur(18px) saturate(.75); transform: scale(1.16); }
 .gb-mod-thumb.is-nsfw-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: rgba(8, 9, 14, .24); color: rgba(255,255,255,.9); font-size: 11px; letter-spacing: .16em; text-shadow: 0 1px 7px rgba(0,0,0,.95); }
-.gb-mod-thumb.is-nsfw-blurred:hover img { filter: none; transform: scale(1.04); }
-.gb-mod-thumb.is-nsfw-blurred:hover::after { opacity: 0; }
 .gb-nsfw-badge { position: absolute; top: 5px; right: 5px; padding: 2px 5px; border-radius: 4px; background: rgba(138, 27, 58, 0.84); color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .06em; }
 .gb-mod-copy { min-width: 0; display: grid; align-content: start; gap: 2px; }
 .gb-mod-copy strong { overflow: hidden; color: rgba(var(--theme-text-primary-rgb), 0.9); font-size: 13px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
@@ -2699,16 +2680,18 @@ onBeforeUnmount(() => {
 .gb-detail-head .gb-nsfw-badge { position: static; flex: 0 0 auto; }
 .gb-screenshots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .gb-screenshots button { position: relative; aspect-ratio: 16 / 9; overflow: hidden; padding: 0; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; background: rgba(0,0,0,0.2); cursor: zoom-in; }
-.gb-screenshots img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s ease; }
+.gb-screenshots img { width: 100%; height: 100%; object-fit: cover; transition: filter .22s ease, transform .22s ease; }
 .gb-screenshots button:hover img { transform: scale(1.05); }
 .gb-screenshots button.is-nsfw-blurred img { filter: blur(18px) saturate(.75); transform: scale(1.16); }
 .gb-screenshots button.is-nsfw-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: rgba(8,9,14,.26); color: rgba(255,255,255,.9); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
-.gb-screenshots button.is-nsfw-blurred:hover img { filter: none; transform: scale(1.05); }
-.gb-screenshots button.is-nsfw-blurred:hover::after { opacity: 0; }
 .gb-mod-thumb.is-image-blurred img,
 .gb-screenshots button.is-image-blurred img { filter: blur(18px) saturate(.75); transform: scale(1.16); }
 .gb-mod-thumb.is-image-blurred::after,
-.gb-screenshots button.is-image-blurred::after { content: 'NSFW'; position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: rgba(8,9,14,.24); color: rgba(255,255,255,.9); font-size: 11px; letter-spacing: .16em; text-shadow: 0 1px 7px rgba(0,0,0,.95); pointer-events: none; }
+.gb-screenshots button.is-image-blurred::after { content: ''; position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: rgba(8,9,14,.24); color: rgba(255,255,255,.9); font-size: 11px; letter-spacing: .16em; text-shadow: 0 1px 7px rgba(0,0,0,.95); pointer-events: none; transition: opacity .22s ease; }
+.gb-mod-thumb.is-image-blurred.can-hover-reveal:hover img,
+.gb-screenshots button.is-image-blurred.can-hover-reveal:hover img { filter: blur(0) saturate(1); transform: scale(1.04); }
+.gb-mod-thumb.is-image-blurred.can-hover-reveal:hover::after,
+.gb-screenshots button.is-image-blurred.can-hover-reveal:hover::after { opacity: 0; }
 .gb-img-toggle { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer; transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease; }
 .gb-img-toggle:hover { transform: scale(1.08); background: rgba(24,24,38,.78); border-color: rgba(255,255,255,.45); color: #fff; }
 .gb-img-toggle:active { transform: scale(.96); }
@@ -2721,7 +2704,9 @@ onBeforeUnmount(() => {
 .gb-screenshots button.gb-blur-active .gb-img-eye { display: inline-flex; }
 .gb-screenshots button.revealed .gb-eye-open { display: none; }
 .gb-screenshots button.revealed .gb-eye-closed { display: block; }
+.gb-rich-text :deep(img), .gb-comment-body :deep(img) { transition: filter .22s ease, transform .22s ease; }
 .gb-rich-text :deep(img.is-blurred), .gb-comment-body :deep(img.is-blurred) { filter: blur(14px) saturate(.8); transform: scale(1.04); cursor: zoom-in; }
+.gb-rich-text :deep(img.is-blurred.can-hover-reveal:hover), .gb-comment-body :deep(img.is-blurred.can-hover-reveal:hover) { filter: blur(0) saturate(1); transform: scale(1); }
 .gb-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gb-stats span { display: grid; gap: 3px; padding: 7px; border-radius: 6px; background: rgba(255,255,255,0.045); color: rgba(var(--theme-text-secondary-rgb), 0.6); font-size: 10px; }
 .gb-stats strong { color: rgba(var(--theme-text-primary-rgb), 0.9); font-size: 13px; }

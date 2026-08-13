@@ -409,6 +409,8 @@
       "uiScaleHint": "Reduce component size to fit more content on low-resolution or high-DPI-scaled displays.",
       "backgroundMaskOpacity": "Background Dimming Strength",
       "backgroundMaskOpacityHint": "Darken bright backgrounds so glass panels stay readable.",
+      "revealBlurredImagesOnHover": "Reveal blurred images on hover",
+      "revealBlurredImagesOnHoverHint": "Temporarily reveal images on hover without changing the eye-button state.",
       "language": "Language",
       "languageOptions": {
         "en": "English",
@@ -566,7 +568,10 @@
       "selectSortTag": "Select tag…",
       "presets": "Presets",
       "noPresetsYet": "No presets yet. Save the current key state to create one.",
-      "blurNsfwPreviews": "Blur NSFW previews"
+      "blurNsfwPreviews": "Image blur mode",
+      "blurAllImages": "All",
+      "blurNsfwImages": "NSFW",
+      "blurNoImages": "None"
     },
     "actions": {
       "chooseIcon": "Choose Icon",
@@ -746,6 +751,9 @@
       "editWorkspace": "Edit workspace",
       "currentWorkspaceName": "Current workspace name: {name}",
       "workspaceList": "Workspace list",
+      "sortByNewest": "Date (newest)",
+      "sortByName": "Name",
+      "sortWorkspaces": "Workspace sorting",
       "defaultTabNamePrefix": "LOD",
       "specificIbDumpHint": "Disable Mods include and only dump the DrawIB list shown in this LOD."
     },
@@ -1148,6 +1156,9 @@
     "perPage": "Per page",
     "nsfwShown": "NSFW State",
     "nsfwImageBlur": "Image Blur",
+    "blurAllImages": "All",
+    "blurNsfwImages": "NSFW",
+    "blurNoImages": "None",
     "nsfwImageBlurHint": "When enabled, every image starts blurred; click any image to toggle",
     "nsfwRevealImage": "Show image",
     "nsfwHideImage": "Blur image",

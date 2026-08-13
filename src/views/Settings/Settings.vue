@@ -249,6 +249,22 @@ const openUsageDocs = async () => {
                   />
                 </div>
               </div>
+
+              <div class="setting-row">
+                <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><View /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.personalization.revealBlurredImagesOnHover') }}</div>
+                    <div class="setting-description">{{ t('settings.personalization.revealBlurredImagesOnHoverHint') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control compact-control">
+                  <el-switch
+                    v-model="appSettings.revealBlurredImagesOnHover"
+                    :aria-label="t('settings.personalization.revealBlurredImagesOnHover')"
+                  />
+                </div>
+              </div>
             </div>
           </section>
 

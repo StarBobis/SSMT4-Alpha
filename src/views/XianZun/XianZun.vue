@@ -780,8 +780,8 @@ const uiCommands: XianZunCommand[] = [
             DRMTargetFolderPath: appSettings.DRMTargetFolderPath,
             ReverseOutputFolder: appSettings.ReverseOutputFolder,
             ReversedWorkSpaceName: appSettings.ReversedWorkSpaceName,
-            modsManagementBlurNsfw: appSettings.modsManagementBlurNsfw,
-            gamebananaNsfwMode: appSettings.gamebananaNsfwMode,
+            modsManagementBlurMode: appSettings.modsManagementBlurMode,
+            gamebananaBlurMode: appSettings.gamebananaBlurMode,
             xianzunModel: appSettings.xianzunModel,
             xianzunApprovalMode: appSettings.xianzunApprovalMode,
           },
@@ -2695,7 +2695,7 @@ const renderInline = (value: string): string => {
     const blurEnabled = appSettings.xianzunNsfwBlur
     const isBlurred = blurEnabled && !isRevealed
     const toggleLabel = escapeHtml(isRevealed ? t('xianzun.hideImage') : t('xianzun.revealImage'))
-    return `<span class="xz-img-box${isBlurred ? ' blurred' : ''}${isRevealed ? ' revealed' : ''}${blurEnabled ? ' nsfw-on' : ''}" data-img="${encoded}"><img class="xz-img" src="${escapeHtml(decoded)}" alt="${altText}" loading="lazy"><button type="button" class="xz-img-toggle" data-reveal="${encoded}" title="${toggleLabel}" aria-label="${toggleLabel}"><svg class="xz-eye-icon xz-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="xz-eye-icon xz-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></span>`
+    return `<span class="xz-img-box${isBlurred ? ' blurred' : ''}${isRevealed ? ' revealed' : ''}${blurEnabled ? ' nsfw-on' : ''}${appSettings.revealBlurredImagesOnHover ? ' can-hover-reveal' : ''}" data-img="${encoded}"><img class="xz-img" src="${escapeHtml(decoded)}" alt="${altText}" loading="lazy"><button type="button" class="xz-img-toggle" data-reveal="${encoded}" title="${toggleLabel}" aria-label="${toggleLabel}"><svg class="xz-eye-icon xz-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="xz-eye-icon xz-eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></span>`
   })
   // markdown links
   out = out.replace(
@@ -6116,6 +6116,7 @@ onUnmounted(() => {
   cursor: zoom-in;
   object-fit: contain;
   background: rgba(0, 0, 0, 0.25);
+  transition: filter 200ms ease, transform 200ms ease;
 }
 
 .xz-img-box.blurred .xz-img {
@@ -6133,7 +6134,15 @@ onUnmounted(() => {
   z-index: 1;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.12));
   pointer-events: none;
+  transition: opacity 200ms ease;
 }
+
+.xz-img-box.blurred.can-hover-reveal:hover .xz-img {
+  filter: blur(0) brightness(1) saturate(1);
+  transform: scale(1);
+}
+
+.xz-img-box.blurred.can-hover-reveal:hover::after { opacity: 0; }
 
 .xz-img-toggle {
   position: absolute;

@@ -3354,16 +3354,11 @@ const {
                         </svg>
                     </button>
                     <div class="tb-divider"></div>
-                    <el-tooltip :content="t('modsManagement.ui.blurNsfwPreviews')" placement="bottom">
-                        <el-switch
-                            v-model="appSettings.modsManagementBlurNsfw"
-                            class="tb-nsfw-switch"
-                            inline-prompt
-                            active-text="NSFW"
-                            inactive-text="NSFW"
-                            :aria-label="t('modsManagement.ui.blurNsfwPreviews')"
-                        />
-                    </el-tooltip>
+                    <el-radio-group v-model="appSettings.modsManagementBlurMode" class="tb-blur-mode" :aria-label="t('modsManagement.ui.blurNsfwPreviews')">
+                        <el-radio-button value="all">{{ t('modsManagement.ui.blurAllImages') }}</el-radio-button>
+                        <el-radio-button value="nsfw">{{ t('modsManagement.ui.blurNsfwImages') }}</el-radio-button>
+                        <el-radio-button value="none">{{ t('modsManagement.ui.blurNoImages') }}</el-radio-button>
+                    </el-radio-group>
                     <div class="tb-divider"></div>
                     <button
                         type="button"
@@ -3664,7 +3659,7 @@ const {
                     :group-icon-url="(mod.group !== 'Root' && getGroupIcon(mod.group)) ? getGroupIconUrl((getGroupIcon(mod.group) as string)) : ''"
                     :group-display-name="mod.group !== 'Root' ? (mod.group.split('/').pop() ?? '') : ''"
                     :is-root-group="mod.group === 'Root'"
-                    :blur-nsfw-preview="appSettings.modsManagementBlurNsfw && isNsfwMod(mod)"
+                    :blur-nsfw-preview="appSettings.modsManagementBlurMode === 'all' || (appSettings.modsManagementBlurMode === 'nsfw' && isNsfwMod(mod))"
                     @contextmenu="showModContextMenu($event, mod)"
                     @card-mousedown="onCardMouseDownWrapper($event, mod)"
                     @mousemove="onModCardMouseMove"
@@ -3759,14 +3754,14 @@ const {
                                 fit="cover"
                                 loading="lazy"
                                 class="mod-list-thumb-img"
-                                :class="{ 'is-nsfw-blurred': appSettings.modsManagementBlurNsfw && isNsfwMod(mod) }"
+                                :class="{ 'is-nsfw-blurred': appSettings.modsManagementBlurMode === 'all' || (appSettings.modsManagementBlurMode === 'nsfw' && isNsfwMod(mod)), 'can-hover-reveal': appSettings.revealBlurredImagesOnHover }"
                             >
                                 <template #error>
                                     <span class="mod-list-thumb-fallback">{{ mod.name.charAt(0) }}</span>
                                 </template>
                             </el-image>
                             <span v-else class="mod-list-thumb-fallback">{{ mod.name.charAt(0) }}</span>
-                            <span v-if="appSettings.modsManagementBlurNsfw && isNsfwMod(mod)" class="mod-list-nsfw-shield">NSFW</span>
+                            <span v-if="appSettings.modsManagementBlurMode === 'nsfw' && isNsfwMod(mod)" class="mod-list-nsfw-shield">NSFW</span>
                         </div>
                     </span>
                     <!-- Name -->
@@ -5088,6 +5083,11 @@ const {
 .mod-list-thumb-img.is-nsfw-blurred {
     filter: blur(12px) saturate(0.82);
     transform: scale(1.14);
+    transition: filter 220ms ease, transform 220ms ease;
+}
+.mod-list-thumb:hover .mod-list-thumb-img.is-nsfw-blurred.can-hover-reveal {
+    filter: blur(0) saturate(1);
+    transform: scale(1.04);
 }
 .mod-list-nsfw-shield {
     position: absolute;
@@ -5102,7 +5102,14 @@ const {
     background: rgba(6, 8, 12, 0.18);
     text-shadow: 0 1px 6px rgba(0,0,0,0.9);
     pointer-events: none;
+    transition: opacity 220ms ease;
 }
+.mod-list-thumb:has(.can-hover-reveal):hover .mod-list-nsfw-shield { opacity: 0; }
+
+.tb-blur-mode { display:flex; min-height:30px; }
+.tb-blur-mode :deep(.el-radio-button) { flex:1 1 0; }
+.tb-blur-mode :deep(.el-radio-button__inner) { min-height:30px; padding:0 8px; border-color:rgba(255,255,255,.13); background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.78); font-size:11px; box-shadow:none; transition:background .18s ease,border-color .18s ease,color .18s ease; }
+.tb-blur-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.20); border-color:rgba(var(--theme-surface-tint-rgb),.42); color:rgba(var(--theme-text-primary-rgb),.98); box-shadow:-1px 0 0 rgba(var(--theme-surface-tint-rgb),.42); }
 .mod-list-thumb-fallback {
     font-size: 16px; font-weight: 700;
     color: rgba(255,255,255,0.30);

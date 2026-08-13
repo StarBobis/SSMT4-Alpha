@@ -17,7 +17,7 @@ const normalizeLocale = (value: unknown): SSMTLocale => {
 }
 
 export type TextureMarkStylePreference = 'Hash' | 'Slot' | 'SharedSlot'
-export type GameBananaNsfwMode = 'show' | 'blur' | 'hide'
+export type ImageBlurMode = 'all' | 'nsfw' | 'none'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 
 export const APP_UI_SCALE_MIN = 0.7
@@ -46,8 +46,12 @@ const normalizeTextureMarkStylePreference = (
 	return 'Hash'
 }
 
-const normalizeGameBananaNsfwMode = (value: unknown): GameBananaNsfwMode => {
-	return value === 'show' || value === 'hide' || value === 'blur' ? value : 'blur'
+const normalizeImageBlurMode = (value: unknown, legacyBlurNsfw?: unknown): ImageBlurMode => {
+	if (value === 'all' || value === 'nsfw' || value === 'none') return value
+	if (value === 'show') return 'none'
+	if (value === 'blur' || value === 'hide') return 'nsfw'
+	if (typeof legacyBlurNsfw === 'boolean') return legacyBlurNsfw ? 'nsfw' : 'none'
+	return 'nsfw'
 }
 
 const normalizeGameBananaTranslationProvider = (value: unknown): GameBananaTranslationProvider => {
@@ -197,9 +201,17 @@ export class AppSettings {
 	CurrentWorkSpace: string = 'Default'
 	CurrentWorkSpaceByGame: Record<string, string> = {}
 	sidebarGameOrder: string[] = []
-	modsManagementBlurNsfw: boolean = true
-	gamebananaNsfwMode: GameBananaNsfwMode = 'blur'
-	gamebananaNsfwBlur: boolean = true
+	/** @deprecated Read only while migrating older settings. */
+	modsManagementBlurNsfw?: boolean
+	/** @deprecated Read only while migrating older settings. */
+	gamebananaNsfwMode?: 'show' | 'blur' | 'hide'
+	/** @deprecated Read only while migrating older settings. */
+	gamebananaNsfwBlur?: boolean
+	modsManagementBlurMode: ImageBlurMode = 'nsfw'
+	gamebananaBlurMode: ImageBlurMode = 'nsfw'
+	gamebananaHideNsfw: boolean = false
+	gamebananaRestoreNsfwAfterHide: boolean = false
+	revealBlurredImagesOnHover: boolean = true
 	gamebananaTranslationEnabled: boolean = true
 	gamebananaTranslationRichText: boolean = false
 	gamebananaTranslationProvider: GameBananaTranslationProvider = 'openai'
@@ -263,9 +275,15 @@ export class AppSettings {
 		this.CurrentWorkSpace = init?.CurrentWorkSpace ?? this.CurrentWorkSpace
 		this.CurrentWorkSpaceByGame = normalizeWorkspaceByGame(init?.CurrentWorkSpaceByGame)
 		this.sidebarGameOrder = normalizeSidebarGameOrder(init?.sidebarGameOrder)
-		this.modsManagementBlurNsfw = init?.modsManagementBlurNsfw ?? this.modsManagementBlurNsfw
-		this.gamebananaNsfwMode = normalizeGameBananaNsfwMode(init?.gamebananaNsfwMode)
-		this.gamebananaNsfwBlur = init?.gamebananaNsfwBlur ?? this.gamebananaNsfwBlur
+		this.modsManagementBlurMode = normalizeImageBlurMode(init?.modsManagementBlurMode, init?.modsManagementBlurNsfw)
+		this.gamebananaBlurMode = normalizeImageBlurMode(init?.gamebananaBlurMode ?? init?.gamebananaNsfwMode, init?.gamebananaNsfwBlur)
+		this.gamebananaHideNsfw = init?.gamebananaHideNsfw ?? init?.gamebananaNsfwMode === 'hide'
+		this.gamebananaRestoreNsfwAfterHide = init?.gamebananaRestoreNsfwAfterHide ?? false
+		if (this.gamebananaHideNsfw && this.gamebananaBlurMode === 'nsfw') {
+			this.gamebananaBlurMode = 'none'
+			this.gamebananaRestoreNsfwAfterHide = true
+		}
+		this.revealBlurredImagesOnHover = init?.revealBlurredImagesOnHover ?? this.revealBlurredImagesOnHover
 		this.gamebananaTranslationEnabled = init?.gamebananaTranslationEnabled ?? this.gamebananaTranslationEnabled
 		this.gamebananaTranslationRichText = init?.gamebananaTranslationRichText ?? this.gamebananaTranslationRichText
 		this.gamebananaTranslationProvider = normalizeGameBananaTranslationProvider(init?.gamebananaTranslationProvider)
@@ -343,9 +361,11 @@ export class AppSettings {
 			CurrentWorkSpace: this.CurrentWorkSpace,
 			CurrentWorkSpaceByGame: this.CurrentWorkSpaceByGame,
 			sidebarGameOrder: this.sidebarGameOrder,
-			modsManagementBlurNsfw: this.modsManagementBlurNsfw,
-			gamebananaNsfwMode: this.gamebananaNsfwMode,
-			gamebananaNsfwBlur: this.gamebananaNsfwBlur,
+			modsManagementBlurMode: this.modsManagementBlurMode,
+			gamebananaBlurMode: this.gamebananaBlurMode,
+			gamebananaHideNsfw: this.gamebananaHideNsfw,
+			gamebananaRestoreNsfwAfterHide: this.gamebananaRestoreNsfwAfterHide,
+			revealBlurredImagesOnHover: this.revealBlurredImagesOnHover,
 			gamebananaTranslationEnabled: this.gamebananaTranslationEnabled,
 			gamebananaTranslationRichText: this.gamebananaTranslationRichText,
 			gamebananaTranslationProvider: this.gamebananaTranslationProvider,

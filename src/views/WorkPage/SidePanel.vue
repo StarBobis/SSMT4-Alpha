@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { ArrowDown, Edit, Plus, FolderAdd, FolderOpened, BrushFilled, Delete } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import type { DrawerCollapsedState } from './WorkPage.types';
@@ -9,11 +10,22 @@ const workspaceDraftName = defineModel<string>('workspaceDraftName', { required:
 const drawerCollapsed = defineModel<DrawerCollapsedState>('drawerCollapsed', { required: true });
 const useSpecificIbDump = defineModel<boolean>('useSpecificIbDump', { default: false });
 
-defineProps<{
+const props = defineProps<{
   workspaceName: string;
   workspaceOptions: string[];
+  workspaceModifiedTimes: Record<string, number>;
   isSpecificIbDumpToggling: boolean;
 }>();
+
+type WorkspaceSortMode = 'date' | 'name';
+const workspaceSortMode = ref<WorkspaceSortMode>('date');
+const sortedWorkspaceOptions = computed(() => [...props.workspaceOptions].sort((a, b) => {
+  if (workspaceSortMode.value === 'date') {
+    const dateDifference = (props.workspaceModifiedTimes[b] ?? 0) - (props.workspaceModifiedTimes[a] ?? 0);
+    if (dateDifference !== 0) return dateDifference;
+  }
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}));
 
 const emit = defineEmits<{
   createWorkspace: [];
@@ -132,9 +144,27 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
           <span>选择工作空间</span>
         </button>
         <div v-show="!drawerCollapsed.workspaceSelector" class="side-drawer-body">
+          <div class="workspace-sort-control" role="group" :aria-label="t('workPage.ui.sortWorkspaces')">
+            <button
+              type="button"
+              class="workspace-sort-option"
+              :class="{ 'is-active': workspaceSortMode === 'date' }"
+              @click="workspaceSortMode = 'date'"
+            >
+              {{ t('workPage.ui.sortByNewest') }}
+            </button>
+            <button
+              type="button"
+              class="workspace-sort-option"
+              :class="{ 'is-active': workspaceSortMode === 'name' }"
+              @click="workspaceSortMode = 'name'"
+            >
+              {{ t('workPage.ui.sortByName') }}
+            </button>
+          </div>
           <div class="workspace-list glass-scrollbar">
             <button
-              v-for="name in workspaceOptions"
+              v-for="name in sortedWorkspaceOptions"
               :key="name"
               type="button"
               class="workspace-list-item"
@@ -610,6 +640,47 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
 
 .specific-ib-dump-toggle::before {
   display: none;
+}
+
+.workspace-sort-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 3px;
+  box-sizing: border-box;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.workspace-sort-option {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 27px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(var(--theme-text-secondary-rgb), 0.64);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.workspace-sort-option:hover {
+  color: rgba(var(--theme-text-primary-rgb), 0.92);
+  background: rgba(var(--theme-surface-tint-rgb), 0.06);
+}
+
+.workspace-sort-option.is-active {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.22);
+  background: rgba(var(--theme-surface-tint-rgb), 0.10);
+  color: var(--theme-accent);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
 }
 
 .specific-ib-dump-toggle__header {

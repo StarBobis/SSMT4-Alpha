@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n';
 import { AppStateManager } from '../../store/AppStateManager';
 import { ModManager } from '../../store/ModManager';
 import { ResourceManager } from '../../store/ResourceManager';
+import { setGameBananaBlurMode, setGameBananaHideNsfw } from '../GameBanana/gameBananaBlurSettings';
 
 type NexusFeed = 'latest_added' | 'latest_updated' | 'trending';
 
@@ -146,10 +147,11 @@ const isInstalling = computed(() => installingFileId.value !== null);
 const visibleMods = computed(() => {
   const search = searchQuery.value.trim().toLowerCase();
   return mods.value.filter((mod) => {
-    if (appSettings.gamebananaNsfwMode === 'hide' && mod.isNsfw) return false;
+    if (appSettings.gamebananaHideNsfw && mod.isNsfw) return false;
     return !search || [mod.title, mod.author, mod.category, mod.summary].join(' ').toLowerCase().includes(search);
   });
 });
+const gameBananaBlurMode = computed({ get: () => appSettings.gamebananaBlurMode, set: (mode) => setGameBananaBlurMode(appSettings, mode) });
 
 const asString = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 const asNumber = (value: unknown): number => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -588,12 +590,13 @@ onBeforeUnmount(() => {
       </label>
       <label class="nexus-field nexus-adult-field">
         <span>{{ t('nexusMods.adultState') }}</span>
-        <el-radio-group v-model="appSettings.gamebananaNsfwMode" class="nexus-adult-mode">
-          <el-radio-button value="show">{{ t('nexusMods.show') }}</el-radio-button>
-          <el-radio-button value="blur">{{ t('nexusMods.blur') }}</el-radio-button>
-          <el-radio-button value="hide">{{ t('nexusMods.hide') }}</el-radio-button>
+        <el-radio-group v-model="gameBananaBlurMode" class="nexus-adult-mode">
+          <el-radio-button value="all">{{ t('gameBanana.blurAllImages') }}</el-radio-button>
+          <el-radio-button value="nsfw" :disabled="appSettings.gamebananaHideNsfw">{{ t('gameBanana.blurNsfwImages') }}</el-radio-button>
+          <el-radio-button value="none">{{ t('gameBanana.blurNoImages') }}</el-radio-button>
         </el-radio-group>
       </label>
+      <el-switch :model-value="appSettings.gamebananaHideNsfw" :active-text="t('gameBanana.hideNsfw')" :inactive-text="t('gameBanana.showNsfw')" @change="(value: string | number | boolean) => setGameBananaHideNsfw(appSettings, value === true)" />
       <button type="button" class="nexus-button nexus-button--primary" :disabled="loadingMods" @click="() => loadMods(1)">
         {{ loadingMods ? t('nexusMods.loading') : t('nexusMods.searchAction') }}
       </button>
@@ -626,7 +629,7 @@ onBeforeUnmount(() => {
             @keydown.enter.prevent="selectMod(mod)"
             @keydown.space.prevent="selectMod(mod)"
           >
-            <div class="nexus-mod-thumb" :class="{ 'is-nsfw-blurred': appSettings.gamebananaNsfwMode === 'blur' && mod.isNsfw }">
+            <div class="nexus-mod-thumb" :class="{ 'is-nsfw-blurred': appSettings.gamebananaBlurMode === 'all' || (appSettings.gamebananaBlurMode === 'nsfw' && mod.isNsfw), 'can-hover-reveal': appSettings.revealBlurredImagesOnHover }">
               <img v-if="mod.thumbnailUrl" :src="mod.thumbnailUrl" :alt="mod.title" loading="lazy" />
               <span v-else>{{ mod.title.slice(0, 1) }}</span>
               <b v-if="mod.isNsfw">ADULT</b>
@@ -658,7 +661,7 @@ onBeforeUnmount(() => {
             </div>
             <span v-if="detail.isNsfw" class="nexus-adult-badge">ADULT</span>
           </div>
-          <button v-if="detail.thumbnailUrl" type="button" class="nexus-hero" :class="{ 'is-nsfw-blurred': appSettings.gamebananaNsfwMode === 'blur' && detail.isNsfw }" @click="openExternal(detail.thumbnailUrl)">
+          <button v-if="detail.thumbnailUrl" type="button" class="nexus-hero" :class="{ 'is-nsfw-blurred': appSettings.gamebananaBlurMode === 'all' || (appSettings.gamebananaBlurMode === 'nsfw' && detail.isNsfw), 'can-hover-reveal': appSettings.revealBlurredImagesOnHover }" @click="openExternal(detail.thumbnailUrl)">
             <img :src="detail.thumbnailUrl" :alt="detail.title" />
           </button>
           <div class="nexus-stats">
@@ -713,4 +716,9 @@ onBeforeUnmount(() => {
 .nexus-empty { display:grid; flex:1; place-items:center; padding:24px; color:rgba(var(--theme-text-secondary-rgb),.58); font-size:12px; text-align:center; }
 @media (max-width:1060px) { .nexus-controls { flex-wrap:wrap; }.nexus-key-field { flex:1 1 280px; }.nexus-layout { grid-template-columns:minmax(300px,1fr) minmax(300px,1fr); } }
 @media (max-width:720px) { .nexusmods-page { padding:42px 10px 10px; }.nexus-title-block { width:100%; }.nexus-layout { display:flex; flex-direction:column; overflow:auto; }.nexus-results { min-height:430px; }.nexus-detail { min-height:430px; }.nexus-key-field,.nexus-domain-field,.nexus-feed-field { flex:1 1 42%; width:auto; }.nexus-adult-field { flex:1 1 100%; } }
+.nexus-mod-thumb img,.nexus-hero img { transition: filter .22s ease, transform .22s ease; }
+.nexus-mod-thumb.is-nsfw-blurred:not(.can-hover-reveal):hover img,.nexus-hero.is-nsfw-blurred:not(.can-hover-reveal):hover img { filter:blur(18px) saturate(.75); transform:scale(1.16); }
+.nexus-mod-thumb.is-nsfw-blurred:not(.can-hover-reveal):hover::after,.nexus-hero.is-nsfw-blurred:not(.can-hover-reveal):hover::after { opacity:1; }
+.nexus-mod-thumb.is-nsfw-blurred::after,.nexus-hero.is-nsfw-blurred::after { transition:opacity .22s ease; }
+.nexus-mod-thumb.is-nsfw-blurred::after,.nexus-hero.is-nsfw-blurred::after { content:''; }
 </style>

@@ -4,8 +4,10 @@ import type { ModInfo } from './ModsManagement.types';
 import type { ModTagDefinition } from '../../store/ModTagStore';
 import type { ModKeyInfo } from '../../store/ModManager';
 import { useI18n } from 'vue-i18n';
+import { AppStateManager } from '../../store/AppStateManager';
 
 const { t } = useI18n();
+const appSettings = AppStateManager.appSettings;
 
 defineProps<{
   mod: ModInfo;
@@ -124,7 +126,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
         </div>
 
         <div class="mod-crystal-wrapper" :class="{ active: mod.enabled }">
-          <div v-if="previewUrl" class="image-wrapper" :class="{ 'is-nsfw-blurred': blurNsfwPreview }">
+          <div v-if="previewUrl" class="image-wrapper" :class="{ 'is-nsfw-blurred': blurNsfwPreview, 'can-hover-reveal': appSettings.revealBlurredImagesOnHover }">
             <div class="slide-item">
               <el-image
                 :src="previewUrl"
@@ -137,7 +139,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
                 </template>
               </el-image>
             </div>
-            <div v-if="blurNsfwPreview" class="nsfw-preview-shield">NSFW</div>
+            <div v-if="blurNsfwPreview" class="nsfw-preview-shield"></div>
           </div>
           <div v-else class="image-placeholder">
             <span class="char-avatar">{{ mod.group === 'Root' ? mod.name.charAt(0) : mod.group.charAt(0) }}</span>
@@ -553,6 +555,15 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   transform: scale(1.12);
 }
 
+.image-wrapper.is-nsfw-blurred.can-hover-reveal:hover .zoom-image {
+  filter: blur(0) saturate(1);
+  transform: scale(1.04);
+}
+
+.image-wrapper.is-nsfw-blurred.can-hover-reveal:hover .nsfw-preview-shield {
+  opacity: 0;
+}
+
 .image-wrapper.is-nsfw-blurred::after {
   background:
     linear-gradient(to bottom, rgba(8, 10, 15, 0.32), rgba(8, 10, 15, 0.52)),
@@ -571,13 +582,14 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   letter-spacing: 0.18em;
   text-shadow: 0 1px 8px rgba(0,0,0,0.8);
   pointer-events: none;
+  transition: opacity 220ms ease;
 }
 
 .zoom-image {
   width: 100%;
   height: 100%;
   display: block;
-  transition: transform 0.5s ease;
+  transition: filter 220ms ease, transform 220ms ease;
   position: relative;
   z-index: 0;
 }

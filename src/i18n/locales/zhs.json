@@ -409,6 +409,8 @@
       "uiScaleHint": "缩小界面组件以便在低分辨率或系统高缩放时显示更多内容。",
       "backgroundMaskOpacity": "背景压暗强度",
       "backgroundMaskOpacityHint": "调高后会压暗明亮背景，让玻璃面板更容易看清。",
+      "revealBlurredImagesOnHover": "悬停时取消图片模糊",
+      "revealBlurredImagesOnHoverHint": "开启后鼠标悬停可临时查看图片，不影响眼睛按钮的显示状态。",
       "language": "语言",
       "languageOptions": {
         "en": "英语",
@@ -566,7 +568,10 @@
       "selectSortTag": "选择标签…",
       "presets": "预设",
       "noPresetsYet": "暂无预设。保存当前按键状态来创建一个。",
-      "blurNsfwPreviews": "模糊 NSFW 预览"
+      "blurNsfwPreviews": "图片模糊方式",
+      "blurAllImages": "全部",
+      "blurNsfwImages": "NSFW",
+      "blurNoImages": "不模糊"
     },
     "actions": {
       "chooseIcon": "选择图标",
@@ -746,6 +751,9 @@
       "editWorkspace": "编辑工作空间",
       "currentWorkspaceName": "当前工作空间名称: {name}",
       "workspaceList": "工作空间列表",
+      "sortByNewest": "日期（新到旧）",
+      "sortByName": "名称",
+      "sortWorkspaces": "工作空间排序方式",
       "defaultTabNamePrefix": "LOD",
       "specificIbDumpHint": "禁用 Mods 引用，并且只对当前 LOD DrawIB 列表里的 IB 执行 Dump。"
     },
@@ -1151,6 +1159,9 @@
     "showNsfw": "显示 NSFW",
     "nsfwShown": "NSFW 显示状态",
     "nsfwImageBlur": "图片屏蔽",
+    "blurAllImages": "全部",
+    "blurNsfwImages": "NSFW",
+    "blurNoImages": "不模糊",
     "nsfwImageBlurHint": "开启后所有图片默认打码，可点击任意图片切换显示",
     "nsfwRevealImage": "显示图片",
     "nsfwHideImage": "打码图片",

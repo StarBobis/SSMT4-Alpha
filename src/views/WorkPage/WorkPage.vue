@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openPath as openExternal } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { readDir, readTextFile, writeTextFile, mkdir } from '@tauri-apps/plugin-fs';
+import { readDir, readTextFile, writeTextFile, mkdir, stat } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { debugError, debugLog, debugWarn } from '../../utils/debugLog';
 import { AppStateManager } from '../../store/AppStateManager';
@@ -92,6 +92,7 @@ const workspaceName = ref('');
 const workspaceDraftName = ref('');
 
 const workspaceOptions = ref<string[]>([]);
+const workspaceModifiedTimes = ref<Record<string, number>>({});
 const isScanningWorkspaces = ref(false);
 const workspaceTabs = ref<WorkspaceTabMeta[]>([]);
 const activeWorkspaceTabId = ref('');
@@ -1282,7 +1283,12 @@ watch(selectedFrameAnalysis, () => {
 });
 
 watch(() => appSettings.CurrentGameName, () => {
+  workspaceOptions.value = [];
+  workspaceModifiedTimes.value = {};
+  workspaceName.value = '';
+  workspaceDraftName.value = '';
   void loadSpecificIbDumpState();
+  void refreshWorkspaces();
 });
 
 const handleFrameAnalysisOptionClick = async (item: string) => {
@@ -2071,6 +2077,7 @@ const handleDeleteWorkspaceTab = async (tabId: string) => {
 
 
 const refreshWorkspaces = async () => {
+    const scannedGameKey = getCurrentWorkspaceMemoryGameKey();
     isScanningWorkspaces.value = true;
     try {
         const baseDir = await getWorkspaceBaseDir();
@@ -2084,8 +2091,19 @@ const refreshWorkspaces = async () => {
         const folders = entries
             .filter(e => e.isDirectory)
             .map(e => e.name);
-        
-        folders.sort((a, b) => a.localeCompare(b));
+
+        const modifiedTimes = Object.fromEntries(await Promise.all(
+          folders.map(async (name) => {
+            try {
+              const metadata = await stat(await join(baseDir, name));
+              return [name, metadata.mtime?.getTime() ?? 0] as const;
+            } catch {
+              return [name, 0] as const;
+            }
+          })
+        ));
+        if (scannedGameKey !== getCurrentWorkspaceMemoryGameKey()) return;
+        workspaceModifiedTimes.value = modifiedTimes;
         workspaceOptions.value = folders;
         debugLog('WorkPage', 'refreshWorkspaces - found folders', folders);
 
@@ -2138,7 +2156,16 @@ const createWorkspaceDirectory = async (name: string, options?: { showMessage?: 
          const folders = entries
             .filter(e => e.isDirectory)
             .map(e => e.name);
-         folders.sort((a, b) => a.localeCompare(b));
+         workspaceModifiedTimes.value = Object.fromEntries(await Promise.all(
+           folders.map(async (folderName) => {
+             try {
+               const metadata = await stat(await join(baseDir, folderName));
+               return [folderName, metadata.mtime?.getTime() ?? 0] as const;
+             } catch {
+               return [folderName, 0] as const;
+             }
+           })
+         ));
          workspaceOptions.value = folders;
          workspaceDraftName.value = normalizedName;
 
@@ -2504,6 +2531,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
         v-model:useSpecificIbDump="useSpecificIbDump"
         :workspaceName="workspaceName"
         :workspaceOptions="workspaceOptions"
+        :workspaceModifiedTimes="workspaceModifiedTimes"
         :isSpecificIbDumpToggling="isSpecificIbDumpToggling"
         @createWorkspace="handleCreateWorkspace"
         @createFromConfig="handleCreateFromConfig"
