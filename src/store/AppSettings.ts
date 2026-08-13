@@ -207,9 +207,11 @@ export class AppSettings {
 	gamebananaNsfwMode?: 'show' | 'blur' | 'hide'
 	/** @deprecated Read only while migrating older settings. */
 	gamebananaNsfwBlur?: boolean
+	/** @deprecated Read only while migrating older settings. */
+	gamebananaHideNsfw?: boolean
 	modsManagementBlurMode: ImageBlurMode = 'nsfw'
 	gamebananaBlurMode: ImageBlurMode = 'nsfw'
-	gamebananaHideNsfw: boolean = false
+	gamebananaShowNsfw: boolean = true
 	gamebananaRestoreNsfwAfterHide: boolean = false
 	revealBlurredImagesOnHover: boolean = true
 	gamebananaTranslationEnabled: boolean = true
@@ -277,9 +279,9 @@ export class AppSettings {
 		this.sidebarGameOrder = normalizeSidebarGameOrder(init?.sidebarGameOrder)
 		this.modsManagementBlurMode = normalizeImageBlurMode(init?.modsManagementBlurMode, init?.modsManagementBlurNsfw)
 		this.gamebananaBlurMode = normalizeImageBlurMode(init?.gamebananaBlurMode ?? init?.gamebananaNsfwMode, init?.gamebananaNsfwBlur)
-		this.gamebananaHideNsfw = init?.gamebananaHideNsfw ?? init?.gamebananaNsfwMode === 'hide'
+		this.gamebananaShowNsfw = init?.gamebananaShowNsfw ?? !(init?.gamebananaHideNsfw ?? init?.gamebananaNsfwMode === 'hide')
 		this.gamebananaRestoreNsfwAfterHide = init?.gamebananaRestoreNsfwAfterHide ?? false
-		if (this.gamebananaHideNsfw && this.gamebananaBlurMode === 'nsfw') {
+		if (!this.gamebananaShowNsfw && this.gamebananaBlurMode === 'nsfw') {
 			this.gamebananaBlurMode = 'none'
 			this.gamebananaRestoreNsfwAfterHide = true
 		}
@@ -363,7 +365,7 @@ export class AppSettings {
 			sidebarGameOrder: this.sidebarGameOrder,
 			modsManagementBlurMode: this.modsManagementBlurMode,
 			gamebananaBlurMode: this.gamebananaBlurMode,
-			gamebananaHideNsfw: this.gamebananaHideNsfw,
+			gamebananaShowNsfw: this.gamebananaShowNsfw,
 			gamebananaRestoreNsfwAfterHide: this.gamebananaRestoreNsfwAfterHide,
 			revealBlurredImagesOnHover: this.revealBlurredImagesOnHover,
 			gamebananaTranslationEnabled: this.gamebananaTranslationEnabled,

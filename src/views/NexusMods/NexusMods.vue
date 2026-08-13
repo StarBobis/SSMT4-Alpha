@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n';
 import { AppStateManager } from '../../store/AppStateManager';
 import { ModManager } from '../../store/ModManager';
 import { ResourceManager } from '../../store/ResourceManager';
-import { setGameBananaBlurMode, setGameBananaHideNsfw } from '../GameBanana/gameBananaBlurSettings';
+import { setGameBananaBlurMode, setGameBananaShowNsfw } from '../GameBanana/gameBananaBlurSettings';
 
 type NexusFeed = 'latest_added' | 'latest_updated' | 'trending';
 
@@ -147,7 +147,7 @@ const isInstalling = computed(() => installingFileId.value !== null);
 const visibleMods = computed(() => {
   const search = searchQuery.value.trim().toLowerCase();
   return mods.value.filter((mod) => {
-    if (appSettings.gamebananaHideNsfw && mod.isNsfw) return false;
+    if (!appSettings.gamebananaShowNsfw && mod.isNsfw) return false;
     return !search || [mod.title, mod.author, mod.category, mod.summary].join(' ').toLowerCase().includes(search);
   });
 });
@@ -592,11 +592,11 @@ onBeforeUnmount(() => {
         <span>{{ t('nexusMods.adultState') }}</span>
         <el-radio-group v-model="gameBananaBlurMode" class="nexus-adult-mode">
           <el-radio-button value="all">{{ t('gameBanana.blurAllImages') }}</el-radio-button>
-          <el-radio-button value="nsfw" :disabled="appSettings.gamebananaHideNsfw">{{ t('gameBanana.blurNsfwImages') }}</el-radio-button>
+          <el-radio-button value="nsfw" :disabled="!appSettings.gamebananaShowNsfw">{{ t('gameBanana.blurNsfwImages') }}</el-radio-button>
           <el-radio-button value="none">{{ t('gameBanana.blurNoImages') }}</el-radio-button>
         </el-radio-group>
       </label>
-      <label class="nexus-field nexus-hide-field"><span>{{ t('nexusMods.adultState') }}</span><div><el-switch :model-value="appSettings.gamebananaHideNsfw" @change="(value: string | number | boolean) => setGameBananaHideNsfw(appSettings, value === true)" /><span>{{ appSettings.gamebananaHideNsfw ? t('gameBanana.hideNsfw') : t('gameBanana.showNsfw') }}</span></div></label>
+      <label class="nexus-field nexus-show-field"><span>{{ t('nexusMods.adultState') }}</span><el-radio-group :model-value="appSettings.gamebananaShowNsfw" class="nexus-visibility" @change="(value: string | number | boolean | undefined) => setGameBananaShowNsfw(appSettings, value === true)"><el-radio-button :value="true">{{ t('gameBanana.nsfwShow') }}</el-radio-button><el-radio-button :value="false">{{ t('gameBanana.nsfwHide') }}</el-radio-button></el-radio-group></label>
       <button type="button" class="nexus-button nexus-button--primary" :disabled="loadingMods" @click="() => loadMods(1)">
         {{ loadingMods ? t('nexusMods.loading') : t('nexusMods.searchAction') }}
       </button>
@@ -702,7 +702,7 @@ onBeforeUnmount(() => {
 .glass-panel { background:linear-gradient(145deg,rgba(var(--theme-surface-tint-rgb),.07),rgba(var(--theme-surface-tint-rgb),.025)),rgba(255,255,255,.035); border:1px solid rgba(var(--theme-surface-tint-rgb),.12); box-shadow:0 14px 36px rgba(0,0,0,.18); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
 .nexus-controls { display:flex; align-items:end; gap:10px; padding:10px 12px; border-radius:12px; }.nexus-title-block { display:grid; flex:0 0 auto; min-width:112px; gap:2px; }.nexus-title-block strong { color:rgba(var(--theme-text-primary-rgb),.94); font-size:16px; }.nexus-title-block span { color:rgba(var(--theme-text-secondary-rgb),.6); font-size:10px; }
 .nexus-field { display:grid; min-width:90px; gap:4px; }.nexus-field>span { color:rgba(var(--theme-text-secondary-rgb),.64); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }.nexus-domain-field { width:155px; }.nexus-key-field { flex:1 1 230px; min-width:180px; }.nexus-feed-field { width:112px; }.nexus-adult-field { min-width:188px; }
-.nexus-hide-field { min-width:92px; }.nexus-hide-field>div { display:flex; align-items:center; gap:7px; min-height:30px; padding:0 8px; border:1px solid rgba(255,255,255,.13); border-radius:7px; background:rgba(255,255,255,.055); box-sizing:border-box; }.nexus-hide-field>div>span { color:rgba(var(--theme-text-primary-rgb),.82); font-size:11px; font-weight:600; letter-spacing:0; text-transform:none; white-space:nowrap; }
+.nexus-show-field { min-width:116px; }.nexus-visibility { display:flex; min-height:30px; }.nexus-visibility :deep(.el-radio-button) { flex:1 1 0; }.nexus-visibility :deep(.el-radio-button__inner) { display:flex; align-items:center; justify-content:center; width:100%; min-height:30px; padding:0 10px; border-color:rgba(255,255,255,.13); background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.86); font-size:12px; box-shadow:none; }.nexus-visibility :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.20); border-color:rgba(var(--theme-surface-tint-rgb),.42); color:rgba(var(--theme-text-primary-rgb),.98); }
 .nexus-field input,.nexus-field select,.nexus-filter input { width:100%; min-height:30px; box-sizing:border-box; padding:0 9px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:7px; outline:none; background:rgba(var(--theme-surface-tint-rgb),.055); color:rgba(var(--theme-text-primary-rgb),.92); font:inherit; font-size:12px; }.nexus-field input:focus,.nexus-field select:focus,.nexus-filter input:focus { border-color:rgba(var(--theme-surface-tint-rgb),.62); box-shadow:0 0 0 2px rgba(var(--theme-surface-tint-rgb),.11); }
 .nexus-adult-mode { display:flex; min-height:30px; overflow:hidden; border-radius:7px; }.nexus-adult-mode :deep(.el-radio-button) { flex:1 1 0; min-width:0; }.nexus-adult-mode :deep(.el-radio-button__inner) { display:flex; align-items:center; justify-content:center; box-sizing:border-box; width:100%; min-height:30px; padding:0 10px; border-color:rgba(255,255,255,.13); background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.86); font:inherit; font-size:12px; line-height:1; box-shadow:none; transition:background .16s ease,border-color .16s ease,color .16s ease; }.nexus-adult-mode :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius:7px 0 0 7px; }.nexus-adult-mode :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius:0 7px 7px 0; }.nexus-adult-mode :deep(.el-radio-button__inner:hover) { background:rgba(var(--theme-surface-tint-rgb),.16); border-color:rgba(var(--theme-surface-tint-rgb),.38); }.nexus-adult-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.2); border-color:rgba(var(--theme-surface-tint-rgb),.42); color:rgba(var(--theme-text-primary-rgb),.98); box-shadow:-1px 0 0 0 rgba(var(--theme-surface-tint-rgb),.42); }
 .nexus-adult-mode :deep(.el-radio-button.is-disabled .el-radio-button__inner) { opacity:.35; background:rgba(255,255,255,.025); color:rgba(var(--theme-text-secondary-rgb),.45); cursor:not-allowed; }
@@ -723,4 +723,6 @@ onBeforeUnmount(() => {
 .nexus-mod-thumb.is-nsfw-blurred:not(.can-hover-reveal):hover::after,.nexus-hero.is-nsfw-blurred:not(.can-hover-reveal):hover::after { opacity:1; }
 .nexus-mod-thumb.is-nsfw-blurred::after,.nexus-hero.is-nsfw-blurred::after { transition:opacity .22s ease; }
 .nexus-mod-thumb.is-nsfw-blurred::after,.nexus-hero.is-nsfw-blurred::after { content:''; }
+.nexus-adult-mode :deep(.el-radio-button__inner),.nexus-visibility :deep(.el-radio-button__inner) { border:none!important; outline:none!important; box-shadow:none!important; }
+.nexus-adult-mode :deep(.el-radio-button.is-active .el-radio-button__inner),.nexus-visibility :deep(.el-radio-button.is-active .el-radio-button__inner) { box-shadow:none!important; }
 </style>

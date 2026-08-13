@@ -5110,6 +5110,8 @@ const {
 .tb-blur-mode :deep(.el-radio-button) { flex:1 1 0; }
 .tb-blur-mode :deep(.el-radio-button__inner) { min-height:30px; padding:0 8px; border-color:rgba(255,255,255,.13); background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.78); font-size:11px; box-shadow:none; transition:background .18s ease,border-color .18s ease,color .18s ease; }
 .tb-blur-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.20); border-color:rgba(var(--theme-surface-tint-rgb),.42); color:rgba(var(--theme-text-primary-rgb),.98); box-shadow:-1px 0 0 rgba(var(--theme-surface-tint-rgb),.42); }
+.tb-blur-mode :deep(.el-radio-button__inner) { border:none!important; outline:none!important; box-shadow:none!important; }
+.tb-blur-mode :deep(.el-radio-button.is-active .el-radio-button__inner) { box-shadow:none!important; }
 .mod-list-thumb-fallback {
     font-size: 16px; font-weight: 700;
     color: rgba(255,255,255,0.30);
