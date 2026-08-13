@@ -2043,7 +2043,13 @@ onBeforeUnmount(() => {
           <el-radio-button value="none">{{ t('gameBanana.blurNoImages') }}</el-radio-button>
         </el-radio-group>
       </label>
-      <el-switch :model-value="appSettings.gamebananaHideNsfw" :active-text="t('gameBanana.hideNsfw')" :inactive-text="t('gameBanana.showNsfw')" @change="(value: string | number | boolean) => setGameBananaHideNsfw(appSettings, value === true)" />
+      <label class="gb-field gb-hide-nsfw-field">
+        <span>{{ t('gameBanana.nsfwShown') }}</span>
+        <div class="gb-hide-nsfw-control">
+          <el-switch :model-value="appSettings.gamebananaHideNsfw" @change="(value: string | number | boolean) => setGameBananaHideNsfw(appSettings, value === true)" />
+          <span>{{ appSettings.gamebananaHideNsfw ? t('gameBanana.hideNsfw') : t('gameBanana.showNsfw') }}</span>
+        </div>
+      </label>
       <button type="button" class="gb-button" :disabled="loadingCategories || loadingMods" @click="applyTarget">
         {{ t('gameBanana.refresh') }}
       </button>
@@ -2474,6 +2480,9 @@ onBeforeUnmount(() => {
 .gb-field :deep(.el-select__selected-item),
 .gb-field :deep(.el-select__placeholder) { color: rgba(var(--theme-text-primary-rgb), .92); font-size: 12px; }
 .gb-nsfw-field { min-width: 188px; }
+.gb-hide-nsfw-field { min-width: 92px; }
+.gb-hide-nsfw-control { display:flex; align-items:center; gap:7px; min-height:30px; padding:0 8px; box-sizing:border-box; border:1px solid rgba(255,255,255,.13); border-radius:7px; background:rgba(255,255,255,.055); }
+.gb-hide-nsfw-control>span { color:rgba(var(--theme-text-primary-rgb),.82); font-size:11px; font-weight:600; letter-spacing:0; text-transform:none; white-space:nowrap; }
 .gb-nsfw-mode { display: flex; min-height: 30px; overflow: hidden; border-radius: 7px; }
 .gb-nsfw-mode :deep(.el-radio-button) { flex: 1 1 0; min-width: 0; }
 .gb-nsfw-mode :deep(.el-radio-button__inner) {
@@ -2497,6 +2506,7 @@ onBeforeUnmount(() => {
 .gb-nsfw-mode :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius: 0 7px 7px 0; }
 .gb-nsfw-mode :deep(.el-radio-button__inner:hover) { background: rgba(var(--theme-surface-tint-rgb),.16); border-color: rgba(var(--theme-surface-tint-rgb),.38); color: rgba(var(--theme-text-primary-rgb),.96); }
 .gb-nsfw-mode :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background: rgba(var(--theme-surface-tint-rgb),.20); border-color: rgba(var(--theme-surface-tint-rgb),.42); color: rgba(var(--theme-text-primary-rgb),.98); box-shadow: -1px 0 0 0 rgba(var(--theme-surface-tint-rgb),.42); }
+.gb-nsfw-mode :deep(.el-radio-button.is-disabled .el-radio-button__inner) { opacity:.35; background:rgba(255,255,255,.025); color:rgba(var(--theme-text-secondary-rgb),.45); cursor:not-allowed; }
 
 .gb-translation-settings { display: grid; grid-template-columns: 1.15fr 1fr 1fr .8fr .8fr .8fr; align-items: end; gap: 9px; padding: 10px 12px 12px; border-radius: 12px; }
 .gb-translation-settings-head { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; color: rgba(var(--theme-text-primary-rgb),.88); font-size: 12px; }
