@@ -728,7 +728,10 @@
       "workspaceDescriptionMessage": "公开说明（可选）",
       "workspaceCapturedAtMessage": "采集时间（RFC 3339 格式）",
       "workspaceGameBuildMessage": "游戏版本（可选）",
-      "workspaceAttributionMessage": "公开自填署名（可选，未验证）"
+      "workspaceAttributionMessage": "公开自填署名（可选，未验证）",
+      "workspaceAliasesMessage": "工作空间别名（可选，使用逗号或换行分隔）",
+      "workspaceIncludeFullPackage": "上传完整工作空间资源包",
+      "workspaceTemporaryArchiveHint": "完整资源包仅在本次上传中临时创建，完成后会自动清理。"
       ,"workspaceLibraryTitle": "公共工作空间库",
       "workspaceLibrarySearchMessage": "按工作空间名、署名、DrawIB 或别名筛选",
       "workspaceLibrarySortMessage": "按 uploadedAt、capturedAt 或 fullDataSize 排序",
@@ -738,7 +741,9 @@
       "workspaceLibraryReview": "复审",
       "workspaceLibrarySelectMessage": "输入条目编号或 Entry ID",
       "workspaceLibraryResultsTitle": "工作空间条目",
-      "workspaceLibraryDownloadMessage": "该条目包含完整工作空间包，是否下载并导入？"
+      "workspaceLibraryDownloadMessage": "该条目包含完整工作空间包，是否下载并导入？",
+      "workspaceLibraryLowDiskSpaceMessage": "目标工作空间所在磁盘仅剩 {available} GiB 可用空间。完整包在解压前至少需要 1 GiB 可用空间，仍要继续吗？",
+      "workspaceLibraryLowDiskSpaceContinue": "仍要下载"
     },
     "tabs": {
       "extractByDrawIB": "按 DrawIB 提取",
@@ -763,7 +768,8 @@
       "enterVSHash": "输入 VS Hash",
       "workspaceLibrarySort": "uploadedAt",
       "workspaceCapturedAt": "2026-08-14T00:00:00Z",
-      "workspaceGameBuild": "游戏版本"
+      "workspaceGameBuild": "游戏版本",
+      "workspaceAliases": "例如角色名、变体、作者标签"
     },
     "ui": {
       "selectFrameAnalysisFolder": "选择 FrameAnalysis 文件夹",
@@ -777,7 +783,9 @@
       "sortByName": "名称",
       "sortWorkspaces": "工作空间排序方式",
       "defaultTabNamePrefix": "LOD",
-      "specificIbDumpHint": "禁用 Mods 引用，并且只对当前 LOD DrawIB 列表里的 IB 执行 Dump。"
+      "specificIbDumpHint": "禁用 Mods 引用，并且只对当前 LOD DrawIB 列表里的 IB 执行 Dump。",
+      "workspaceName": "工作空间",
+      "workspaceLibrarySource": "库来源：{attribution} · 上传于 {uploadedAt}"
     },
     "actions": {
       "refresh": "刷新",
@@ -809,7 +817,9 @@
       ,"publishWorkspaceMetadata": "发布公开元数据",
       "publishWorkspaceArchive": "发布元数据和 .ssmtws 工作空间包",
       "cancelWorkspaceArchiveUpload": "取消工作空间包上传"
-      ,"browseWorkspaceLibrary": "浏览公共工作空间库"
+      ,"browseWorkspaceLibrary": "浏览公共工作空间库",
+      "openWorkspaceUpload": "上传工作空间",
+      "openWorkspaceDownload": "下载工作空间"
     },
     "menu": {
       "open3DmigotoFolder": "打开 3Dmigoto 文件夹",
@@ -905,6 +915,7 @@
       "workspaceArchiveImportFailed": "工作空间包导入失败"
       ,"workspacePublished": "工作空间已发布为条目 {entryId}",
       "workspacePublishFailed": "工作空间发布失败",
+      "workspaceAccessEndpointRequired": "请输入工作空间访问服务地址",
       "workspaceUploadCancellationRequested": "已请求取消工作空间包上传",
       "workspaceUploadCancelled": "工作空间包上传已取消",
       "workspaceUploadCancelFailed": "取消工作空间包上传失败"

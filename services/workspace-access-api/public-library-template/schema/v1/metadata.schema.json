@@ -15,6 +15,7 @@
     "gameBuild": { "type": ["string", "null"], "maxLength": 256 },
     "attribution": { "$ref": "#/$defs/attribution" },
     "supersedes": { "type": ["string", "null"] },
+    "workspaceAliases": { "type": "array", "maxItems": 128, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" } },
     "generator": { "$ref": "#/$defs/generator" },
     "lods": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/lod" } },
     "fullData": { "$ref": "#/$defs/fullData" }

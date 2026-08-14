@@ -728,7 +728,10 @@
       "workspaceDescriptionMessage": "Public description (optional)",
       "workspaceCapturedAtMessage": "Capture time in RFC 3339 format",
       "workspaceGameBuildMessage": "Game build (optional)",
-      "workspaceAttributionMessage": "Public self-supplied attribution (optional, not verified)"
+      "workspaceAttributionMessage": "Public self-supplied attribution (optional, not verified)",
+      "workspaceAliasesMessage": "Workspace aliases (optional; separate with commas or new lines)",
+      "workspaceIncludeFullPackage": "Upload complete workspace package",
+      "workspaceTemporaryArchiveHint": "Complete packages are created in a temporary location for this upload and removed automatically afterwards."
       ,"workspaceLibraryTitle": "Public Workspace Library",
       "workspaceLibrarySearchMessage": "Filter by workspace name, attribution, DrawIB, or alias",
       "workspaceLibrarySortMessage": "Sort by uploadedAt, capturedAt, or fullDataSize",
@@ -738,7 +741,9 @@
       "workspaceLibraryReview": "review",
       "workspaceLibrarySelectMessage": "Enter an entry number or Entry ID",
       "workspaceLibraryResultsTitle": "Workspace Entries",
-      "workspaceLibraryDownloadMessage": "This entry includes a complete workspace package. Download and import it?"
+      "workspaceLibraryDownloadMessage": "This entry includes a complete workspace package. Download and import it?",
+      "workspaceLibraryLowDiskSpaceMessage": "The target workspace disk has only {available} GiB free. A full package download needs at least 1 GiB of free space before extraction. Continue anyway?",
+      "workspaceLibraryLowDiskSpaceContinue": "Download anyway"
     },
     "tabs": {
       "extractByDrawIB": "Extract by DrawIB",
@@ -763,7 +768,8 @@
       "enterVSHash": "Enter VS Hash",
       "workspaceLibrarySort": "uploadedAt",
       "workspaceCapturedAt": "2026-08-14T00:00:00Z",
-      "workspaceGameBuild": "Game build"
+      "workspaceGameBuild": "Game build",
+      "workspaceAliases": "e.g. character name, variant, author label"
     },
     "ui": {
       "selectFrameAnalysisFolder": "Select FrameAnalysis folder",
@@ -777,7 +783,9 @@
       "sortByName": "Name",
       "sortWorkspaces": "Workspace sorting",
       "defaultTabNamePrefix": "LOD",
-      "specificIbDumpHint": "Disable Mods include and only dump the DrawIB list shown in this LOD."
+      "specificIbDumpHint": "Disable Mods include and only dump the DrawIB list shown in this LOD.",
+      "workspaceName": "Workspace",
+      "workspaceLibrarySource": "Library source: {attribution} · uploaded {uploadedAt}"
     },
     "actions": {
       "refresh": "Refresh",
@@ -809,7 +817,9 @@
       ,"publishWorkspaceMetadata": "Publish Public Metadata",
       "publishWorkspaceArchive": "Publish Metadata and .ssmtws Package",
       "cancelWorkspaceArchiveUpload": "Cancel Workspace Package Upload"
-      ,"browseWorkspaceLibrary": "Browse Public Workspace Library"
+      ,"browseWorkspaceLibrary": "Browse Public Workspace Library",
+      "openWorkspaceUpload": "Upload workspace",
+      "openWorkspaceDownload": "Download workspace"
     },
     "menu": {
       "open3DmigotoFolder": "Open 3Dmigoto Folder",
@@ -905,6 +915,7 @@
       "workspaceArchiveImportFailed": "Workspace package import failed"
       ,"workspacePublished": "Workspace published as entry {entryId}",
       "workspacePublishFailed": "Workspace publish failed",
+      "workspaceAccessEndpointRequired": "Please enter the workspace access service URL",
       "workspaceUploadCancellationRequested": "Workspace package upload cancellation requested",
       "workspaceUploadCancelled": "Workspace package upload cancelled",
       "workspaceUploadCancelFailed": "Workspace package upload cancellation failed"

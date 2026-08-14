@@ -46,4 +46,7 @@ declare module 'vue' {
     SettingsMenu: typeof import('./src/components/SettingsMenu.vue')['default']
     TitleBar: typeof import('./src/components/TitleBar.vue')['default']
   }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
+  }
 }

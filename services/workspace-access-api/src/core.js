@@ -47,6 +47,8 @@ export function normalizeMetadata(input, now) {
   if (!attribution) return { error: ERROR_CODES.INVALID_METADATA };
   const supersedes = normalizeSupersedes(input.supersedes);
   if (input.supersedes != null && !supersedes) return { error: ERROR_CODES.INVALID_METADATA };
+  const workspaceAliases = normalizeStringList(input.workspaceAliases, 128, 128);
+  if (!workspaceAliases) return { error: ERROR_CODES.INVALID_METADATA };
 
   const lods = [];
   const seenLods = new Set();
@@ -55,8 +57,10 @@ export function normalizeMetadata(input, now) {
     const name = lod.name.trim();
     if (!name || name.length > 128 || seenLods.has(name.normalize('NFKC').toLocaleLowerCase())) return { error: ERROR_CODES.INVALID_METADATA };
     seenLods.add(name.normalize('NFKC').toLocaleLowerCase());
-    const drawIB = normalizeHashAliases(lod.drawIB, 8, 16);
-    const skipIB = normalizeSkipIB(lod.skipIB);
+    // Rust's historic `rename_all = camelCase` serialization emitted drawIb/skipIb.
+    // Accept those drafts, but always publish the protocol's canonical ...IB spelling.
+    const drawIB = normalizeHashAliases(lod.drawIB ?? lod.drawIb, 8, 16);
+    const skipIB = normalizeSkipIB(lod.skipIB ?? lod.skipIb);
     const vsCheck = normalizeVS(lod.vsCheck);
     if (!drawIB || !skipIB || !vsCheck || drawIB.length === 0) return { error: ERROR_CODES.INVALID_METADATA };
     lods.push({ name, drawIB, skipIB, vsCheck });
@@ -72,11 +76,26 @@ export function normalizeMetadata(input, now) {
       gameBuild: typeof input.gameBuild === 'string' ? input.gameBuild.trim().slice(0, 256) || null : null,
       attribution,
       supersedes,
+      workspaceAliases,
       generator: normalizeGenerator(input.generator),
       lods,
       fullData: normalizeFullData(input.fullData),
     },
   };
+}
+
+function normalizeStringList(value, maxItems, maxLength) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > maxItems) return null;
+  const seen = new Set();
+  const result = [];
+  for (const item of value) {
+    const normalized = typeof item === 'string' ? item.trim() : '';
+    if (!normalized || normalized.length > maxLength || [...normalized].some((char) => /[\u0000-\u001f\u007f]/u.test(char))) return null;
+    const key = normalized.normalize('NFKC').toLocaleLowerCase();
+    if (!seen.has(key)) { seen.add(key); result.push(normalized); }
+  }
+  return result;
 }
 
 function normalizeHashAliases(value, min, max) {

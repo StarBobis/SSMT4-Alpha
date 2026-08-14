@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install validation dependencies
+        run: npm ci --ignore-scripts
       - name: Validate JSON documents
         run: node scripts/validate-entries.mjs .
       - name: Rebuild indexes
@@ -33,9 +35,9 @@ jobs:
         run: node scripts/notify-large-entries.mjs .
       - name: Commit generated indexes
         run: |
-          if git diff --quiet -- index/v1; then exit 0; fi
+          if [ -z "$(git status --porcelain -- index/v1)" ]; then exit 0; fi
           git config user.name 'ssmt-workspace-bot'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index/v1
+          git add --force index/v1
           git commit -m 'Rebuild workspace indexes [skip ci]'
           git push

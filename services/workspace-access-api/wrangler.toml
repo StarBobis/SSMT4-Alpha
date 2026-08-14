@@ -13,11 +13,12 @@ MAX_ARCHIVE_BYTES = "1073741824"
 MAX_ARCHIVE_BYTES_PER_IP_PER_DAY = "5368709120"
 LARGE_REVIEW_THRESHOLD = "209715200"
 UPLOAD_TTL_HOURS = "24"
+SERVER_SHA256_VALIDATION_MAX_BYTES = "33554432"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "ssmt-workspace-api-dev"
-database_id = "REPLACE_WITH_DEV_DATABASE_ID"
+database_id = "1045d152-69da-40f7-9c3d-d78c3f1d9fdf"
 migrations_dir = "migrations"
 
 [[r2_buckets]]

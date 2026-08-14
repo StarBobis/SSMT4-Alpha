@@ -45,6 +45,9 @@ pub struct PublicMetadataDocument {
     pub workspace_name: String,
     pub uploaded_at: String,
     pub captured_at: Option<String>,
+    pub attribution: crate::workspace_access::models::PublicAttribution,
+    #[serde(default)]
+    pub workspace_aliases: Vec<String>,
     pub lods: Vec<crate::workspace_access::models::PortableLodV1>,
     pub full_data: PublicFullData,
 }

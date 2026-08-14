@@ -21,7 +21,7 @@ async function main() {
         throw new Error(`entry identity mismatch: ${gamePreset}/${entryId}`);
       }
       const drawIB = metadata.lods.flatMap((lod) => lod.drawIB.map((item) => item.hash));
-      const aliases = metadata.lods.flatMap((lod) => [...lod.drawIB, ...lod.skipIB, ...lod.vsCheck].map((item) => item.alias).filter(Boolean));
+      const aliases = [...(metadata.workspaceAliases || []), ...metadata.lods.flatMap((lod) => [...lod.drawIB, ...lod.skipIB, ...lod.vsCheck].map((item) => item.alias).filter(Boolean))];
       const attribution = metadata.attribution?.mode === 'custom' ? metadata.attribution.displayName : 'anonymous';
       const item = {
         entryId,

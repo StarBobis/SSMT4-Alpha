@@ -196,7 +196,7 @@ async function completeSubmission(request, env, submissionId) {
   try {
     await validateR2Archive(env, row.object_key, metadata);
   } catch (error) {
-    console.error('workspace-api archive validation failed', error instanceof Error ? error.name : 'unknown');
+    console.error('workspace-api archive validation failed', error instanceof Error ? error.message : 'unknown');
     if (error instanceof Error && error.message === 'R2_VALIDATION_UNAVAILABLE') return apiError('R2_VALIDATION_UNAVAILABLE', 422);
     const discarded = await discardCompletedSubmission(env, row);
     return discarded ? apiError('ARCHIVE_INVALID', 422) : apiError('R2_CLEANUP_FAILED', 502);

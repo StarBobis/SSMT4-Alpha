@@ -1,7 +1,7 @@
 const GITHUB_API = 'https://api.github.com';
 
 export async function publishEntry(env, metadata, status, entryId) {
-  const token = await installationToken(env);
+  const token = await githubToken(env);
   const metadataPath = `games/${metadata.gamePreset}/entries/${entryId}/metadata.json`;
   const statusPath = `games/${metadata.gamePreset}/entries/${entryId}/status.json`;
   const metadataBlob = await githubJson(env, token, `/repos/${env.PUBLIC_REPO_OWNER}/${env.PUBLIC_REPO_NAME}/git/blobs`, {
@@ -49,7 +49,7 @@ export async function fetchPublicEntry(env, gamePreset, entryId) {
 }
 
 export async function removeExpiredEntries(env, now = new Date().toISOString()) {
-  const token = await installationToken(env);
+  const token = await githubToken(env);
   const repository = `/repos/${env.PUBLIC_REPO_OWNER}/${env.PUBLIC_REPO_NAME}`;
   const ref = await githubJson(env, token, `${repository}/git/ref/heads/main`);
   const commit = await githubJson(env, token, `${repository}/git/commits/${ref.object.sha}`);
@@ -107,6 +107,11 @@ async function installationToken(env) {
   const body = await response.json();
   if (typeof body.token !== 'string') throw new Error('GITHUB_PUBLISH_FAILED');
   return body.token;
+}
+
+async function githubToken(env) {
+  const token = String(env.GITHUB_TOKEN || '').trim();
+  return token || installationToken(env);
 }
 
 async function githubJson(env, token, path, init = {}) {

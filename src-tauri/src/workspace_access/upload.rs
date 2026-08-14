@@ -7,6 +7,7 @@ use std::sync::{
     Arc, Mutex, OnceLock,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,9 @@ const PART_SIZE: u64 = 32 * 1024 * 1024;
 const PART_BATCH_SIZE: usize = 100;
 const UPLOAD_CONCURRENCY: usize = 3;
 const UPLOAD_RETRIES: usize = 3;
+// The completion request verifies the entire R2 object before publishing.  The
+// reqwest default of 30 seconds is too short for ordinary large workspaces.
+const SERVICE_REQUEST_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 static UPLOAD_CANCELLATIONS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
 
@@ -47,6 +51,8 @@ struct PublicMetadataV1 {
     game_build: Option<String>,
     attribution: crate::workspace_access::models::PublicAttribution,
     supersedes: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    workspace_aliases: Vec<String>,
     generator: Generator,
     lods: Vec<crate::workspace_access::models::PortableLodV1>,
     full_data: FullData,
@@ -159,7 +165,7 @@ where
         None => None,
     };
     let metadata = make_public_metadata(request, portable, archive_info.as_ref());
-    let client = reqwest::Client::new();
+    let client = workspace_service_client()?;
 
     if let Some(info) = archive_info {
         return publish_archive(&client, &worker_url, metadata, info, on_progress).await;
@@ -184,7 +190,7 @@ pub async fn cancel_upload(worker_url: &str, archive_path: &Path) -> Result<(), 
     if state.worker_url != worker_url {
         return Err("UPLOAD_STATE_SERVICE_MISMATCH".to_string());
     }
-    let response = reqwest::Client::new()
+    let response = workspace_service_client()?
         .delete(format!(
             "{worker_url}/v1/submissions/{}",
             state.submission_id
@@ -196,6 +202,13 @@ pub async fn cancel_upload(worker_url: &str, archive_path: &Path) -> Result<(), 
         return Err("UPLOAD_CANCEL_FAILED".to_string());
     }
     fs::remove_file(state_path).map_err(|_| "UPLOAD_STATE_DELETE_FAILED".to_string())
+}
+
+fn workspace_service_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(SERVICE_REQUEST_TIMEOUT)
+        .build()
+        .map_err(|_| "WORKSPACE_SERVICE_CLIENT_INIT_FAILED".to_string())
 }
 
 struct ArchiveInfo {
@@ -278,6 +291,16 @@ fn make_public_metadata(
             .as_ref()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty()),
+        workspace_aliases: request
+            .workspace_aliases
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .take(128)
+            .map(ToOwned::to_owned)
+            .collect(),
         generator: Generator {
             name: "SSMT",
             version: env!("CARGO_PKG_VERSION"),
@@ -615,6 +638,10 @@ fn upload_state_path(archive: &Path) -> PathBuf {
         .join("WorkspaceUploads")
         .join(format!("{:x}", digest.finalize()))
         .join("state.json")
+}
+
+pub fn remove_upload_state(archive: &Path) {
+    let _ = fs::remove_file(upload_state_path(archive));
 }
 fn normalize_worker_url(value: &str) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/');

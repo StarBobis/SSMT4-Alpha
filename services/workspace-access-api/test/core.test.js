@@ -18,6 +18,21 @@ test('normalizes metadata and never trusts client timestamps', () => {
   assert.equal(result.value.attribution.mode, 'custom');
 });
 
+test('normalizes workspace aliases for public library search', () => {
+  const result = normalizeMetadata({ ...draft, workspaceAliases: [' Himeko ', 'himeko', 'Fire Form'] }, '2026-08-14T00:00:00.000Z');
+  assert.deepEqual(result.value.workspaceAliases, ['Himeko', 'Fire Form']);
+  assert.equal(normalizeMetadata({ ...draft, workspaceAliases: ['bad\u0000alias'] }, new Date().toISOString()).error, 'INVALID_METADATA');
+});
+
+test('accepts historic camel-cased IB fields and emits canonical protocol keys', () => {
+  const result = normalizeMetadata({
+    ...draft,
+    lods: [{ name: 'LOD0', drawIb: [{ hash: '0F8A6711', alias: 'Face' }], skipIb: [], vsCheck: [] }],
+  }, '2026-08-14T00:00:00.000Z');
+  assert.deepEqual(result.value.lods[0].drawIB, [{ hash: '0f8a6711', alias: 'Face' }]);
+  assert.deepEqual(result.value.lods[0].skipIB, []);
+});
+
 test('rejects unsupported presets and unsafe names', () => {
   assert.equal(normalizeMetadata({ ...draft, gamePreset: 'unknown' }, new Date().toISOString()).error, 'UNSUPPORTED_GAME_PRESET');
   assert.equal(normalizeMetadata({ ...draft, workspaceName: 'bad\u0000name' }, new Date().toISOString()).error, 'INVALID_WORKSPACE_NAME');

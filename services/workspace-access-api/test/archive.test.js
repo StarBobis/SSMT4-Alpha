@@ -54,16 +54,55 @@ function storedManifestBytes(manifest) {
   return archive;
 }
 
+function zip64ManifestHeader(bytes) {
+  const manifestSize = new DataView(bytes.buffer).getUint32(18, true);
+  const firstLength = 30 + 13 + manifestSize;
+  const shifted = new Uint8Array(bytes.length + 20);
+  shifted.set(bytes.slice(0, 30), 0);
+  const header = new DataView(shifted.buffer);
+  header.setUint32(18, 0xffffffff, true);
+  header.setUint32(22, 0xffffffff, true);
+  header.setUint16(28, 20, true);
+  const extra = new DataView(shifted.buffer, 30 + 13, 20);
+  extra.setUint16(0, 1, true);
+  extra.setUint16(2, 16, true);
+  extra.setBigUint64(4, BigInt(manifestSize), true);
+  extra.setBigUint64(12, BigInt(manifestSize), true);
+  shifted.set(bytes.slice(30, 43), 30);
+  shifted.set(bytes.slice(43, firstLength), 43 + 20);
+  shifted.set(bytes.slice(firstLength), firstLength + 20);
+  const directoryOffset = new DataView(shifted.buffer).getUint32(shifted.length - 22 + 16, true);
+  const shiftedEocd = new DataView(shifted.buffer, shifted.length - 22);
+  shiftedEocd.setUint32(16, directoryOffset + 20, true);
+  for (let offset = directoryOffset + 20; offset < shifted.length - 22;) {
+    if (new DataView(shifted.buffer).getUint32(offset, true) !== 0x02014b50) break;
+    const nameLength = new DataView(shifted.buffer).getUint16(offset + 28, true);
+    const extraLength = new DataView(shifted.buffer).getUint16(offset + 30, true);
+    const commentLength = new DataView(shifted.buffer).getUint16(offset + 32, true);
+    if (offset !== directoryOffset + 20) new DataView(shifted.buffer).setUint32(offset + 42, new DataView(shifted.buffer).getUint32(offset + 42, true) + 20, true);
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return shifted;
+}
+
 test('R2 validation inspects the stored first manifest without loading the archive', async () => {
   const manifest = { archiveVersion: 1, portableMetadataPath: 'portable-workspace.json', fileCount: 1, totalUncompressedSize: 4, files: [{ path: 'payload/LOD0/mesh.buf', role: 'payload', size: 4, sha256: 'a'.repeat(64) }] };
   const bytes = storedManifestBytes(manifest);
   const digest = createHash('sha256').update(bytes).digest('hex');
   let getCount = 0;
   const env = { WORKSPACE_BUCKET: { async head() { return { size: bytes.length }; }, async get() { getCount += 1; return { async arrayBuffer() { return bytes.buffer; }, body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) }; } } };
-  const metadata = { fullData: { uncompressedSize: 4, fileCount: 1, sha256: digest } };
+  const metadata = { fullData: { size: bytes.length, uncompressedSize: 4, fileCount: 1, sha256: digest } };
   assert.deepEqual(await validateR2Archive(env, 'packages/test.ssmtws', metadata), manifest);
   assert.equal(getCount, 3);
   await assert.rejects(() => validateR2Archive(env, 'packages/test.ssmtws', { fullData: { uncompressedSize: 5, fileCount: 1 } }), /ARCHIVE_MANIFEST_MISMATCH/);
+});
+
+test('R2 validation reads a Zip64 local manifest header', async () => {
+  const manifest = { archiveVersion: 1, portableMetadataPath: 'portable-workspace.json', fileCount: 1, totalUncompressedSize: 4, files: [{ path: 'payload/LOD0/mesh.buf', role: 'payload', size: 4, sha256: 'a'.repeat(64) }] };
+  const bytes = storedManifestBytes(manifest);
+  const zipped = zip64ManifestHeader(bytes);
+  const env = { WORKSPACE_BUCKET: { async head() { return { size: zipped.length }; }, async get() { return { async arrayBuffer() { return zipped.buffer; }, body: new ReadableStream({ start(controller) { controller.enqueue(zipped); controller.close(); } }) }; } } };
+  await assert.doesNotReject(() => validateR2Archive(env, 'packages/test.ssmtws', { fullData: { uncompressedSize: 4, fileCount: 1 } }));
 });
 
 test('R2 validation rejects a central-directory payload size that disagrees with the manifest', async () => {
@@ -75,5 +114,14 @@ test('R2 validation rejects a central-directory payload size that disagrees with
   }
   const digest = createHash('sha256').update(bytes).digest('hex');
   const env = { WORKSPACE_BUCKET: { async head() { return { size: bytes.length }; }, async get() { return { async arrayBuffer() { return bytes.buffer; }, body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) }; } } };
-  await assert.rejects(() => validateR2Archive(env, 'packages/test.ssmtws', { fullData: { uncompressedSize: 4, fileCount: 1, sha256: digest } }), /ARCHIVE_CENTRAL_DIRECTORY_MISMATCH/);
+  await assert.rejects(() => validateR2Archive(env, 'packages/test.ssmtws', { fullData: { size: bytes.length, uncompressedSize: 4, fileCount: 1, sha256: digest } }), /ARCHIVE_CENTRAL_DIRECTORY_MISMATCH/);
+});
+
+test('keeps structural validation for large archives without a synchronous full-object hash', async () => {
+  const manifest = { archiveVersion: 1, portableMetadataPath: 'portable-workspace.json', fileCount: 1, totalUncompressedSize: 4, files: [{ path: 'payload/LOD0/mesh.buf', role: 'payload', size: 4, sha256: 'a'.repeat(64) }] };
+  const bytes = storedManifestBytes(manifest);
+  let getCount = 0;
+  const env = { WORKSPACE_BUCKET: { async head() { return { size: bytes.length }; }, async get() { getCount += 1; return { async arrayBuffer() { return bytes.buffer; }, body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) }; } } };
+  await assert.doesNotReject(() => validateR2Archive(env, 'packages/test.ssmtws', { fullData: { size: 64 * 1024 * 1024, uncompressedSize: 4, fileCount: 1, sha256: 'a'.repeat(64) } }));
+  assert.equal(getCount, 2);
 });

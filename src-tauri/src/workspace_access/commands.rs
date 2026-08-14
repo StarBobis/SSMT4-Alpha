@@ -13,9 +13,10 @@ use crate::workspace_access::models::{
     WorkspacePreflightReport, WorkspacePublishResult,
 };
 use crate::workspace_access::transfer::{
-    download_archive, import_archive, import_metadata_skeleton, DownloadResult, ImportResult,
+    check_disk_space, download_archive, import_archive, import_metadata_skeleton,
+    temporary_archive_path, DiskSpaceReport, DownloadResult, ImportResult,
 };
-use crate::workspace_access::upload::{cancel_upload, publish_workspace};
+use crate::workspace_access::upload::{cancel_upload, publish_workspace, remove_upload_state};
 use crate::workspace_access::validate::preflight_workspace;
 
 #[tauri::command]
@@ -55,6 +56,11 @@ pub async fn workspace_access_download_archive(
 }
 
 #[tauri::command]
+pub fn workspace_access_check_disk_space(path: String) -> DiskSpaceReport {
+    check_disk_space(&PathBuf::from(path))
+}
+
+#[tauri::command]
 pub fn workspace_access_import_archive(
     archive_path: String,
     workspace_base: String,
@@ -88,6 +94,38 @@ pub async fn workspace_access_publish(
         let _ = app.emit("workspace-access-upload-progress", progress);
     })
     .await
+}
+
+#[tauri::command]
+pub async fn workspace_access_create_and_publish(
+    app: tauri::AppHandle,
+    mut request: WorkspaceAccessPublishRequest,
+) -> Result<WorkspacePublishResult, String> {
+    let archive_path = temporary_archive_path(&request.workspace_name)?;
+    let created = create_workspace_archive(
+        &WorkspaceAccessPreflightRequest {
+            workspace_path: request.workspace_path.clone(),
+            game_preset: request.game_preset.clone(),
+            workspace_name: request.workspace_name.clone(),
+        },
+        &archive_path,
+    );
+    if let Err(error) = created {
+        let _ = std::fs::remove_file(&archive_path);
+        return Err(error);
+    }
+    request.archive_path = Some(archive_path.to_string_lossy().to_string());
+    use tauri::Emitter;
+    let result = publish_workspace(&request, |progress| {
+        let _ = app.emit("workspace-access-upload-progress", progress);
+    })
+    .await;
+    if result.is_err() {
+        let _ = cancel_upload(&request.worker_url, &archive_path).await;
+    }
+    remove_upload_state(&archive_path);
+    let _ = std::fs::remove_file(&archive_path);
+    result
 }
 
 #[tauri::command]
@@ -128,4 +166,29 @@ pub async fn workspace_access_download_entry(
         &expected_sha256,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn workspace_access_download_and_import_entry(
+    worker_url: String,
+    entry_id: String,
+    expected_sha256: String,
+    workspace_base: String,
+    workspace_name: String,
+    game_preset: String,
+) -> Result<ImportResult, String> {
+    let archive_path = temporary_archive_path(&entry_id)?;
+    let result = async {
+        download_entry(&worker_url, &entry_id, &archive_path, &expected_sha256).await?;
+        import_archive(
+            &archive_path,
+            &PathBuf::from(workspace_base),
+            &workspace_name,
+            &game_preset,
+        )
+    }
+    .await;
+    let _ = std::fs::remove_file(&archive_path);
+    let _ = std::fs::remove_file(archive_path.with_extension("ssmtws.part"));
+    result
 }

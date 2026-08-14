@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use futures_util::StreamExt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use sysinfo::Disks;
 
 use crate::workspace_access::archive::{validate_portable_metadata, validate_workspace_archive};
 use crate::workspace_access::models::PortableWorkspaceMetadataV1;
@@ -13,6 +14,7 @@ use crate::workspace_access::models::PortableWorkspaceMetadataV1;
 const MAX_ARCHIVE_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_UNCOMPRESSED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO: u64 = 1000;
+pub const RECOMMENDED_DOWNLOAD_FREE_BYTES: u64 = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +31,54 @@ pub struct ImportResult {
     pub workspace_name: String,
     pub file_count: u64,
     pub total_size: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskSpaceReport {
+    pub available_bytes: Option<u64>,
+    pub recommended_free_bytes: u64,
+    pub below_recommended: bool,
+}
+
+pub fn check_disk_space(path: &Path) -> DiskSpaceReport {
+    let existing_path = existing_ancestor(path).unwrap_or_else(|| path.to_path_buf());
+    let disks = Disks::new_with_refreshed_list();
+    let available_bytes = disks
+        .list()
+        .iter()
+        .filter(|disk| existing_path.starts_with(disk.mount_point()))
+        .max_by_key(|disk| disk.mount_point().components().count())
+        .map(|disk| disk.available_space());
+    DiskSpaceReport {
+        below_recommended: available_bytes
+            .is_some_and(|value| value < RECOMMENDED_DOWNLOAD_FREE_BYTES),
+        available_bytes,
+        recommended_free_bytes: RECOMMENDED_DOWNLOAD_FREE_BYTES,
+    }
+}
+
+pub fn temporary_archive_path(label: &str) -> Result<PathBuf, String> {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "TEMPORARY_ARCHIVE_PATH_FAILED")?
+        .as_nanos();
+    let directory = std::env::temp_dir().join("SSMT").join("WorkspaceAccess");
+    fs::create_dir_all(&directory).map_err(|_| "TEMPORARY_ARCHIVE_PATH_FAILED")?;
+    let label: String = label
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .take(32)
+        .collect();
+    Ok(directory.join(format!(
+        "{}-{}-{stamp}.ssmtws",
+        if label.is_empty() {
+            "workspace"
+        } else {
+            &label
+        },
+        std::process::id()
+    )))
 }
 
 pub async fn download_archive(
@@ -265,6 +315,14 @@ fn create_staging(base: &Path) -> Result<PathBuf, String> {
     let path = base.join(format!(".ssmtws-import-{}-{stamp}", std::process::id()));
     fs::create_dir(&path).map_err(|_| "IMPORT_STAGING_FAILED")?;
     Ok(path)
+}
+
+fn existing_ancestor(path: &Path) -> Option<PathBuf> {
+    let mut current = path.to_path_buf();
+    while !current.exists() {
+        current = current.parent()?.to_path_buf();
+    }
+    Some(current)
 }
 
 fn unique_workspace_name(base: &Path, name: &str) -> String {

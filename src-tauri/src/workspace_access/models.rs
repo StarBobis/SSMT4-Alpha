@@ -35,6 +35,8 @@ pub struct WorkspaceAccessPublishRequest {
     #[serde(default)]
     pub supersedes: Option<String>,
     #[serde(default)]
+    pub workspace_aliases: Option<Vec<String>>,
+    #[serde(default)]
     pub archive_path: Option<String>,
 }
 
@@ -125,7 +127,9 @@ pub struct PortableWorkspaceMetadataV1 {
 #[serde(rename_all = "camelCase")]
 pub struct PortableLodV1 {
     pub name: String,
+    #[serde(rename = "drawIB", alias = "drawIb")]
     pub draw_ib: Vec<HashAlias>,
+    #[serde(rename = "skipIB", alias = "skipIb")]
     pub skip_ib: Vec<SkipIbEntry>,
     pub vs_check: Vec<VsCheckEntry>,
 }

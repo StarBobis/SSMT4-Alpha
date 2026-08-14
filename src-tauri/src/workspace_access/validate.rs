@@ -695,14 +695,14 @@ fn validate_category_buffer(
         let byte_width = element.byte_width.trim().parse::<u64>();
         if byte_width.as_ref().is_err_and(|_| true)
             || byte_width.as_ref().is_ok_and(|value| *value == 0)
-            || element.extract_slot.trim().parse::<u32>().is_err()
+            || element.extract_slot.trim().is_empty()
             || element.category.trim().is_empty()
-            || !element.format.trim().starts_with("DXGI_FORMAT_")
+            || element.format.trim().is_empty()
         {
             errors.push(issue(
                 "INVALID_CATEGORY_LAYOUT",
                 relative(root, source),
-                "Category element ByteWidth, ExtractSlot, Category, and DXGI format are invalid.",
+                "Category element ByteWidth, ExtractSlot, Category, and Format must be present.",
             ));
             return;
         }
@@ -957,6 +957,52 @@ mod tests {
         assert!(errors
             .iter()
             .any(|issue| issue.code == "CATEGORY_BUFFER_STRIDE_MISMATCH"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepts_ssmt_category_layout_without_reinterpreting_slot_or_format() {
+        let root = std::env::temp_dir().join(format!(
+            "ssmt-workspace-access-category-layout-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let lod = root.join("LOD0");
+        fs::create_dir_all(&lod).unwrap();
+        fs::write(lod.join("mesh.ib"), [0_u8; 6]).unwrap();
+        fs::write(lod.join("position.buf"), [0_u8; 12]).unwrap();
+
+        let mut submesh = SubMeshJson::default();
+        submesh.vertex_count = 1;
+        submesh.index_count = 3;
+        submesh
+            .index_buffer_list
+            .push(crate::workspace::submesh_json::SubMeshIndexBuffer {
+                dxgi_format: "DXGI_FORMAT_R16_UINT".to_string(),
+                file_name: "mesh.ib".to_string(),
+            });
+        submesh
+            .category_buffer_list
+            .push(crate::workspace::submesh_json::SubMeshCategoryBuffer {
+                file_name: "position.buf".to_string(),
+                buffer_type: "Position".to_string(),
+                d3d11_element_list: vec![crate::workspace::submesh_json::SubMeshD3D11Element {
+                    semantic_name: "POSITION".to_string(),
+                    semantic_index: "0".to_string(),
+                    format: "R32G32B32_FLOAT".to_string(),
+                    byte_width: "12".to_string(),
+                    extract_slot: "vb0".to_string(),
+                    extract_technique: "pointlist".to_string(),
+                    category: "Position".to_string(),
+                    draw_category: "Position".to_string(),
+                }],
+            });
+
+        let source = lod.join("submesh.json");
+        fs::write(&source, serde_json::to_vec(&submesh).unwrap()).unwrap();
+        let mut errors = Vec::new();
+        validate_json_and_references(&source, &root, &mut errors);
+        assert!(errors.is_empty(), "{errors:?}");
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { ArrowDown, Edit, Plus, FolderAdd, FolderOpened, BrushFilled, Delete } from '@element-plus/icons-vue';
+import { ArrowDown, Edit, Plus, FolderAdd, FolderOpened, BrushFilled, Delete, UploadFilled, Download } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import type { DrawerCollapsedState } from './WorkPage.types';
 
@@ -14,9 +14,8 @@ const props = defineProps<{
   workspaceName: string;
   workspaceOptions: string[];
   workspaceModifiedTimes: Record<string, number>;
+  workspaceProvenance: { attribution: string; uploadedAt: string; aliases: string[] } | null;
   isSpecificIbDumpToggling: boolean;
-  isWorkspaceArchiveUploadActive: boolean;
-  isWorkspaceArchiveUploadCancelling: boolean;
 }>();
 
 type WorkspaceSortMode = 'date' | 'name';
@@ -39,13 +38,8 @@ const emit = defineEmits<{
   selectWorkspace: [name: string];
   folderMenu: [cmd: string];
   textureMenu: [cmd: unknown];
-  preflightWorkspace: [];
-  createWorkspaceArchive: [];
-  importWorkspaceArchive: [];
-  publishWorkspaceMetadata: [];
-  publishWorkspaceArchive: [];
-  cancelWorkspaceArchiveUpload: [];
-  browseWorkspaceLibrary: [];
+  openWorkspaceUpload: [];
+  openWorkspaceDownload: [];
   specificIbDumpToggle: [value: string | number | boolean];
 }>();
 
@@ -138,7 +132,25 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
                 <el-icon><Delete /></el-icon>
               </button>
             </el-tooltip>
+            <el-tooltip :content="t('workPage.actions.openWorkspaceUpload')" placement="bottom">
+              <button
+                type="button"
+                class="workspace-inline-action workspace-inline-action--secondary"
+                :class="{ 'is-disabled': !workspaceName }"
+                @click="workspaceName && emit('openWorkspaceUpload')"
+              >
+                <el-icon><UploadFilled /></el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip :content="t('workPage.actions.openWorkspaceDownload')" placement="bottom">
+              <button type="button" class="workspace-inline-action workspace-inline-action--secondary" @click="emit('openWorkspaceDownload')">
+                <el-icon><Download /></el-icon>
+              </button>
+            </el-tooltip>
           </div>
+          <p v-if="workspaceProvenance" class="workspace-provenance">
+            {{ t('workPage.ui.workspaceLibrarySource', { attribution: workspaceProvenance.attribution, uploadedAt: workspaceProvenance.uploadedAt }) }}
+          </p>
           </div>
         </div>
       </section>
@@ -253,35 +265,6 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
           <span>其它功能</span>
         </button>
         <div v-show="!drawerCollapsed.otherFunctions" class="side-drawer-body">
-          <div class="side-menu-list">
-            <button type="button" class="side-menu-trigger" @click="emit('preflightWorkspace')">
-              <span>{{ t('workPage.actions.preflightWorkspace') }}</span>
-            </button>
-            <button type="button" class="side-menu-trigger" @click="emit('createWorkspaceArchive')">
-              <span>{{ t('workPage.actions.createWorkspaceArchive') }}</span>
-            </button>
-            <button type="button" class="side-menu-trigger" @click="emit('importWorkspaceArchive')">
-              <span>{{ t('workPage.actions.importWorkspaceArchive') }}</span>
-            </button>
-            <button type="button" class="side-menu-trigger" @click="emit('publishWorkspaceMetadata')">
-              <span>{{ t('workPage.actions.publishWorkspaceMetadata') }}</span>
-            </button>
-            <button type="button" class="side-menu-trigger" @click="emit('publishWorkspaceArchive')">
-              <span>{{ t('workPage.actions.publishWorkspaceArchive') }}</span>
-            </button>
-            <button
-              v-if="isWorkspaceArchiveUploadActive"
-              type="button"
-              class="side-menu-trigger"
-              :disabled="isWorkspaceArchiveUploadCancelling"
-              @click="emit('cancelWorkspaceArchiveUpload')"
-            >
-              <span>{{ t('workPage.actions.cancelWorkspaceArchiveUpload') }}</span>
-            </button>
-            <button type="button" class="side-menu-trigger" @click="emit('browseWorkspaceLibrary')">
-              <span>{{ t('workPage.actions.browseWorkspaceLibrary') }}</span>
-            </button>
-          </div>
           <div class="specific-ib-dump-toggle">
             <div class="specific-ib-dump-toggle__header">
               <span>{{ t('workPage.actions.specificIbDump') }}</span>
@@ -678,6 +661,14 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
 
 .specific-ib-dump-toggle::before {
   display: none;
+}
+
+.workspace-provenance {
+  margin: 8px 0 0;
+  color: var(--work-crystal-text, rgba(255, 255, 255, 0.7));
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .workspace-sort-control {

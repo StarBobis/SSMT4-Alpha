@@ -2,6 +2,7 @@ const MAX_HEADER_RANGE = 64 * 1024;
 const MAX_MANIFEST_SIZE = 16 * 1024 * 1024;
 const MAX_DIRECTORY_RANGE = 16 * 1024 * 1024;
 const MAX_UNCOMPRESSED_SIZE = 2 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_SERVER_SHA256_VALIDATION_BYTES = 32 * 1024 * 1024;
 
 export async function validateR2Archive(env, objectKey, metadata) {
   if (!env.WORKSPACE_BUCKET || typeof env.WORKSPACE_BUCKET.get !== 'function') throw new Error('R2_VALIDATION_UNAVAILABLE');
@@ -29,11 +30,25 @@ export async function validateR2Archive(env, objectKey, metadata) {
     paths.add(file.path.toUpperCase());
   }
   await validateCentralDirectory(env, objectKey, manifest);
-  if (metadata.fullData.sha256) {
+  // A complete JS SHA-256 pass keeps a Worker request open for too long on
+  // ordinary large workspaces.  Their integrity is still checked by the
+  // desktop client before upload and after download; the Worker always checks
+  // the R2 object size and ZIP structure.  Keep an independent full pass for
+  // smaller archives where it is safely within the synchronous request budget.
+  const maxServerSha256Bytes = numberEnv(
+    env.SERVER_SHA256_VALIDATION_MAX_BYTES,
+    DEFAULT_MAX_SERVER_SHA256_VALIDATION_BYTES,
+  );
+  if (metadata.fullData.sha256 && metadata.fullData.size <= maxServerSha256Bytes) {
     const actualSha256 = await sha256R2Object(env, objectKey);
     if (actualSha256 !== metadata.fullData.sha256.toLowerCase()) throw new Error('ARCHIVE_SHA256_MISMATCH');
   }
   return manifest;
+}
+
+function numberEnv(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 async function validateCentralDirectory(env, objectKey, manifest) {
@@ -157,7 +172,8 @@ function parseStoredManifest(bytes) {
   if (bytes.length < 30 || readU32(bytes, 0) !== 0x04034b50) throw new Error('ARCHIVE_HEADER_INVALID');
   const flags = readU16(bytes, 6);
   const method = readU16(bytes, 8);
-  const compressedSize = readU32(bytes, 18);
+  const compressedSizeField = readU32(bytes, 18);
+  const uncompressedSizeField = readU32(bytes, 22);
   const nameLength = readU16(bytes, 26);
   const extraLength = readU16(bytes, 28);
   if ((flags & 0x1) !== 0 || method !== 0 || nameLength !== 13) throw new Error('ARCHIVE_MANIFEST_INVALID');
@@ -165,8 +181,36 @@ function parseStoredManifest(bytes) {
   const dataStart = nameStart + nameLength + extraLength;
   const name = new TextDecoder().decode(bytes.slice(nameStart, dataStart - extraLength));
   if (name !== 'manifest.json') throw new Error('ARCHIVE_MANIFEST_INVALID');
+  const extra = bytes.slice(nameStart + nameLength, dataStart);
+  const compressedSize = readZip64LocalSize(extra, compressedSizeField, uncompressedSizeField);
+  if (compressedSize === null) throw new Error('ARCHIVE_MANIFEST_INVALID');
   if (compressedSize > bytes.length - dataStart) throw new Error('ARCHIVE_MANIFEST_RANGE_REQUIRED');
   try { return JSON.parse(new TextDecoder().decode(bytes.slice(dataStart, dataStart + compressedSize))); } catch { throw new Error('ARCHIVE_MANIFEST_INVALID'); }
+}
+
+function readZip64LocalSize(extra, compressedSize, uncompressedSize) {
+  if (compressedSize !== 0xffffffff && uncompressedSize !== 0xffffffff) return compressedSize;
+  let cursor = 0;
+  while (cursor + 4 <= extra.length) {
+    const id = readU16(extra, cursor);
+    const size = readU16(extra, cursor + 2);
+    cursor += 4;
+    if (cursor + size > extra.length) return null;
+    if (id === 0x0001) {
+      const data = extra.slice(cursor, cursor + size);
+      let position = 0;
+      const read = () => {
+        const value = readU64(data, position);
+        position += 8;
+        return value;
+      };
+      if (uncompressedSize === 0xffffffff && read() === null) return null;
+      const expanded = compressedSize === 0xffffffff ? read() : compressedSize;
+      return expanded;
+    }
+    cursor += size;
+  }
+  return null;
 }
 
 function manifestRequiredLength(bytes) {
