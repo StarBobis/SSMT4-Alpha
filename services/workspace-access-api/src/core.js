@@ -171,6 +171,8 @@ export function createStatus(entryId, metadata, reviewThreshold = 209715200) {
     availability: 'active',
     moderation: { reviewRequired: metadata.fullData.available && metadata.fullData.size > reviewThreshold, reviewState: metadata.fullData.available && metadata.fullData.size > reviewThreshold ? 'pending' : 'not_required', reviewedAt: null },
     warning: { markedAt: null, reason: null },
+    metadataDownloadCount: 0,
+    fullPackageDownloadCount: 0,
     deleteAfter: null,
     replacementEntryId: null,
   };

@@ -127,6 +127,8 @@ type LibraryIndexEntry = {
   capturedAt: string | null;
   drawIB: string[];
   aliases: string[];
+  metadataDownloadCount: number;
+  fullPackageDownloadCount: number;
   fullDataAvailable: boolean;
   fullDataSize: number;
   availability: string;
@@ -446,6 +448,7 @@ const unavailableWorkspaceFullPackages = ref<string[]>([]);
 const workspaceAccessBusy = computed(() => workspacePublishing.value || workspaceDownloadingEntry.value !== null);
 const workspaceProvenance = ref<WorkspaceProvenance | null>(null);
 const workspaceLibraryQuery = ref('');
+const workspaceLibrarySort = ref<'time' | 'downloads'>('time');
 const workspaceLibraryEntries = ref<LibraryIndexEntry[]>([]);
 const workspaceLibraryLoading = ref(false);
 const workspaceUploadPercent = computed(() => {
@@ -1723,7 +1726,7 @@ const openWorkspaceUploadDialog = (): void => {
   }
   workspaceAccessDescription.value = '';
   workspaceAccessPublishName.value = workspaceName.value;
-  workspaceAccessAttribution.value = '';
+  workspaceAccessAttribution.value = appSettings.workspaceAccessAttribution;
   workspaceAccessAliases.value = '';
   workspaceAccessIncludeFullPackage.value = true;
   workspaceAccessDialog.value = 'upload';
@@ -1759,6 +1762,7 @@ const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
       attribution: workspaceAccessAttribution.value.trim() ? { mode: 'custom', displayName: workspaceAccessAttribution.value.trim() } : { mode: 'anonymous' },
       workspaceAliases: normalizedWorkspaceAliases(),
     };
+    appSettings.workspaceAccessAttribution = workspaceAccessAttribution.value.trim();
     const command = workspaceAccessIncludeFullPackage.value ? 'workspace_access_create_and_publish' : 'workspace_access_publish';
     const result = await invoke<WorkspacePublishResult>(command, { request });
     workspaceAccessDialog.value = null;
@@ -1784,6 +1788,8 @@ const workspaceLibraryEntriesSignature = (entries: LibraryIndexEntry[]): string 
     entry.uploadedAt,
     entry.fullDataAvailable,
     entry.fullDataSize,
+    entry.metadataDownloadCount ?? 0,
+    entry.fullPackageDownloadCount ?? 0,
     entry.metadataPath,
   ].join('\u0000'))
   .join('\u0001');
@@ -1835,7 +1841,10 @@ const openWorkspaceDownloadDialog = async (): Promise<void> => {
 
 const filteredWorkspaceLibraryEntries = () => {
   const query = workspaceLibraryQuery.value.trim().toLocaleLowerCase();
-  return workspaceLibraryEntries.value.filter((entry) => !query || [entry.workspaceName, entry.attribution, ...entry.drawIB, ...entry.aliases].join('\n').toLocaleLowerCase().includes(query));
+  const filtered = workspaceLibraryEntries.value.filter((entry) => !query || [entry.workspaceName, entry.description ?? '', entry.attribution, ...entry.drawIB, ...entry.aliases].join('\n').toLocaleLowerCase().includes(query));
+  return filtered.sort((left, right) => workspaceLibrarySort.value === 'downloads'
+    ? ((right.metadataDownloadCount ?? 0) + (right.fullPackageDownloadCount ?? 0)) - ((left.metadataDownloadCount ?? 0) + (left.fullPackageDownloadCount ?? 0)) || right.uploadedAt.localeCompare(left.uploadedAt)
+    : right.uploadedAt.localeCompare(left.uploadedAt));
 };
 
 const handleLibraryDownload = async (entry: LibraryIndexEntry, mode: 'metadata' | 'full'): Promise<void> => {
@@ -1888,6 +1897,14 @@ const handleLibraryDownload = async (entry: LibraryIndexEntry, mode: 'metadata' 
     );
     await refreshWorkspaces();
     await handleWorkspaceSelectionChange(imported.workspaceName);
+    void invoke('workspace_access_record_download', {
+      workerUrl: WORKSPACE_ACCESS_API_URL,
+      entryId: metadata.entryId,
+      kind: mode === 'metadata' ? 'metadata' : 'fullPackage',
+      proxyPort: workspaceAccessProxyPort(),
+    }).catch((error) => {
+      console.warn('Workspace download count was not recorded', error);
+    });
     workspaceAccessDialog.value = null;
     ElMessage.success(t('workPage.messages.workspaceArchiveImported', { name: imported.workspaceName, files: imported.fileCount }));
   } catch (error) {
@@ -3191,6 +3208,10 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
       <template v-else>
         <div class="workspace-library-toolbar">
           <el-input v-model="workspaceLibraryQuery" clearable :placeholder="t('workPage.placeholders.workspaceLibrarySearch')" />
+          <div class="workspace-library-sort" role="group" :aria-label="t('workPage.dialog.workspaceLibrarySortMessage')">
+            <el-button size="small" :type="workspaceLibrarySort === 'time' ? 'primary' : 'default'" @click="workspaceLibrarySort = 'time'">{{ t('workPage.actions.sortWorkspaceLibraryByTime') }}</el-button>
+            <el-button size="small" :type="workspaceLibrarySort === 'downloads' ? 'primary' : 'default'" @click="workspaceLibrarySort = 'downloads'">{{ t('workPage.actions.sortWorkspaceLibraryByDownloads') }}</el-button>
+          </div>
           <el-button text :loading="workspaceLibraryLoading" @click="loadWorkspaceLibraryForDialog({ forceRefresh: true })">{{ t('workPage.actions.refresh') }}</el-button>
         </div>
         <div v-loading="workspaceLibraryLoading" class="workspace-library-results glass-scrollbar">
@@ -3204,6 +3225,11 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
               </div>
               <p class="workspace-library-entry-attribution">{{ entry.attribution || 'anonymous' }}</p>
               <p v-if="entry.description" class="workspace-library-entry-description">{{ entry.description }}</p>
+              <p class="workspace-library-entry-stats">
+                {{ t('workPage.ui.workspaceLibraryUploadedAt', { time: new Date(entry.uploadedAt).toLocaleString() }) }} ·
+                {{ t('workPage.ui.workspaceLibraryMetadataDownloads', { count: entry.metadataDownloadCount ?? 0 }) }} ·
+                {{ t('workPage.ui.workspaceLibraryFullPackageDownloads', { count: entry.fullPackageDownloadCount ?? 0 }) }}
+              </p>
               <p v-if="entry.drawIB.length" class="workspace-library-entry-drawib">{{ entry.drawIB.join(' · ') }}</p>
               <p v-if="entry.aliases.length" class="workspace-library-entry-aliases">{{ entry.aliases.join(' · ') }}</p>
             </div>
@@ -3613,6 +3639,12 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   flex: 1;
 }
 
+.workspace-library-sort {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 .workspace-library-results {
   display: flex;
   flex-direction: column;
@@ -3682,6 +3714,13 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   -webkit-line-clamp: 2;
 }
 
+.workspace-library-entry-stats {
+  margin: 8px 0 0;
+  color: rgba(var(--theme-surface-tint-rgb), 0.82);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .workspace-library-entry-drawib {
   color: rgba(var(--theme-surface-tint-rgb), 0.88);
 }
@@ -3693,6 +3732,15 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
 }
 
 @media (max-width: 640px) {
+  .workspace-library-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .workspace-library-sort {
+    width: 100%;
+  }
+
   .workspace-library-entry {
     align-items: stretch;
     flex-direction: column;

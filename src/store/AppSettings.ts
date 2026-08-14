@@ -48,6 +48,9 @@ const normalizeWorkspaceAccessProxyPort = (value: unknown): number => {
 	return numericValue
 }
 
+const normalizeWorkspaceAccessAttribution = (value: unknown): string =>
+	typeof value === 'string' ? value.trim().slice(0, 128) : ''
+
 const normalizeTextureMarkStylePreference = (
 	value: unknown
 ): TextureMarkStylePreference => {
@@ -194,6 +197,7 @@ export class AppSettings {
 	uiScale: number = 1
 	DBMTWorkFolder: string = ''
 	workspaceAccessProxyPort: number = 0
+	workspaceAccessAttribution: string = ''
 	CurrentGameName: string = 'Default'
 	githubToken: string = ''
 	includePrereleaseUpdates: boolean = true
@@ -276,6 +280,7 @@ export class AppSettings {
 		this.uiScale = normalizeAppUiScale(init?.uiScale)
 		this.DBMTWorkFolder = init?.DBMTWorkFolder ?? this.DBMTWorkFolder
 		this.workspaceAccessProxyPort = normalizeWorkspaceAccessProxyPort(init?.workspaceAccessProxyPort)
+		this.workspaceAccessAttribution = normalizeWorkspaceAccessAttribution(init?.workspaceAccessAttribution)
 		this.CurrentGameName = init?.CurrentGameName ?? this.CurrentGameName
 		this.githubToken = init?.githubToken ?? this.githubToken
 		this.includePrereleaseUpdates = init?.includePrereleaseUpdates ?? this.includePrereleaseUpdates
@@ -372,6 +377,7 @@ export class AppSettings {
 			uiScale: this.uiScale,
 			DBMTWorkFolder: this.DBMTWorkFolder,
 			workspaceAccessProxyPort: normalizeWorkspaceAccessProxyPort(this.workspaceAccessProxyPort),
+			workspaceAccessAttribution: normalizeWorkspaceAccessAttribution(this.workspaceAccessAttribution),
 			CurrentGameName: this.CurrentGameName,
 			githubToken: this.githubToken,
 			includePrereleaseUpdates: this.includePrereleaseUpdates,

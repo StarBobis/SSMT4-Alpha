@@ -33,6 +33,8 @@ async function main() {
         capturedAt: metadata.capturedAt ?? null,
         drawIB: [...new Set(drawIB)].sort(),
         aliases: [...new Set(aliases)].sort(),
+        metadataDownloadCount: Number.isSafeInteger(status.metadataDownloadCount) ? status.metadataDownloadCount : 0,
+        fullPackageDownloadCount: Number.isSafeInteger(status.fullPackageDownloadCount) ? status.fullPackageDownloadCount : 0,
         fullDataAvailable: metadata.fullData?.available === true,
         fullDataSize: metadata.fullData?.available === true ? metadata.fullData.size : 0,
         availability: status.availability,

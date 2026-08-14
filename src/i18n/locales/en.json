@@ -409,6 +409,7 @@
     "general": {
       "githubToken": "GitHub Token",
       "workspaceAccessProxyPort": "Workspace Library Proxy Port",
+      "workspaceAccessProxyPortPlaceholder": "For example 7890; leave empty for system proxy",
       "showWindowShortcut": "Alt+F Show Window Shortcut",
       "githubTokenPlaceholder": "Optional personal access token",
       "includePrereleaseUpdates": "Include Pre-release Updates",
@@ -785,7 +786,10 @@
       "workspaceLibrarySort": "uploadedAt",
       "workspaceCapturedAt": "2026-08-14T00:00:00Z",
       "workspaceGameBuild": "Game build",
-      "workspaceAliases": "e.g. character name, variant, author label"
+      "workspaceAliases": "e.g. character name, variant, author label",
+      "workspaceDescription": "Describe this workspace",
+      "workspaceAttribution": "Your public display name",
+      "workspaceLibrarySearch": "Search workspace, attribution, DrawIB, or alias"
     },
     "ui": {
       "selectFrameAnalysisFolder": "Select FrameAnalysis folder",
@@ -802,6 +806,9 @@
       "specificIbDumpHint": "Disable Mods include and only dump the DrawIB list shown in this LOD.",
       "workspaceName": "Workspace",
       "workspaceLibrarySource": "Library source: {attribution} · uploaded {uploadedAt}"
+      ,"workspaceLibraryUploadedAt": "Uploaded {time}",
+      "workspaceLibraryMetadataDownloads": "Metadata {count}",
+      "workspaceLibraryFullPackageDownloads": "Full package {count}"
     },
     "actions": {
       "refresh": "Refresh",
@@ -837,6 +844,8 @@
       ,"browseWorkspaceLibrary": "Browse Public Workspace Library",
       "openWorkspaceUpload": "Upload workspace",
       "openWorkspaceDownload": "Download workspace",
+      "sortWorkspaceLibraryByTime": "By time",
+      "sortWorkspaceLibraryByDownloads": "By downloads",
       "importWorkspaceMetadata": "Import metadata only",
       "downloadWorkspacePackage": "Download full package"
     },

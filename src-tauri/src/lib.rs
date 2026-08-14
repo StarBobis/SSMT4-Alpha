@@ -191,6 +191,7 @@ pub fn run() {
             workspace_access::commands::workspace_access_fetch_index,
             workspace_access::commands::workspace_access_fetch_metadata,
             workspace_access::commands::workspace_access_download_entry,
+            workspace_access::commands::workspace_access_record_download,
             workspace_access::commands::workspace_access_download_and_import_entry,
             commands::recycle_bin::move_file_to_recycle_bin,
             commands::recycle_bin::move_dir_to_recycle_bin,

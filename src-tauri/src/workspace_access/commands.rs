@@ -5,7 +5,7 @@ use crate::workspace_access::archive::{
     ArchiveValidationReport,
 };
 use crate::workspace_access::library::{
-    download_entry, fetch_index, fetch_metadata, LibraryDownloadResult, LibraryIndexV1,
+    download_entry, fetch_index, fetch_metadata, record_download, LibraryDownloadResult, LibraryIndexV1,
     PublicMetadataDocument,
 };
 use crate::workspace_access::models::{
@@ -179,6 +179,16 @@ pub async fn workspace_access_download_entry(
         proxy_port,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn workspace_access_record_download(
+    worker_url: String,
+    entry_id: String,
+    kind: String,
+    proxy_port: Option<u16>,
+) -> Result<(), String> {
+    record_download(&worker_url, &entry_id, &kind, proxy_port).await
 }
 
 #[tauri::command]

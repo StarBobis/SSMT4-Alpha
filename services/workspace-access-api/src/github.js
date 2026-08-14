@@ -48,6 +48,42 @@ export async function fetchPublicEntry(env, gamePreset, entryId) {
   return { metadata: await metadataResponse.json(), status: await statusResponse.json() };
 }
 
+export async function publishDownloadCounts(env, gamePreset, entryId, counts) {
+  const token = await githubToken(env);
+  const repository = `/repos/${env.PUBLIC_REPO_OWNER}/${env.PUBLIC_REPO_NAME}`;
+  const statusPath = `games/${gamePreset}/entries/${entryId}/status.json`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const current = await githubJson(env, token, `${repository}/contents/${statusPath}?ref=main`);
+      const status = decodeGithubContent(current);
+      const nextStatus = {
+        ...status,
+        metadataDownloadCount: Math.max(Number(status.metadataDownloadCount) || 0, Number(counts.metadataDownloadCount) || 0),
+        fullPackageDownloadCount: Math.max(Number(status.fullPackageDownloadCount) || 0, Number(counts.fullPackageDownloadCount) || 0),
+      };
+      const statusBlob = await githubJson(env, token, `${repository}/git/blobs`, {
+        method: 'POST', body: JSON.stringify({ content: JSON.stringify(nextStatus, null, 2), encoding: 'utf-8' }),
+      });
+      const ref = await githubJson(env, token, `${repository}/git/ref/heads/main`);
+      const commit = await githubJson(env, token, `${repository}/git/commits/${ref.object.sha}`);
+      const tree = await githubJson(env, token, `${repository}/git/trees`, {
+        method: 'POST', body: JSON.stringify({ base_tree: commit.tree.sha, tree: [
+          { path: statusPath, mode: '100644', type: 'blob', sha: statusBlob.sha },
+        ] }),
+      });
+      const nextCommit = await githubJson(env, token, `${repository}/git/commits`, {
+        method: 'POST', body: JSON.stringify({ message: `Record workspace downloads for ${entryId}`, tree: tree.sha, parents: [ref.object.sha] }),
+      });
+      await githubJson(env, token, `${repository}/git/refs/heads/main`, {
+        method: 'PATCH', body: JSON.stringify({ sha: nextCommit.sha, force: false }),
+      });
+      return;
+    } catch (error) {
+      if (![409, 422].includes(error?.status) || attempt === 2) throw error;
+    }
+  }
+}
+
 export async function removeExpiredEntries(env, now = new Date().toISOString()) {
   const token = await githubToken(env);
   const repository = `/repos/${env.PUBLIC_REPO_OWNER}/${env.PUBLIC_REPO_NAME}`;
@@ -127,6 +163,13 @@ async function readBlobJson(env, token, repository, sha) {
   const blob = await githubJson(env, token, `${repository}/git/blobs/${sha}`);
   if (blob.encoding !== 'base64' || typeof blob.content !== 'string') throw new Error('GITHUB_BLOB_INVALID');
   const binary = atob(blob.content.replace(/\s+/gu, ''));
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+function decodeGithubContent(content) {
+  if (content?.encoding !== 'base64' || typeof content.content !== 'string') throw new Error('GITHUB_BLOB_INVALID');
+  const binary = atob(content.content.replace(/\s+/gu, ''));
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(bytes));
 }

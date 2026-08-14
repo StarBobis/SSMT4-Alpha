@@ -1,6 +1,6 @@
 import { attachServerEntryId, createStatus, createUuidV7, ERROR_CODES, json, apiError, normalizeMetadata } from './core.js';
 import { validateR2Archive } from './archive.js';
-import { fetchPublicEntry, publishEntry, removeExpiredEntries } from './github.js';
+import { fetchPublicEntry, publishDownloadCounts, publishEntry, removeExpiredEntries } from './github.js';
 import { abortMultipart, completeMultipart, createMultipart, deleteObject, headObject, presignObject, presignPart } from './r2.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -19,6 +19,8 @@ export default {
       if (request.method === 'DELETE' && cancelMatch) return cancelSubmission(env, cancelMatch[1]);
       const downloadMatch = url.pathname.match(/^\/v1\/entries\/([^/]+)\/download$/u);
       if (request.method === 'GET' && downloadMatch) return downloadEntry(env, downloadMatch[1]);
+      const downloadRecordMatch = url.pathname.match(/^\/v1\/entries\/([^/]+)\/downloads$/u);
+      if (request.method === 'POST' && downloadRecordMatch) return recordEntryDownload(request, env, ctx, downloadRecordMatch[1]);
       return apiError('NOT_FOUND', 404);
     } catch (error) {
       console.error('workspace-api request failed', error instanceof Error ? error.name : 'unknown');
@@ -33,6 +35,7 @@ export default {
 async function cleanupOldQuotaRecords(env) {
   const cutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   await env.DB.prepare('DELETE FROM daily_quota WHERE utc_date < ?1').bind(cutoff).run();
+  await env.DB.prepare('DELETE FROM entry_download_events WHERE utc_date < ?1').bind(cutoff).run();
 }
 
 async function cleanupStaleSubmissions(env) {
@@ -257,6 +260,42 @@ async function downloadEntry(env, entryId) {
     return apiError('PUBLIC_ENTRY_UNAVAILABLE', 503);
   }
   return json({ entryId, url: await presignObject(env, row.object_key) });
+}
+
+async function recordEntryDownload(request, env, ctx, entryId) {
+  const row = await env.DB.prepare('SELECT entry_id, status, metadata_json, metadata_download_count, full_package_download_count FROM submissions WHERE entry_id = ?1').bind(entryId).first();
+  if (!row || row.status !== 'published') return apiError('ENTRY_NOT_FOUND', 404);
+  const body = await readJsonLimited(request);
+  const kind = body?.kind === 'metadata' || body?.kind === 'fullPackage' ? body.kind : null;
+  if (!kind) return apiError('DOWNLOAD_KIND_INVALID');
+  let metadata;
+  try {
+    metadata = JSON.parse(row.metadata_json);
+    const publicEntry = await fetchPublicEntry(env, metadata.gamePreset, entryId);
+    if (!publicEntry || publicEntry.status?.availability === 'expired') return apiError('ENTRY_NOT_FOUND', 404);
+  } catch {
+    return apiError('PUBLIC_ENTRY_UNAVAILABLE', 503);
+  }
+  const utcDate = new Date().toISOString().slice(0, 10);
+  const ipKey = await ipDigest(env.RATE_LIMIT_SECRET, request.headers.get('CF-Connecting-IP') || 'unknown', utcDate);
+  const event = await env.DB.prepare('INSERT INTO entry_download_events (entry_id, download_kind, utc_date, ip_key) VALUES (?1, ?2, ?3, ?4) ON CONFLICT DO NOTHING RETURNING entry_id')
+    .bind(entryId, kind === 'metadata' ? 'metadata' : 'full_package', utcDate, ipKey).first();
+  let counts;
+  if (event) {
+    const field = kind === 'metadata' ? 'metadata_download_count' : 'full_package_download_count';
+    counts = await env.DB.prepare(`UPDATE submissions SET ${field} = ${field} + 1, updated_at = ?2 WHERE entry_id = ?1 RETURNING metadata_download_count, full_package_download_count`)
+      .bind(entryId, new Date().toISOString()).first();
+  } else {
+    counts = await env.DB.prepare('SELECT metadata_download_count, full_package_download_count FROM submissions WHERE entry_id = ?1').bind(entryId).first();
+  }
+  const normalizedCounts = {
+    metadataDownloadCount: Number(counts?.metadata_download_count || 0),
+    fullPackageDownloadCount: Number(counts?.full_package_download_count || 0),
+  };
+  ctx.waitUntil(publishDownloadCounts(env, metadata.gamePreset, entryId, normalizedCounts).catch((error) => {
+    console.error('workspace-api download count publish failed', error instanceof Error ? error.name : 'unknown');
+  }));
+  return json({ entryId, ...normalizedCounts });
 }
 
 async function discardCompletedSubmission(env, row) {

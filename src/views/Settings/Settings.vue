@@ -9,7 +9,7 @@ import {
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { getVersion } from '@tauri-apps/api/app';
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   ArrowRight,
@@ -42,6 +42,29 @@ const languageOptions = computed(() => [
 ]);
 
 const appVersion = ref('1.0.0');
+const workspaceAccessProxyPortInput = ref('');
+const workspaceAccessProxyPortInvalid = computed(() => {
+  const value = workspaceAccessProxyPortInput.value.trim();
+  if (!value) return false;
+  if (!/^\d+$/u.test(value)) return true;
+  const port = Number(value);
+  return !Number.isInteger(port) || port < 1 || port > 65535;
+});
+const applyWorkspaceAccessProxyPort = (value: string): void => {
+  workspaceAccessProxyPortInput.value = value;
+  const normalized = value.trim();
+  if (!normalized) {
+    appSettings.workspaceAccessProxyPort = 0;
+  } else if (!workspaceAccessProxyPortInvalid.value) {
+    appSettings.workspaceAccessProxyPort = Number(normalized);
+  }
+};
+watch(() => appSettings.workspaceAccessProxyPort, (port) => {
+  const normalized = port > 0 ? String(port) : '';
+  if (!workspaceAccessProxyPortInvalid.value && workspaceAccessProxyPortInput.value !== normalized) {
+    workspaceAccessProxyPortInput.value = normalized;
+  }
+}, { immediate: true });
 
 const formatMaskOpacity = (value: number) => `${value.toFixed(1)}x`;
 const uiScalePercent = computed({
@@ -146,13 +169,13 @@ const openUsageDocs = async () => {
                   </div>
                 </div>
                 <div class="setting-control compact-control">
-                  <el-input-number
-                    v-model="appSettings.workspaceAccessProxyPort"
+                  <el-input
+                    :model-value="workspaceAccessProxyPortInput"
+                    @update:model-value="applyWorkspaceAccessProxyPort"
                     :aria-label="t('settings.general.workspaceAccessProxyPort')"
-                    :min="0"
-                    :max="65535"
-                    :step="1"
-                    controls-position="right"
+                    inputmode="numeric"
+                    :class="{ 'workspace-access-proxy-input--invalid': workspaceAccessProxyPortInvalid }"
+                    :placeholder="t('settings.general.workspaceAccessProxyPortPlaceholder')"
                   />
                 </div>
               </div>
@@ -496,6 +519,15 @@ const openUsageDocs = async () => {
 .compact-control {
   width: min(100%, 220px);
   justify-self: end;
+}
+
+.workspace-access-proxy-input--invalid :deep(.el-input__wrapper) {
+  background: rgba(230, 162, 60, 0.16);
+  box-shadow: 0 0 0 1px rgba(230, 162, 60, 0.72) inset;
+}
+
+.workspace-access-proxy-input--invalid :deep(.el-input__inner) {
+  color: rgba(255, 224, 145, 1);
 }
 
 .path-control {

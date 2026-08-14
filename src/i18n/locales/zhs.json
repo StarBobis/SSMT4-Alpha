@@ -409,6 +409,7 @@
     "general": {
       "githubToken": "GitHub Token",
       "workspaceAccessProxyPort": "工作空间公共库代理端口",
+      "workspaceAccessProxyPortPlaceholder": "例如 7890；留空使用系统代理",
       "showWindowShortcut": "Alt+F 唤起窗口快捷键",
       "githubTokenPlaceholder": "可选的个人访问令牌",
       "includePrereleaseUpdates": "包含预发布更新",
@@ -785,7 +786,10 @@
       "workspaceLibrarySort": "uploadedAt",
       "workspaceCapturedAt": "2026-08-14T00:00:00Z",
       "workspaceGameBuild": "游戏版本",
-      "workspaceAliases": "例如角色名、变体、作者标签"
+      "workspaceAliases": "例如角色名、变体、作者标签",
+      "workspaceDescription": "描述这个工作空间",
+      "workspaceAttribution": "公开显示名称",
+      "workspaceLibrarySearch": "搜索工作空间、署名、DrawIB 或别名"
     },
     "ui": {
       "selectFrameAnalysisFolder": "选择 FrameAnalysis 文件夹",
@@ -802,6 +806,9 @@
       "specificIbDumpHint": "禁用 Mods 引用，并且只对当前 LOD DrawIB 列表里的 IB 执行 Dump。",
       "workspaceName": "工作空间",
       "workspaceLibrarySource": "库来源：{attribution} · 上传于 {uploadedAt}"
+      ,"workspaceLibraryUploadedAt": "上传于 {time}",
+      "workspaceLibraryMetadataDownloads": "元数据 {count} 次",
+      "workspaceLibraryFullPackageDownloads": "完整包 {count} 次"
     },
     "actions": {
       "refresh": "刷新",
@@ -837,6 +844,8 @@
       ,"browseWorkspaceLibrary": "浏览公共工作空间库",
       "openWorkspaceUpload": "上传工作空间",
       "openWorkspaceDownload": "下载工作空间",
+      "sortWorkspaceLibraryByTime": "按时间",
+      "sortWorkspaceLibraryByDownloads": "按下载量",
       "importWorkspaceMetadata": "仅导入元数据",
       "downloadWorkspacePackage": "下载完整包"
     },

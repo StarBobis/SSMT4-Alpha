@@ -35,6 +35,10 @@ pub struct LibraryIndexEntry {
     #[serde(rename = "drawIB", alias = "drawIb")]
     pub draw_ib: Vec<String>,
     pub aliases: Vec<String>,
+    #[serde(default)]
+    pub metadata_download_count: u64,
+    #[serde(default)]
+    pub full_package_download_count: u64,
     pub full_data_available: bool,
     pub full_data_size: u64,
     pub availability: String,
@@ -294,6 +298,31 @@ pub async fn download_entry(
         entry_id: entry_id.to_string(),
         archive,
     })
+}
+
+pub async fn record_download(
+    worker_url: &str,
+    entry_id: &str,
+    kind: &str,
+    proxy_port: Option<u16>,
+) -> Result<(), String> {
+    let worker = normalize_worker_url(worker_url)?;
+    if !is_uuid_like(entry_id) {
+        return Err("LIBRARY_ENTRY_ID_INVALID".to_string());
+    }
+    if !matches!(kind, "metadata" | "fullPackage") {
+        return Err("LIBRARY_DOWNLOAD_KIND_INVALID".to_string());
+    }
+    let response = workspace_access_http_client(proxy_port, None)?
+        .post(format!("{worker}/v1/entries/{entry_id}/downloads"))
+        .json(&serde_json::json!({ "kind": kind }))
+        .send()
+        .await
+        .map_err(|_| "WORKSPACE_SERVICE_UNAVAILABLE")?;
+    if !response.status().is_success() {
+        return Err("LIBRARY_DOWNLOAD_RECORD_FAILED".to_string());
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]

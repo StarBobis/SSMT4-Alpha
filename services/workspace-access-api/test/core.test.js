@@ -52,7 +52,10 @@ test('creates server UUIDv7 and review status', () => {
   const entryId = createUuidV7(1723593600000);
   assert.match(entryId, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   const metadata = normalizeMetadata({ ...draft, fullData: { available: true, sha256: 'a'.repeat(64), size: 209715201, uncompressedSize: 1, fileCount: 1 } }, new Date().toISOString()).value;
-  assert.equal(createStatus(entryId, metadata).moderation.reviewRequired, true);
+  const status = createStatus(entryId, metadata);
+  assert.equal(status.moderation.reviewRequired, true);
+  assert.equal(status.metadataDownloadCount, 0);
+  assert.equal(status.fullPackageDownloadCount, 0);
 });
 
 test('metadata normalization leaves the server-owned entry ID out of client control', () => {

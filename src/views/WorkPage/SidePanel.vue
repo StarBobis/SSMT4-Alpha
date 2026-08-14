@@ -77,7 +77,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
           />
 
           <div class="workspace-action-strip workspace-action-strip--management">
-            <el-tooltip :content="t('workPage.actions.createWorkspace')" placement="bottom">
+            <el-tooltip :content="t('workPage.actions.createWorkspace')" placement="top">
               <button
                 type="button"
                 class="workspace-inline-action workspace-inline-action--primary"
@@ -87,7 +87,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
                 <el-icon><Plus /></el-icon>
               </button>
             </el-tooltip>
-            <el-tooltip :content="t('workPage.actions.createWorkspaceFromCurrentDrawIB')" placement="bottom">
+            <el-tooltip :content="t('workPage.actions.createWorkspaceFromCurrentDrawIB')" placement="top">
               <button
                 type="button"
                 class="workspace-inline-action workspace-inline-action--secondary"
@@ -97,12 +97,12 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
                 <el-icon><FolderAdd /></el-icon>
               </button>
             </el-tooltip>
-            <el-tooltip :content="t('workPage.actions.openWorkspaceFolder')" placement="bottom">
+            <el-tooltip :content="t('workPage.actions.openWorkspaceFolder')" placement="top">
               <div class="workspace-icon-btn" role="button" tabindex="0" @click="emit('openWorkspace')">
                 <el-icon><FolderOpened /></el-icon>
               </div>
             </el-tooltip>
-            <el-tooltip :content="t('workPage.actions.openGeneratedModFolder')" placement="bottom">
+            <el-tooltip :content="t('workPage.actions.openGeneratedModFolder')" placement="top">
               <div
                 class="workspace-icon-btn workspace-icon-btn--generated"
                 :class="{ 'is-disabled': !workspaceName }"
@@ -113,7 +113,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
                 <el-icon><FolderAdd /></el-icon>
               </div>
             </el-tooltip>
-            <el-tooltip :content="t('workPage.actions.clearWorkspace')" placement="bottom">
+            <el-tooltip :content="t('workPage.actions.clearWorkspace')" placement="top">
               <div
                 class="workspace-icon-btn workspace-icon-btn--warning"
                 :class="{ 'is-disabled': !workspaceName }"
@@ -124,7 +124,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
                 <el-icon class="workspace-clean-icon"><BrushFilled /></el-icon>
               </div>
             </el-tooltip>
-            <el-tooltip :content="t('workPage.actions.deleteWorkspace')" placement="bottom">
+            <el-tooltip :content="t('workPage.actions.deleteWorkspace')" placement="top">
               <button
                 type="button"
                 class="workspace-inline-action workspace-inline-action--danger"
@@ -137,7 +137,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
             <el-tooltip :content="t('workPage.actions.openWorkspaceUpload')" placement="bottom">
               <button
                 type="button"
-                class="workspace-inline-action workspace-inline-action--secondary"
+                class="workspace-inline-action workspace-inline-action--library"
                 :class="{ 'is-disabled': !workspaceName, 'is-uploading': workspaceUploadActive }"
                 :disabled="workspaceUploadActive"
                 @click="workspaceName && emit('openWorkspaceUpload')"
@@ -151,7 +151,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
               </button>
             </el-tooltip>
             <el-tooltip :content="t('workPage.actions.openWorkspaceDownload')" placement="bottom">
-              <button type="button" class="workspace-inline-action workspace-inline-action--secondary" @click="emit('openWorkspaceDownload')">
+              <button type="button" class="workspace-inline-action workspace-inline-action--library" @click="emit('openWorkspaceDownload')">
                 <el-icon><Download /></el-icon>
               </button>
             </el-tooltip>
@@ -202,6 +202,23 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
             >
               <span class="workspace-list-name">{{ name }}</span>
             </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="side-drawer specific-ib-dump-drawer">
+        <div class="side-drawer-body">
+          <div class="specific-ib-dump-toggle">
+            <div class="specific-ib-dump-toggle__header">
+              <span>{{ t('workPage.actions.specificIbDump') }}</span>
+              <el-switch
+                v-model="useSpecificIbDump"
+                :loading="isSpecificIbDumpToggling"
+                style="--el-switch-on-color: var(--theme-success);"
+                @change="(val: string | number | boolean) => emit('specificIbDumpToggle', val)"
+              />
+            </div>
+            <p class="specific-ib-dump-toggle__hint">{{ t('workPage.ui.specificIbDumpHint') }}</p>
           </div>
         </div>
       </section>
@@ -263,30 +280,6 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
         </div>
       </section>
 
-      <section class="side-drawer" :class="{ 'is-collapsed': drawerCollapsed.otherFunctions }">
-        <button
-          type="button"
-          class="side-drawer-head"
-          @click="toggleDrawer('otherFunctions')"
-        >
-          <el-icon class="side-drawer-arrow"><ArrowDown /></el-icon>
-          <span>其它功能</span>
-        </button>
-        <div v-show="!drawerCollapsed.otherFunctions" class="side-drawer-body">
-          <div class="specific-ib-dump-toggle">
-            <div class="specific-ib-dump-toggle__header">
-              <span>{{ t('workPage.actions.specificIbDump') }}</span>
-              <el-switch
-                v-model="useSpecificIbDump"
-                :loading="isSpecificIbDumpToggling"
-                style="--el-switch-on-color: var(--theme-success);"
-                @change="(val: string | number | boolean) => emit('specificIbDumpToggle', val)"
-              />
-            </div>
-            <p class="specific-ib-dump-toggle__hint">{{ t('workPage.ui.specificIbDumpHint') }}</p>
-          </div>
-        </div>
-      </section>
     </div>
   </aside>
 </template>
@@ -561,6 +554,19 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
   color: rgba(var(--theme-text-secondary-rgb), 0.94);
 }
 
+.workspace-inline-action--library {
+  border-color: rgba(177, 121, 255, 0.56);
+  background: linear-gradient(135deg, rgba(137, 83, 224, 0.52), rgba(96, 57, 173, 0.46));
+  color: rgba(244, 233, 255, 0.98);
+}
+
+.workspace-inline-action--library:hover {
+  border-color: rgba(209, 172, 255, 0.84);
+  background: linear-gradient(135deg, rgba(156, 101, 244, 0.70), rgba(111, 68, 199, 0.62));
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(124, 72, 210, 0.28);
+}
+
 .workspace-inline-action--danger {
   border-color: rgba(245, 108, 108, 0.34);
   background: rgba(245, 108, 108, 0.12);
@@ -594,6 +600,7 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
 }
 
 .workspace-list-item {
+  box-sizing: border-box;
   width: 100%;
   min-height: 34px;
   display: flex;
@@ -629,7 +636,8 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
 }
 
 .workspace-list-item.is-active {
-  border-color: rgba(var(--theme-surface-tint-rgb), 0.34);
+  border-width: 2px;
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.66);
   background: rgba(var(--theme-surface-tint-rgb), 0.10);
   color: rgba(var(--theme-text-primary-rgb), 0.98);
   box-shadow: 0 6px 18px rgba(var(--theme-surface-tint-rgb), 0.08);
