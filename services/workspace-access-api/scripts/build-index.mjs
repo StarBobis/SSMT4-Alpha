@@ -26,6 +26,7 @@ async function main() {
       const item = {
         entryId,
         workspaceName: metadata.workspaceName,
+        description: metadata.description ?? null,
         attribution,
         attributionVerified: false,
         uploadedAt: metadata.uploadedAt,

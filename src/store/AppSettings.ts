@@ -371,6 +371,7 @@ export class AppSettings {
 			globalDimMaskStrength: this.globalDimMaskStrength,
 			uiScale: this.uiScale,
 			DBMTWorkFolder: this.DBMTWorkFolder,
+			workspaceAccessProxyPort: normalizeWorkspaceAccessProxyPort(this.workspaceAccessProxyPort),
 			CurrentGameName: this.CurrentGameName,
 			githubToken: this.githubToken,
 			includePrereleaseUpdates: this.includePrereleaseUpdates,

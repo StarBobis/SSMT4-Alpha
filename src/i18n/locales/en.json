@@ -739,6 +739,7 @@
       "importWorkspaceTitle": "Import Workspace Package",
       "importWorkspaceNameMessage": "Name for the imported workspace",
       "workspacePublishTitle": "Publish Workspace",
+      "workspacePublishNameMessage": "Workspace name in the public library",
       "workspaceAccessEndpointMessage": "Workspace access service URL",
       "workspaceDescriptionMessage": "Public description (optional)",
       "workspaceCapturedAtMessage": "Capture time in RFC 3339 format",
@@ -907,6 +908,7 @@
       "createWorkspaceFailed": "Failed to create workspace: {name}",
       "enterWorkspaceName": "Please enter a workspace name",
       "workspaceDescription": "Describe this workspace",
+      "workspacePublishName": "Enter the public library workspace name",
       "workspaceAttribution": "Your public display name",
       "confirmCreateWorkspace": "Create a workspace named \"{name}\"?",
       "workspaceAlreadyExists": "Workspace already exists",
@@ -943,6 +945,7 @@
       "workspaceLibraryNoMatches": "No matching workspace entries",
       "workspaceLibraryInvalidSelection": "That workspace entry was not found",
       "workspaceLibraryFailed": "Public workspace library request failed",
+      "workspacePublishNameInvalid": "Enter a valid public workspace name",
       "workspaceMetadataImported": "Imported metadata skeleton: {name}",
       "workspaceFullPackageUnavailable": "This workspace's complete package is unavailable. You can still import its metadata only."
     }

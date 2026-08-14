@@ -739,6 +739,7 @@
       "importWorkspaceTitle": "导入工作空间包",
       "importWorkspaceNameMessage": "输入导入后的工作空间名称",
       "workspacePublishTitle": "发布工作空间",
+      "workspacePublishNameMessage": "公共库中的工作空间名称",
       "workspaceAccessEndpointMessage": "工作空间公共库服务地址",
       "workspaceDescriptionMessage": "公开说明（可选）",
       "workspaceCapturedAtMessage": "采集时间（RFC 3339 格式）",
@@ -907,6 +908,7 @@
       "createWorkspaceFailed": "创建工作空间失败: {name}",
       "enterWorkspaceName": "请输入工作空间名称",
       "workspaceDescription": "描述这个工作空间",
+      "workspacePublishName": "输入公共库中显示的工作空间名称",
       "workspaceAttribution": "公开显示名称",
       "confirmCreateWorkspace": "确认创建名为 \"{name}\" 的工作空间？",
       "workspaceAlreadyExists": "工作空间已存在",
@@ -943,6 +945,7 @@
       "workspaceLibraryNoMatches": "没有匹配的工作空间条目",
       "workspaceLibraryInvalidSelection": "找不到这个工作空间条目",
       "workspaceLibraryFailed": "公共工作空间库请求失败",
+      "workspacePublishNameInvalid": "请输入有效的公共工作空间名称",
       "workspaceMetadataImported": "已导入元数据骨架：{name}",
       "workspaceFullPackageUnavailable": "该工作空间的完整包已不可用，仍可仅导入元数据。"
     }

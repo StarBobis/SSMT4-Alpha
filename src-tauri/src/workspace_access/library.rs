@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -9,7 +10,7 @@ use crate::workspace_access::transfer::{
 };
 
 const DEFAULT_RAW_BASE: &str =
-    "https://raw.githubusercontent.com/Perxenic-Acid/SSMT-WorkSpace_Access-Library/main";
+    "https://api.github.com/repos/Perxenic-Acid/SSMT-WorkSpace_Access-Library/contents";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +26,8 @@ pub struct LibraryIndexV1 {
 pub struct LibraryIndexEntry {
     pub entry_id: String,
     pub workspace_name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub attribution: String,
     pub attribution_verified: bool,
     pub uploaded_at: String,
@@ -46,6 +49,7 @@ pub struct PublicMetadataDocument {
     pub entry_id: String,
     pub game_preset: String,
     pub workspace_name: String,
+    pub description: Option<String>,
     pub uploaded_at: String,
     pub captured_at: Option<String>,
     pub attribution: crate::workspace_access::models::PublicAttribution,
@@ -81,24 +85,35 @@ pub async fn fetch_index(
     raw_base_url: Option<&str>,
     game_preset: &str,
     proxy_port: Option<u16>,
+    force_refresh: bool,
 ) -> Result<LibraryIndexV1, String> {
     let game_preset = game_preset.trim();
     if game_preset.is_empty() || game_preset.contains(['/', '\\']) {
         return Err("LIBRARY_GAME_PRESET_INVALID".to_string());
     }
     let base = normalize_raw_base(raw_base_url.unwrap_or(DEFAULT_RAW_BASE))?;
-    let url = format!("{base}/index/v1/{game_preset}.json");
+    let index_path = format!("index/v1/{game_preset}.json");
+    // Raw GitHub is normally conditional-cache friendly, but a local proxy can
+    // retain a stale response. A user initiated/background post-publish refresh
+    // deliberately uses a one-off query string to ask upstream for fresh data.
     let cache_path = index_cache_path(&base, game_preset);
     let cache = read_index_cache(&cache_path).ok().flatten();
-    let mut request = workspace_access_http_client(proxy_port, None)?.get(url);
-    if let Some(etag) = cache.as_ref().and_then(|value| value.etag.as_deref()) {
-        request = request.header(reqwest::header::IF_NONE_MATCH, etag);
-    }
-    if let Some(last_modified) = cache
-        .as_ref()
-        .and_then(|value| value.last_modified.as_deref())
-    {
-        request = request.header(reqwest::header::IF_MODIFIED_SINCE, last_modified);
+    let mut request = public_file_request(
+        workspace_access_http_client(proxy_port, None)?,
+        &base,
+        &index_path,
+        force_refresh,
+    );
+    if !force_refresh {
+        if let Some(etag) = cache.as_ref().and_then(|value| value.etag.as_deref()) {
+            request = request.header(reqwest::header::IF_NONE_MATCH, etag);
+        }
+        if let Some(last_modified) = cache
+            .as_ref()
+            .and_then(|value| value.last_modified.as_deref())
+        {
+            request = request.header(reqwest::header::IF_MODIFIED_SINCE, last_modified);
+        }
     }
     let response = match request.send().await {
         Ok(response) => response,
@@ -190,8 +205,12 @@ pub async fn fetch_metadata(
         return Err("LIBRARY_METADATA_PATH_INVALID".to_string());
     }
     let base = normalize_raw_base(raw_base_url.unwrap_or(DEFAULT_RAW_BASE))?;
-    let response = workspace_access_http_client(proxy_port, None)?
-        .get(format!("{base}/{metadata_path}"))
+    let response = public_file_request(
+        workspace_access_http_client(proxy_port, None)?,
+        &base,
+        metadata_path,
+        false,
+    )
         .send()
         .await
         .map_err(|_| "LIBRARY_REQUEST_FAILED")?;
@@ -206,6 +225,45 @@ pub async fn fetch_metadata(
         return Err("LIBRARY_METADATA_UNSUPPORTED".to_string());
     }
     Ok(metadata)
+}
+
+fn public_file_request(
+    client: reqwest::Client,
+    base: &str,
+    path: &str,
+    force_refresh: bool,
+) -> reqwest::RequestBuilder {
+    let nonce = if force_refresh {
+        Some(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|value| value.as_millis())
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+    if is_github_contents_api(base) {
+        let mut url = format!("{base}/{path}?ref=main");
+        if let Some(nonce) = nonce {
+            url.push_str(&format!("&refresh={nonce}"));
+        }
+        client
+            .get(url)
+            .header(reqwest::header::ACCEPT, "application/vnd.github.raw+json")
+            .header(reqwest::header::USER_AGENT, "SSMT4-Workspace-Library/1.0")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+    } else {
+        let mut url = format!("{base}/{path}");
+        if let Some(nonce) = nonce {
+            url.push_str(&format!("?refresh={nonce}"));
+        }
+        client.get(url)
+    }
+}
+
+fn is_github_contents_api(base: &str) -> bool {
+    base.starts_with("https://api.github.com/repos/") && base.contains("/contents")
 }
 
 pub async fn download_entry(

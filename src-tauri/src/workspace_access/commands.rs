@@ -143,8 +143,15 @@ pub async fn workspace_access_fetch_index(
     raw_base_url: Option<String>,
     game_preset: String,
     proxy_port: Option<u16>,
+    force_refresh: Option<bool>,
 ) -> Result<LibraryIndexV1, String> {
-    fetch_index(raw_base_url.as_deref(), &game_preset, proxy_port).await
+    fetch_index(
+        raw_base_url.as_deref(),
+        &game_preset,
+        proxy_port,
+        force_refresh.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]

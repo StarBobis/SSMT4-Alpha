@@ -121,6 +121,7 @@ type WorkspaceUploadProgress = {
 type LibraryIndexEntry = {
   entryId: string;
   workspaceName: string;
+  description: string | null;
   attribution: string;
   uploadedAt: string;
   capturedAt: string | null;
@@ -139,6 +140,7 @@ type LibraryMetadata = {
   entryId: string;
   gamePreset: string;
   workspaceName: string;
+  description: string | null;
   uploadedAt: string;
   attribution: { mode: 'anonymous' | 'custom'; displayName?: string };
   workspaceAliases?: string[];
@@ -433,6 +435,7 @@ const activeWorkspaceArchiveUpload = ref<{ workerUrl: string; archivePath: strin
 const isWorkspaceArchiveUploadCancelling = ref(false);
 const workspaceAccessDialog = ref<'upload' | 'download' | null>(null);
 const workspaceAccessDescription = ref('');
+const workspaceAccessPublishName = ref('');
 const workspaceAccessAttribution = ref('');
 const workspaceAccessAliases = ref('');
 const workspaceAccessIncludeFullPackage = ref(true);
@@ -1719,6 +1722,7 @@ const openWorkspaceUploadDialog = (): void => {
     return;
   }
   workspaceAccessDescription.value = '';
+  workspaceAccessPublishName.value = workspaceName.value;
   workspaceAccessAttribution.value = '';
   workspaceAccessAliases.value = '';
   workspaceAccessIncludeFullPackage.value = true;
@@ -1738,13 +1742,18 @@ const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
     await workspaceSaveQueue;
     const workspacePath = await getWorkspaceDirPath(workspaceName.value);
     if (!workspacePath) throw new Error('WORKSPACE_NOT_ACCESSIBLE');
+    const publishName = workspaceAccessPublishName.value.trim();
+    if (!isValidWindowsFileName(publishName)) {
+      ElMessage.warning(t('workPage.messages.workspacePublishNameInvalid'));
+      return;
+    }
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
     const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
     const request = {
       workerUrl: WORKSPACE_ACCESS_API_URL,
       proxyPort: workspaceAccessProxyPort(),
       workspacePath,
-      workspaceName: workspaceName.value,
+      workspaceName: publishName,
       gamePreset,
       description: workspaceAccessDescription.value.trim() || undefined,
       attribution: workspaceAccessAttribution.value.trim() ? { mode: 'custom', displayName: workspaceAccessAttribution.value.trim() } : { mode: 'anonymous' },
@@ -1766,17 +1775,44 @@ const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
   }
 };
 
-const loadWorkspaceLibraryForDialog = async (silent = false): Promise<void> => {
+const workspaceLibraryEntriesSignature = (entries: LibraryIndexEntry[]): string => entries
+  .map((entry) => [
+    entry.entryId,
+    entry.workspaceName,
+    entry.description ?? '',
+    entry.attribution,
+    entry.uploadedAt,
+    entry.fullDataAvailable,
+    entry.fullDataSize,
+    entry.metadataPath,
+  ].join('\u0000'))
+  .join('\u0001');
+
+const loadWorkspaceLibraryForDialog = async ({
+  silent = false,
+  forceRefresh = false,
+}: { silent?: boolean; forceRefresh?: boolean } = {}): Promise<void> => {
   try {
-    workspaceLibraryLoading.value = true;
+    if (!silent) workspaceLibraryLoading.value = true;
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
     const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
-    workspaceLibraryEntries.value = (await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset, proxyPort: workspaceAccessProxyPort() })).entries;
+    const index = await invoke<LibraryIndex>('workspace_access_fetch_index', {
+      rawBaseUrl: null,
+      gamePreset,
+      proxyPort: workspaceAccessProxyPort(),
+      forceRefresh,
+    });
+    // Do not replace the reactive list when its content is unchanged. In
+    // particular, background post-publish checks must not make the visible
+    // download panel flicker while the remote index is still catching up.
+    if (workspaceLibraryEntriesSignature(index.entries) !== workspaceLibraryEntriesSignature(workspaceLibraryEntries.value)) {
+      workspaceLibraryEntries.value = index.entries;
+    }
   } catch (error) {
     console.error('Workspace library load failed', error);
     if (!silent) ElMessage.error(t('workPage.messages.workspaceLibraryFailed'));
   } finally {
-    workspaceLibraryLoading.value = false;
+    if (!silent) workspaceLibraryLoading.value = false;
   }
 };
 
@@ -1785,7 +1821,7 @@ const refreshWorkspaceLibraryAfterPublish = async (entryId: string): Promise<voi
   // short time after publishing so the download dialog is normally current when
   // the user opens it, rather than relying on a later manual refresh.
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    await loadWorkspaceLibraryForDialog(true);
+    await loadWorkspaceLibraryForDialog({ silent: true, forceRefresh: true });
     if (workspaceLibraryEntries.value.some((entry) => entry.entryId === entryId)) return;
     await new Promise((resolve) => window.setTimeout(resolve, 2_000));
   }
@@ -1794,7 +1830,7 @@ const refreshWorkspaceLibraryAfterPublish = async (entryId: string): Promise<voi
 const openWorkspaceDownloadDialog = async (): Promise<void> => {
   workspaceAccessDialog.value = 'download';
   workspaceLibraryQuery.value = '';
-  await loadWorkspaceLibraryForDialog();
+  await loadWorkspaceLibraryForDialog({ forceRefresh: true });
 };
 
 const filteredWorkspaceLibraryEntries = () => {
@@ -3134,6 +3170,9 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
       </template>
 
       <el-form v-if="workspaceAccessDialog === 'upload'" label-position="top">
+        <el-form-item :label="t('workPage.dialog.workspacePublishNameMessage')">
+          <el-input v-model="workspaceAccessPublishName" :maxlength="128" :placeholder="t('workPage.placeholders.workspacePublishName')" />
+        </el-form-item>
         <el-form-item :label="t('workPage.dialog.workspaceDescriptionMessage')">
           <el-input v-model="workspaceAccessDescription" type="textarea" :rows="3" :placeholder="t('workPage.placeholders.workspaceDescription')" />
         </el-form-item>
@@ -3152,7 +3191,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
       <template v-else>
         <div class="workspace-library-toolbar">
           <el-input v-model="workspaceLibraryQuery" clearable :placeholder="t('workPage.placeholders.workspaceLibrarySearch')" />
-          <el-button text :loading="workspaceLibraryLoading" @click="loadWorkspaceLibraryForDialog()">{{ t('workPage.actions.refresh') }}</el-button>
+          <el-button text :loading="workspaceLibraryLoading" @click="loadWorkspaceLibraryForDialog({ forceRefresh: true })">{{ t('workPage.actions.refresh') }}</el-button>
         </div>
         <div v-loading="workspaceLibraryLoading" class="workspace-library-results glass-scrollbar">
           <article v-for="entry in filteredWorkspaceLibraryEntries()" :key="entry.entryId" class="workspace-library-entry">
@@ -3164,6 +3203,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
                 </el-tag>
               </div>
               <p class="workspace-library-entry-attribution">{{ entry.attribution || 'anonymous' }}</p>
+              <p v-if="entry.description" class="workspace-library-entry-description">{{ entry.description }}</p>
               <p v-if="entry.drawIB.length" class="workspace-library-entry-drawib">{{ entry.drawIB.join(' · ') }}</p>
               <p v-if="entry.aliases.length" class="workspace-library-entry-aliases">{{ entry.aliases.join(' · ') }}</p>
             </div>
@@ -3629,6 +3669,17 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-library-entry-description {
+  display: -webkit-box;
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .workspace-library-entry-drawib {
