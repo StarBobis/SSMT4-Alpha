@@ -24,6 +24,7 @@ defineProps<{
 const emit = defineEmits<{
   refresh: [];
   selectLatest: [];
+  analyzeMissingGameTypes: [];
   pickFolder: [];
   openFolder: [];
   dropFolder: [event: DragEvent];
@@ -148,6 +149,10 @@ onBeforeUnmount(() => {
 
       <el-button @click="emit('selectLatest')">
         {{ t('workPage.actions.useLatestFrameAnalysisFolder') }}
+      </el-button>
+
+      <el-button @click="emit('analyzeMissingGameTypes')">
+        {{ t('workPage.actions.analyzeMissingGameTypes') }}
       </el-button>
     </div>
 

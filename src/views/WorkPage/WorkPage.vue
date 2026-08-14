@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch, onActivated, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openPath as openExternal } from '@tauri-apps/plugin-opener';
@@ -10,6 +11,7 @@ import { readDir, readTextFile, writeTextFile, mkdir, stat } from '@tauri-apps/p
 import { join } from '@tauri-apps/api/path';
 import { debugError, debugLog, debugWarn } from '../../utils/debugLog';
 import { AppStateManager } from '../../store/AppStateManager';
+import { setPendingXianZunPrompt } from '../../store/XianZunPendingPrompt';
 import { PathHelper } from '../../helper/PathHelper';
 import { ResourceManager } from '../../store/ResourceManager';
 import { MigotoManager } from '../../store/MigotoManager';
@@ -41,6 +43,7 @@ import type { ModelRow, SkipRow, VSCheckRow } from './WorkPage.types';
 
 const appSettings = AppStateManager.appSettings;
 const { t } = useI18n();
+const router = useRouter();
 const DEFAULT_WORKSPACE_NAME = 'Default';
 const WORKSPACE_ACCESS_API_URL = 'https://ssmt-workspace-api-dev.angeloyrd856.workers.dev';
 const workspaceAccessProxyPort = (): number | undefined => {
@@ -1561,6 +1564,15 @@ const handleSelectLatestFrameAnalysis = async () => {
     }
 };
 
+const handleAnalyzeMissingGameTypes = async () => {
+  if (!(appSettings.xianzunApiKey || '').trim()) {
+    ElMessage.warning(t('workPage.messages.xianzunUnavailable'));
+    return;
+  }
+  setPendingXianZunPrompt(t('workPage.messages.analyzeGameTypePrompt'));
+  await router.push('/xianzun');
+};
+
 const handlePickFrameAnalysisFolder = async () => {
   try {
     const selected = await openDialog({
@@ -3064,6 +3076,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
                 :fullExtractDataTypeFilterOptions="FULL_EXTRACT_DATA_TYPE_FILTER_OPTIONS"
                 @refresh="refreshFrameAnalysisFolders"
                 @selectLatest="handleSelectLatestFrameAnalysis"
+                @analyzeMissingGameTypes="handleAnalyzeMissingGameTypes"
                 @pickFolder="handlePickFrameAnalysisFolder"
                 @openFolder="handleOpenFrameAnalysisFolderPath"
                 @dropFolder="handleDropFrameAnalysisFolder"

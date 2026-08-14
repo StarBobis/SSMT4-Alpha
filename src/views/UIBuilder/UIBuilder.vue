@@ -1,29 +1,108 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  resolveUIBuilderContext,
+  saveUIBuilderAssets,
+  saveUIBuilderINI,
+  saveUIBuilderPreset,
+} from './uiBuilderWorkspace'
 
 const source = ref('/ui-builder-v79.html')
-const loadError = ref(false)
+const iframe = ref<HTMLIFrameElement | null>(null)
 
-const retry = () => {
-  loadError.value = false
-  source.value = `${source.value.split('?')[0]}?reload=${Date.now()}`
+const pushContext = async () => {
+  const context = await resolveUIBuilderContext().catch(() => ({
+    workspaceName: '',
+    firstHash: '',
+  }))
+
+  iframe.value?.contentWindow?.postMessage(
+    { __ssmt_uib: true, type: 'context', ...context },
+    '*',
+  )
 }
+
+type SaveRequestMessage =
+  | { type: 'ready' }
+  | { type: 'save-ini'; content: string; hash: string; requestId?: string }
+  | { type: 'save-assets'; buffer: ArrayBuffer; requestId?: string }
+  | { type: 'save-preset'; json: string; hash: string; requestId?: string }
+
+const sendResult = (
+  requestId: string | undefined,
+  result: { ok: boolean; path?: string; error?: string },
+) => {
+  iframe.value?.contentWindow?.postMessage(
+    { __ssmt_uib: true, type: 'save-result', requestId, ...result },
+    '*',
+  )
+}
+
+const handleMessage = async (event: MessageEvent) => {
+  const data = event.data as (SaveRequestMessage & { __ssmt_uib?: boolean }) | null
+  if (!data || data.__ssmt_uib !== true) {
+    return
+  }
+
+  if (iframe.value && event.source !== iframe.value.contentWindow) {
+    return
+  }
+
+  switch (data.type) {
+    case 'ready': {
+      await pushContext()
+      break
+    }
+
+    case 'save-ini': {
+      try {
+        const path = await saveUIBuilderINI(data.content, data.hash || '')
+        sendResult(data.requestId, { ok: true, path })
+      } catch (error) {
+        sendResult(data.requestId, { ok: false, error: String(error) })
+      }
+      break
+    }
+
+    case 'save-assets': {
+      try {
+        const path = await saveUIBuilderAssets(data.buffer)
+        sendResult(data.requestId, { ok: true, path })
+      } catch (error) {
+        sendResult(data.requestId, { ok: false, error: String(error) })
+      }
+      break
+    }
+
+    case 'save-preset': {
+      try {
+        const path = await saveUIBuilderPreset(data.json, data.hash || '')
+        sendResult(data.requestId, { ok: true, path })
+      } catch (error) {
+        sendResult(data.requestId, { ok: false, error: String(error) })
+      }
+      break
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('message', handleMessage)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleMessage)
+})
 </script>
 
 <template>
   <section class="ui-builder-page" aria-label="UI 构造器">
     <iframe
-      v-if="!loadError"
+      ref="iframe"
       :src="source"
       title="3Dmigoto UI 构造器"
       class="ui-builder-frame"
-      @error="loadError = true"
     />
-    <div v-else class="ui-builder-error">
-      <h2>UI 构造器加载失败</h2>
-      <p>构造器资源无法加载，请重试。</p>
-      <button type="button" @click="retry">重试</button>
-    </div>
   </section>
 </template>
 
@@ -34,6 +113,7 @@ const retry = () => {
   min-height: 0;
   overflow: hidden;
   background: #050914;
+  isolation: isolate;
 }
 
 .ui-builder-frame {
@@ -42,33 +122,6 @@ const retry = () => {
   height: 100%;
   border: 0;
   background: #050914;
-}
-
-.ui-builder-error {
-  display: grid;
-  place-content: center;
-  gap: 8px;
-  height: 100%;
-  color: #e8f2ff;
-  text-align: center;
-}
-
-.ui-builder-error h2,
-.ui-builder-error p {
-  margin: 0;
-}
-
-.ui-builder-error p {
-  color: #a8b8ca;
-}
-
-.ui-builder-error button {
-  justify-self: center;
-  padding: 8px 18px;
-  border: 1px solid #72d2ff;
-  border-radius: 6px;
-  background: #16364c;
-  color: #fff;
-  cursor: pointer;
+  pointer-events: auto;
 }
 </style>

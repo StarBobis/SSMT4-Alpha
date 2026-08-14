@@ -8,6 +8,9 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::{ProcessRefreshKind, UpdateKind};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalProgramOutput {
@@ -586,6 +589,12 @@ pub async fn execute_external_program(
     work_dir: Option<String>,
 ) -> Result<ExternalProgramOutput, String> {
     let mut command = std::process::Command::new(&program_path);
+
+    #[cfg(windows)]
+    {
+        // 使用 CREATE_NO_WINDOW，避免启动外部程序时弹出控制台窗口。
+        command.creation_flags(0x08000000);
+    }
 
     if let Some(args) = args {
         command.args(args);

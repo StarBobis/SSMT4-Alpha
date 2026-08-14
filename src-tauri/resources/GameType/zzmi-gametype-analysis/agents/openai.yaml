@@ -1,4 +1,0 @@
-interface:
-  display_name: "ZZMI GameType Analysis"
-  short_description: "Check ZZZ FrameAnalysis IB/VB against ZZMI data types"
-  default_prompt: "Use $zzmi-gametype-analysis to check whether all IBs in a ZZZ FrameAnalysis folder are parseable by existing ZZMI data types and to add any missing types following project conventions."

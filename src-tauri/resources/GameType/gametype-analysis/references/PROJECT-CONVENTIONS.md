@@ -1,11 +1,11 @@
-# ZZMI Project Conventions
+# GameType Project Conventions
 
 ## Repository layout
 
-- Single source of truth: src-tauri/resources/GameType/ZZMI/*.json (one file per data type; the Rust registry type_zzmi.rs was removed).
-- Runtime data types: %LOCALAPPDATA%\SSMT4GlobalConfigs\GameType\ZZMI\ (synced from the bundle on every app start).
+- Single source of truth: src-tauri/resources/GameType/*.json (one file per data type; each game type has its own folder, e.g. ZZMI/, GF2/, APMI/). The old Rust registry type_zzmi.rs was removed.
+- Runtime data types: %LOCALAPPDATA%/SSMT4GlobalConfigs/GameType/<GameType>/ (synced from the bundle on every app start).
 - Constants: src-tauri/src/constants/gametype_{format,element_name,extract_slot,extract_technique,category_name}.rs.
-- Extractor matching logic: src-tauri/src/extract_new/zzmi.rs (get_possible_gametype_list_unity_vs, filter_trianglelist_index_unity_vs).
+- Extractor matching logic: src-tauri/src/extract_new/*.rs (get_possible_gametype_list_unity_vs, filter_trianglelist_index_unity_vs).
 - Frame analysis plumbing: src-tauri/src/common/frame_analysis/frameanalysis_log.rs, frameanalysis_data.rs.
 
 ## JSON data type format
@@ -55,6 +55,9 @@ GPU-pre-skinning types use pointlist ExtractTechnique; CPU types use trianglelis
 
 ## Matching algorithm (as implemented in the checker script)
 
+The default coverage check is a fast layout-signature comparison, not the full file-size walk. For each IB it derives the per-buffer layout from the VB header (grouping by `InputSlot`, deduplicating overlapping `AlignedByteOffset` entries) and compares the signature against the registry. Covered IBs are returned immediately. The full algorithm below is kept as a deep-verify fallback.
+
+
 1. For each candidate trianglelist index (from IB txt files sharing the draw IB hash), require every category whose topology is trianglelist to have a <index>-<slot>.buf frame file. Pick the first index that satisfies all.
 2. For each category, pick the extract index: pointlist index when the category topology is pointlist and a pointlist index was found from the log; otherwise the trianglelist index.
 3. Resolve <extract_index>-<slot>.buf and .txt to real paths through the log.txt Dumping Buffer map; fail if the buf path is missing or the txt exists without a deduped path.
@@ -72,10 +75,15 @@ GPU-pre-skinning types use pointlist ExtractTechnique; CPU types use trianglelis
 
 ## Adding a data type (checklist)
 
-1. Identify unsupported IB hashes with the checker (matched=[]).
-2. Open the paired VB txt headers for a representative trianglelist draw (and pointlist draw if present): record SemanticName/SemanticIndex/Format/InputSlot/AlignedByteOffset/stride per slot, and the actual buffer bytes.
-3. Build the element list (order matters: POSITION, NORMAL, TANGENT, COLOR, TEXCOORD0..N, BLENDWEIGHTS, BLENDINDICES) with ExtractSlot/ExtractTechnique/Category/DrawCategory/ByteWidth; infer CPU vs GPU from topology and blend presence.
-4. Choose a type name following the encoding table.
-5. Write src-tauri/resources/GameType/ZZMI/<TYPE_NAME>.json with the D3D11ElementList. For a same-name variant use a _2 file suffix and set GameTypeName to the real name.
-6. Re-run the checker: the new hash must match; no previously matched hash may lose its match.
-7. Restart the app (or run `bun tauri dev`) so the file is synced into the user config GameType folder.
+1. Identify unsupported IB hashes with `scripts/gametype_ib_check.py` (matched=[]).
+2. Let `scripts/gametype_add_missing_types.py` derive and generate the missing files (dry-run first, review, then `--write`).
+3. Re-run the checker: the new hash must match, and no previously matched hash may lose its match.
+4. The `--write` run also creates a `gametype-additions-<GameType>-<timestamp>.zip` package. Share it with developers so they can add the new files to the library directly.
+5. Restart the app (or run `bun tauri dev`) so the file is synced into the user config GameType folder.
+
+For manual review/fallback when the automatic derivation is not applicable:
+
+- Open the paired VB txt headers for a representative trianglelist draw (and pointlist draw if present): record SemanticName/SemanticIndex/Format/InputSlot/AlignedByteOffset/stride per slot, and the actual buffer bytes.
+- Build the element list (order matters: POSITION, NORMAL, TANGENT, COLOR, TEXCOORD0..N, BLENDWEIGHTS, BLENDINDICES) with ExtractSlot/ExtractTechnique/Category/DrawCategory/ByteWidth; infer CPU vs GPU from topology and blend presence.
+- Choose a type name following the encoding table.
+- Write `src-tauri/resources/GameType/<GameType>/<TYPE_NAME>.json` with the D3D11ElementList. A same-name variant uses a `_2` file suffix (the file stem becomes the distinct game type name).
