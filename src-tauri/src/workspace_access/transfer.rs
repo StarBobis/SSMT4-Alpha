@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -15,6 +15,24 @@ const MAX_ARCHIVE_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_UNCOMPRESSED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO: u64 = 1000;
 pub const RECOMMENDED_DOWNLOAD_FREE_BYTES: u64 = 1024 * 1024 * 1024;
+
+pub fn workspace_access_http_client(
+    proxy_port: Option<u16>,
+    timeout: Option<Duration>,
+) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder();
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
+    if let Some(port) = proxy_port.filter(|port| *port != 0) {
+        let proxy = reqwest::Proxy::all(format!("http://127.0.0.1:{port}"))
+            .map_err(|_| "WORKSPACE_PROXY_INVALID")?;
+        builder = builder.proxy(proxy);
+    }
+    builder
+        .build()
+        .map_err(|_| "WORKSPACE_HTTP_CLIENT_INIT_FAILED".to_string())
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +103,7 @@ pub async fn download_archive(
     url: &str,
     destination: &Path,
     expected_sha256: &str,
+    proxy_port: Option<u16>,
 ) -> Result<DownloadResult, String> {
     if destination.extension().and_then(|value| value.to_str()) != Some("ssmtws") {
         return Err("DOWNLOAD_OUTPUT_EXTENSION_INVALID".to_string());
@@ -96,7 +115,7 @@ pub async fn download_archive(
     if destination.exists() {
         return Err("DOWNLOAD_OUTPUT_ALREADY_EXISTS".to_string());
     }
-    let response = reqwest::Client::new()
+    let response = workspace_access_http_client(proxy_port, None)?
         .get(url)
         .send()
         .await

@@ -379,6 +379,7 @@
     "hints": {
       "cacheFolder": "Used for workspaces, generated files, and local cache data.",
       "githubToken": "Optional. A personal token raises the GitHub API rate limit for update checks.",
+      "workspaceAccessProxyPort": "Only used by the workspace public library. Enter the local HTTP proxy port (for example, 7890); use 0 for the system or environment proxy.",
       "showWindowShortcut": "Press Alt+F to bring SSMT to the front; press it again while focused to minimize the window.",
       "language": "Changes the interface language immediately.",
       "textureMarkStyle": "Used as the default when starting a new texture marking task."
@@ -394,6 +395,7 @@
     },
     "general": {
       "githubToken": "GitHub Token",
+      "workspaceAccessProxyPort": "Workspace Library Proxy Port",
       "showWindowShortcut": "Alt+F Show Window Shortcut",
       "githubTokenPlaceholder": "Optional personal access token",
       "includePrereleaseUpdates": "Include Pre-release Updates",

@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::workspace_access::transfer::{download_archive, DownloadResult};
+use crate::workspace_access::transfer::{
+    download_archive, workspace_access_http_client, DownloadResult,
+};
 
 const DEFAULT_RAW_BASE: &str =
     "https://raw.githubusercontent.com/Perxenic-Acid/SSMT-WorkSpace_Access-Library/main";
@@ -27,6 +29,7 @@ pub struct LibraryIndexEntry {
     pub attribution_verified: bool,
     pub uploaded_at: String,
     pub captured_at: Option<String>,
+    #[serde(rename = "drawIB", alias = "drawIb")]
     pub draw_ib: Vec<String>,
     pub aliases: Vec<String>,
     pub full_data_available: bool,
@@ -77,6 +80,7 @@ struct IndexCache {
 pub async fn fetch_index(
     raw_base_url: Option<&str>,
     game_preset: &str,
+    proxy_port: Option<u16>,
 ) -> Result<LibraryIndexV1, String> {
     let game_preset = game_preset.trim();
     if game_preset.is_empty() || game_preset.contains(['/', '\\']) {
@@ -86,7 +90,7 @@ pub async fn fetch_index(
     let url = format!("{base}/index/v1/{game_preset}.json");
     let cache_path = index_cache_path(&base, game_preset);
     let cache = read_index_cache(&cache_path).ok().flatten();
-    let mut request = reqwest::Client::new().get(url);
+    let mut request = workspace_access_http_client(proxy_port, None)?.get(url);
     if let Some(etag) = cache.as_ref().and_then(|value| value.etag.as_deref()) {
         request = request.header(reqwest::header::IF_NONE_MATCH, etag);
     }
@@ -177,6 +181,7 @@ fn write_index_cache(path: &Path, cache: &IndexCache) -> Result<(), String> {
 pub async fn fetch_metadata(
     raw_base_url: Option<&str>,
     metadata_path: &str,
+    proxy_port: Option<u16>,
 ) -> Result<PublicMetadataDocument, String> {
     if !metadata_path.starts_with("games/")
         || metadata_path.contains(['\\', ':'])
@@ -185,7 +190,7 @@ pub async fn fetch_metadata(
         return Err("LIBRARY_METADATA_PATH_INVALID".to_string());
     }
     let base = normalize_raw_base(raw_base_url.unwrap_or(DEFAULT_RAW_BASE))?;
-    let response = reqwest::Client::new()
+    let response = workspace_access_http_client(proxy_port, None)?
         .get(format!("{base}/{metadata_path}"))
         .send()
         .await
@@ -208,12 +213,13 @@ pub async fn download_entry(
     entry_id: &str,
     destination: &std::path::Path,
     expected_sha256: &str,
+    proxy_port: Option<u16>,
 ) -> Result<LibraryDownloadResult, String> {
     let worker = normalize_worker_url(worker_url)?;
     if !is_uuid_like(entry_id) {
         return Err("LIBRARY_ENTRY_ID_INVALID".to_string());
     }
-    let response = reqwest::Client::new()
+    let response = workspace_access_http_client(proxy_port, None)?
         .get(format!("{worker}/v1/entries/{entry_id}/download"))
         .send()
         .await
@@ -225,7 +231,7 @@ pub async fn download_entry(
         .json::<DownloadUrl>()
         .await
         .map_err(|_| "WORKSPACE_SERVICE_INVALID_RESPONSE")?;
-    let archive = download_archive(&body.url, destination, expected_sha256).await?;
+    let archive = download_archive(&body.url, destination, expected_sha256, proxy_port).await?;
     Ok(LibraryDownloadResult {
         entry_id: entry_id.to_string(),
         archive,

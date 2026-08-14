@@ -20,7 +20,7 @@ use crate::workspace_access::models::{
     PortableWorkspaceMetadataV1, WorkspaceAccessPublishRequest, WorkspacePublishResult,
     WorkspaceUploadProgress,
 };
-use crate::workspace_access::transfer::sha256_file;
+use crate::workspace_access::transfer::{sha256_file, workspace_access_http_client};
 use crate::workspace_access::validate::preflight_workspace;
 
 const PART_SIZE: u64 = 32 * 1024 * 1024;
@@ -165,7 +165,7 @@ where
         None => None,
     };
     let metadata = make_public_metadata(request, portable, archive_info.as_ref());
-    let client = workspace_service_client()?;
+    let client = workspace_service_client(request.proxy_port)?;
 
     if let Some(info) = archive_info {
         return publish_archive(&client, &worker_url, metadata, info, on_progress).await;
@@ -180,7 +180,11 @@ where
     })
 }
 
-pub async fn cancel_upload(worker_url: &str, archive_path: &Path) -> Result<(), String> {
+pub async fn cancel_upload(
+    worker_url: &str,
+    archive_path: &Path,
+    proxy_port: Option<u16>,
+) -> Result<(), String> {
     let worker_url = normalize_worker_url(worker_url)?;
     request_upload_cancellation(archive_path);
     let state_path = upload_state_path(archive_path);
@@ -190,7 +194,7 @@ pub async fn cancel_upload(worker_url: &str, archive_path: &Path) -> Result<(), 
     if state.worker_url != worker_url {
         return Err("UPLOAD_STATE_SERVICE_MISMATCH".to_string());
     }
-    let response = workspace_service_client()?
+    let response = workspace_service_client(proxy_port)?
         .delete(format!(
             "{worker_url}/v1/submissions/{}",
             state.submission_id
@@ -204,10 +208,8 @@ pub async fn cancel_upload(worker_url: &str, archive_path: &Path) -> Result<(), 
     fs::remove_file(state_path).map_err(|_| "UPLOAD_STATE_DELETE_FAILED".to_string())
 }
 
-fn workspace_service_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(SERVICE_REQUEST_TIMEOUT)
-        .build()
+fn workspace_service_client(proxy_port: Option<u16>) -> Result<reqwest::Client, String> {
+    workspace_access_http_client(proxy_port, Some(SERVICE_REQUEST_TIMEOUT))
         .map_err(|_| "WORKSPACE_SERVICE_CLIENT_INIT_FAILED".to_string())
 }
 

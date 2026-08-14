@@ -42,6 +42,11 @@ import type { ModelRow, SkipRow, VSCheckRow } from './WorkPage.types';
 const appSettings = AppStateManager.appSettings;
 const { t } = useI18n();
 const DEFAULT_WORKSPACE_NAME = 'Default';
+const WORKSPACE_ACCESS_API_URL = 'https://ssmt-workspace-api-dev.angeloyrd856.workers.dev';
+const workspaceAccessProxyPort = (): number | undefined => {
+  const port = Number(appSettings.workspaceAccessProxyPort);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : undefined;
+};
 
 type DrawIBSubmeshRange = {
   firstIndex: string;
@@ -416,7 +421,6 @@ const isWorkspaceTransitioning = ref(false);
 const activeWorkspaceArchiveUpload = ref<{ workerUrl: string; archivePath: string } | null>(null);
 const isWorkspaceArchiveUploadCancelling = ref(false);
 const workspaceAccessDialog = ref<'upload' | 'download' | null>(null);
-const workspaceAccessWorkerUrl = ref('');
 const workspaceAccessDescription = ref('');
 const workspaceAccessAttribution = ref('');
 const workspaceAccessAliases = ref('');
@@ -1682,7 +1686,6 @@ const openWorkspaceUploadDialog = (): void => {
     ElMessage.warning(t('workPage.messages.selectOrCreateWorkspaceFirst'));
     return;
   }
-  workspaceAccessWorkerUrl.value = appSettings.workspaceAccessApiUrl || 'https://ssmt-workspace-api-dev.angeloyrd856.workers.dev';
   workspaceAccessDescription.value = '';
   workspaceAccessAttribution.value = '';
   workspaceAccessAliases.value = '';
@@ -1696,11 +1699,6 @@ const normalizedWorkspaceAliases = (): string[] => Array.from(new Set(
 
 const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
   if (!workspaceName.value || workspaceAccessBusy.value) return;
-  const workerUrl = workspaceAccessWorkerUrl.value.trim();
-  if (!workerUrl) {
-    ElMessage.warning(t('workPage.messages.workspaceAccessEndpointRequired'));
-    return;
-  }
   try {
     workspaceAccessBusy.value = true;
     await saveCurrentWorkspaceTabConfig();
@@ -1709,9 +1707,9 @@ const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
     if (!workspacePath) throw new Error('WORKSPACE_NOT_ACCESSIBLE');
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
     const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
-    appSettings.workspaceAccessApiUrl = workerUrl;
     const request = {
-      workerUrl,
+      workerUrl: WORKSPACE_ACCESS_API_URL,
+      proxyPort: workspaceAccessProxyPort(),
       workspacePath,
       workspaceName: workspaceName.value,
       gamePreset,
@@ -1736,7 +1734,7 @@ const loadWorkspaceLibraryForDialog = async (): Promise<void> => {
     workspaceLibraryLoading.value = true;
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
     const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
-    workspaceLibraryEntries.value = (await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset })).entries;
+    workspaceLibraryEntries.value = (await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset, proxyPort: workspaceAccessProxyPort() })).entries;
   } catch (error) {
     console.error('Workspace library load failed', error);
     ElMessage.error(t('workPage.messages.workspaceLibraryFailed'));
@@ -1746,7 +1744,6 @@ const loadWorkspaceLibraryForDialog = async (): Promise<void> => {
 };
 
 const openWorkspaceDownloadDialog = async (): Promise<void> => {
-  workspaceAccessWorkerUrl.value = appSettings.workspaceAccessApiUrl || 'https://ssmt-workspace-api-dev.angeloyrd856.workers.dev';
   workspaceAccessDialog.value = 'download';
   workspaceLibraryQuery.value = '';
   await loadWorkspaceLibraryForDialog();
@@ -1761,7 +1758,7 @@ const handleLibraryDownload = async (entry: LibraryIndexEntry): Promise<void> =>
   if (workspaceAccessBusy.value) return;
   try {
     workspaceAccessBusy.value = true;
-    const metadata = await invoke<LibraryMetadata>('workspace_access_fetch_metadata', { rawBaseUrl: null, metadataPath: entry.metadataPath });
+    const metadata = await invoke<LibraryMetadata>('workspace_access_fetch_metadata', { rawBaseUrl: null, metadataPath: entry.metadataPath, proxyPort: workspaceAccessProxyPort() });
     const workspaceBase = await getWorkspaceBaseDir();
     if (!workspaceBase) throw new Error('WORKSPACE_BASE_NOT_FOUND');
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
@@ -1775,7 +1772,8 @@ const handleLibraryDownload = async (entry: LibraryIndexEntry): Promise<void> =>
         if (!proceed) return;
       }
       imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_download_and_import_entry', {
-        workerUrl: appSettings.workspaceAccessApiUrl || workspaceAccessWorkerUrl.value,
+        workerUrl: WORKSPACE_ACCESS_API_URL,
+        proxyPort: workspaceAccessProxyPort(),
         entryId: metadata.entryId,
         expectedSha256: metadata.fullData.sha256,
         workspaceBase,
@@ -1894,13 +1892,7 @@ const _legacyPromptWorkspacePublishDetails = async (withArchive: boolean): Promi
   attribution: { mode: 'anonymous' | 'custom'; displayName?: string };
   archivePath?: string;
 } | undefined> => {
-  const endpoint = await ElMessageBox.prompt(
-    t('workPage.dialog.workspaceAccessEndpointMessage'),
-    t('workPage.dialog.workspacePublishTitle'),
-    { inputValue: appSettings.workspaceAccessApiUrl, inputPlaceholder: 'https://...', confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
-  );
-  const workerUrl = endpoint.value.trim();
-  appSettings.workspaceAccessApiUrl = workerUrl;
+  const workerUrl = WORKSPACE_ACCESS_API_URL;
   const descriptionInput = await ElMessageBox.prompt(
     t('workPage.dialog.workspaceDescriptionMessage'),
     t('workPage.dialog.workspacePublishTitle'),
@@ -1968,6 +1960,7 @@ const _legacyPublishWorkspace = async (withArchive: boolean): Promise<void> => {
           workspacePath,
           workspaceName: workspaceName.value,
           gamePreset,
+          proxyPort: workspaceAccessProxyPort(),
           description: details.description,
           capturedAt: details.capturedAt,
           gameBuild: details.gameBuild,
@@ -2010,7 +2003,7 @@ const _legacyBrowseWorkspaceLibrary = async (): Promise<void> => {
   try {
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
     const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
-    const index = await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset });
+    const index = await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset, proxyPort: workspaceAccessProxyPort() });
     if (!index.entries.length) {
       ElMessage.info(t('workPage.messages.workspaceLibraryEmpty'));
       return;
@@ -2046,7 +2039,7 @@ const _legacyBrowseWorkspaceLibrary = async (): Promise<void> => {
       ElMessage.warning(t('workPage.messages.workspaceLibraryInvalidSelection'));
       return;
     }
-    const metadata = await invoke<LibraryMetadata>('workspace_access_fetch_metadata', { rawBaseUrl: null, metadataPath: selected.metadataPath });
+    const metadata = await invoke<LibraryMetadata>('workspace_access_fetch_metadata', { rawBaseUrl: null, metadataPath: selected.metadataPath, proxyPort: workspaceAccessProxyPort() });
     const workspaceBase = await getWorkspaceBaseDir();
     if (!workspaceBase) {
       ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
@@ -2066,7 +2059,8 @@ const _legacyBrowseWorkspaceLibrary = async (): Promise<void> => {
         if (!continueDownload) return;
       }
       const imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_download_and_import_entry', {
-        workerUrl: appSettings.workspaceAccessApiUrl,
+        workerUrl: WORKSPACE_ACCESS_API_URL,
+        proxyPort: workspaceAccessProxyPort(),
         entryId: metadata.entryId,
         expectedSha256: metadata.fullData.sha256,
         workspaceBase,
@@ -3060,9 +3054,6 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
       </template>
 
       <el-form v-if="workspaceAccessDialog === 'upload'" label-position="top">
-        <el-form-item :label="t('workPage.dialog.workspaceAccessEndpointMessage')">
-          <el-input v-model="workspaceAccessWorkerUrl" placeholder="https://..." />
-        </el-form-item>
         <el-form-item :label="t('workPage.dialog.workspaceDescriptionMessage')">
           <el-input v-model="workspaceAccessDescription" type="textarea" :rows="3" :placeholder="t('workPage.placeholders.workspaceDescription')" />
         </el-form-item>

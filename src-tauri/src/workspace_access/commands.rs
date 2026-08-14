@@ -51,8 +51,9 @@ pub async fn workspace_access_download_archive(
     url: String,
     destination: String,
     expected_sha256: String,
+    proxy_port: Option<u16>,
 ) -> Result<DownloadResult, String> {
-    download_archive(&url, &PathBuf::from(destination), &expected_sha256).await
+    download_archive(&url, &PathBuf::from(destination), &expected_sha256, proxy_port).await
 }
 
 #[tauri::command]
@@ -121,7 +122,7 @@ pub async fn workspace_access_create_and_publish(
     })
     .await;
     if result.is_err() {
-        let _ = cancel_upload(&request.worker_url, &archive_path).await;
+        let _ = cancel_upload(&request.worker_url, &archive_path, request.proxy_port).await;
     }
     remove_upload_state(&archive_path);
     let _ = std::fs::remove_file(&archive_path);
@@ -132,24 +133,27 @@ pub async fn workspace_access_create_and_publish(
 pub async fn workspace_access_cancel_upload(
     worker_url: String,
     archive_path: String,
+    proxy_port: Option<u16>,
 ) -> Result<(), String> {
-    cancel_upload(&worker_url, &PathBuf::from(archive_path)).await
+    cancel_upload(&worker_url, &PathBuf::from(archive_path), proxy_port).await
 }
 
 #[tauri::command]
 pub async fn workspace_access_fetch_index(
     raw_base_url: Option<String>,
     game_preset: String,
+    proxy_port: Option<u16>,
 ) -> Result<LibraryIndexV1, String> {
-    fetch_index(raw_base_url.as_deref(), &game_preset).await
+    fetch_index(raw_base_url.as_deref(), &game_preset, proxy_port).await
 }
 
 #[tauri::command]
 pub async fn workspace_access_fetch_metadata(
     raw_base_url: Option<String>,
     metadata_path: String,
+    proxy_port: Option<u16>,
 ) -> Result<PublicMetadataDocument, String> {
-    fetch_metadata(raw_base_url.as_deref(), &metadata_path).await
+    fetch_metadata(raw_base_url.as_deref(), &metadata_path, proxy_port).await
 }
 
 #[tauri::command]
@@ -158,12 +162,14 @@ pub async fn workspace_access_download_entry(
     entry_id: String,
     destination: String,
     expected_sha256: String,
+    proxy_port: Option<u16>,
 ) -> Result<LibraryDownloadResult, String> {
     download_entry(
         &worker_url,
         &entry_id,
         &PathBuf::from(destination),
         &expected_sha256,
+        proxy_port,
     )
     .await
 }
@@ -176,10 +182,11 @@ pub async fn workspace_access_download_and_import_entry(
     workspace_base: String,
     workspace_name: String,
     game_preset: String,
+    proxy_port: Option<u16>,
 ) -> Result<ImportResult, String> {
     let archive_path = temporary_archive_path(&entry_id)?;
     let result = async {
-        download_entry(&worker_url, &entry_id, &archive_path, &expected_sha256).await?;
+        download_entry(&worker_url, &entry_id, &archive_path, &expected_sha256, proxy_port).await?;
         import_archive(
             &archive_path,
             &PathBuf::from(workspace_base),

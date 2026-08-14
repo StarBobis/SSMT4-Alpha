@@ -21,6 +21,8 @@ pub struct WorkspaceAccessArchiveRequest {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceAccessPublishRequest {
     pub worker_url: String,
+    #[serde(default)]
+    pub proxy_port: Option<u16>,
     pub workspace_path: String,
     pub game_preset: String,
     pub workspace_name: String,

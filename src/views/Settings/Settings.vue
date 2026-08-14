@@ -139,6 +139,26 @@ const openUsageDocs = async () => {
 
               <div class="setting-row">
                 <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><Link /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.general.workspaceAccessProxyPort') }}</div>
+                    <div class="setting-description">{{ t('settings.hints.workspaceAccessProxyPort') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control compact-control">
+                  <el-input-number
+                    v-model="appSettings.workspaceAccessProxyPort"
+                    :aria-label="t('settings.general.workspaceAccessProxyPort')"
+                    :min="0"
+                    :max="65535"
+                    :step="1"
+                    controls-position="right"
+                  />
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-identity">
                   <span class="setting-icon"><el-icon><Key /></el-icon></span>
                   <div>
                     <div class="setting-label">{{ t('settings.general.showWindowShortcut') }}</div>

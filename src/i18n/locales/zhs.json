@@ -379,6 +379,7 @@
     "hints": {
       "cacheFolder": "用于保存工作区、生成文件和本地缓存数据。",
       "githubToken": "可选。个人令牌可以提高更新检查时的 GitHub API 请求限额。",
+      "workspaceAccessProxyPort": "仅用于工作空间公共库。填入本机 HTTP 代理端口（例如 7890）；填 0 时使用系统或环境代理。",
       "showWindowShortcut": "按 Alt+F 唤起并聚焦 SSMT 窗口；窗口已聚焦时再次按下会将其最小化。",
       "language": "更改后会立即切换界面语言。",
       "textureMarkStyle": "新建贴图标记任务时作为默认方式。"
@@ -394,6 +395,7 @@
     },
     "general": {
       "githubToken": "GitHub Token",
+      "workspaceAccessProxyPort": "工作空间公共库代理端口",
       "showWindowShortcut": "Alt+F 唤起窗口快捷键",
       "githubTokenPlaceholder": "可选的个人访问令牌",
       "includePrereleaseUpdates": "包含预发布更新",

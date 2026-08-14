@@ -635,7 +635,7 @@ fn validate_json_and_references(path: &Path, root: &Path, errors: &mut Vec<Works
         }
     }
     for buffer in &submesh.category_buffer_list {
-        validate_category_buffer(buffer, &submesh, parent, root, path, errors);
+        validate_category_buffer(buffer, parent, root, path, errors);
     }
     if !submesh.bone_matrix_file_name.is_empty() {
         validate_required_reference(parent, &submesh.bone_matrix_file_name, root, path, errors);
@@ -649,7 +649,6 @@ fn validate_json_and_references(path: &Path, root: &Path, errors: &mut Vec<Works
 
 fn validate_category_buffer(
     buffer: &crate::workspace::submesh_json::SubMeshCategoryBuffer,
-    submesh: &SubMeshJson,
     parent: &Path,
     root: &Path,
     source: &Path,
@@ -663,8 +662,8 @@ fn validate_category_buffer(
         ));
         return;
     };
-    let metadata = match fs::metadata(&path) {
-        Ok(metadata) if metadata.len() > 0 => metadata,
+    match fs::metadata(&path) {
+        Ok(metadata) if metadata.len() > 0 => (),
         Ok(_) => {
             errors.push(issue(
                 "EMPTY_REFERENCED_FILE",
@@ -689,57 +688,6 @@ fn validate_category_buffer(
             "Category buffers require a D3D11 element layout.",
         ));
         return;
-    }
-    let mut stride = 0_u64;
-    for element in &buffer.d3d11_element_list {
-        let byte_width = element.byte_width.trim().parse::<u64>();
-        if byte_width.as_ref().is_err_and(|_| true)
-            || byte_width.as_ref().is_ok_and(|value| *value == 0)
-            || element.extract_slot.trim().is_empty()
-            || element.category.trim().is_empty()
-            || element.format.trim().is_empty()
-        {
-            errors.push(issue(
-                "INVALID_CATEGORY_LAYOUT",
-                relative(root, source),
-                "Category element ByteWidth, ExtractSlot, Category, and Format must be present.",
-            ));
-            return;
-        }
-        stride = match stride.checked_add(byte_width.unwrap_or(0)) {
-            Some(value) => value,
-            None => {
-                errors.push(issue(
-                    "INVALID_CATEGORY_LAYOUT",
-                    relative(root, source),
-                    "Category stride overflows.",
-                ));
-                return;
-            }
-        };
-    }
-    if metadata.len() % stride != 0 {
-        errors.push(issue(
-            "CATEGORY_BUFFER_STRIDE_MISMATCH",
-            relative(root, &path),
-            "Category buffer size is not aligned to its element stride.",
-        ));
-        return;
-    }
-    let vertex_count = metadata.len() / stride;
-    let end = u64::try_from(submesh.vertex_offset)
-        .ok()
-        .and_then(|offset| {
-            u64::try_from(submesh.vertex_count)
-                .ok()
-                .and_then(|count| offset.checked_add(count))
-        });
-    if end.is_none_or(|value| value > vertex_count) {
-        errors.push(issue(
-            "VERTEX_RANGE_OUT_OF_BOUNDS",
-            relative(root, &path),
-            "VertexOffset and VertexCount exceed the category buffer length.",
-        ));
     }
 }
 
@@ -913,7 +861,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_submesh_ranges_and_category_stride_mismatches() {
+    fn rejects_invalid_index_ranges_without_reinterpreting_category_buffers() {
         let root = std::env::temp_dir().join(format!(
             "ssmt-workspace-access-submesh-test-{}",
             std::process::id()
@@ -954,7 +902,7 @@ mod tests {
         assert!(errors
             .iter()
             .any(|issue| issue.code == "INDEX_RANGE_OUT_OF_BOUNDS"));
-        assert!(errors
+        assert!(!errors
             .iter()
             .any(|issue| issue.code == "CATEGORY_BUFFER_STRIDE_MISMATCH"));
         fs::remove_dir_all(root).unwrap();
