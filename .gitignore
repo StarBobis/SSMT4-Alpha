@@ -46,3 +46,5 @@ bun.lock
 
 *.bak*
 tmp*
+cloudflare_r2.env
+github_app.env
