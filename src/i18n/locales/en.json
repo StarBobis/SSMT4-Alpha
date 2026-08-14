@@ -821,7 +821,9 @@
       "cancelWorkspaceArchiveUpload": "Cancel Workspace Package Upload"
       ,"browseWorkspaceLibrary": "Browse Public Workspace Library",
       "openWorkspaceUpload": "Upload workspace",
-      "openWorkspaceDownload": "Download workspace"
+      "openWorkspaceDownload": "Download workspace",
+      "importWorkspaceMetadata": "Import metadata only",
+      "downloadWorkspacePackage": "Download full package"
     },
     "menu": {
       "open3DmigotoFolder": "Open 3Dmigoto Folder",
@@ -925,7 +927,8 @@
       "workspaceLibraryNoMatches": "No matching workspace entries",
       "workspaceLibraryInvalidSelection": "That workspace entry was not found",
       "workspaceLibraryFailed": "Public workspace library request failed",
-      "workspaceMetadataImported": "Imported metadata skeleton: {name}"
+      "workspaceMetadataImported": "Imported metadata skeleton: {name}",
+      "workspaceFullPackageUnavailable": "This workspace's complete package is unavailable. You can still import its metadata only."
     }
   },
   "gameType": {

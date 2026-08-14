@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { nextTick, onMounted, ref, watch, onActivated, onBeforeUnmount } from 'vue';
+import { computed, nextTick, onMounted, ref, watch, onActivated, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
@@ -105,6 +105,14 @@ type WorkspacePublishResult = {
   entryId: string;
   status: string;
   metadataPath?: string;
+};
+
+type WorkspaceUploadProgress = {
+  submissionId: string;
+  completedBytes: number;
+  totalBytes: number;
+  completedParts: number;
+  totalParts: number;
 };
 
 type LibraryIndexEntry = {
@@ -425,11 +433,22 @@ const workspaceAccessDescription = ref('');
 const workspaceAccessAttribution = ref('');
 const workspaceAccessAliases = ref('');
 const workspaceAccessIncludeFullPackage = ref(true);
-const workspaceAccessBusy = ref(false);
+const workspacePublishing = ref(false);
+const workspaceDownloadingEntry = ref<{ entryId: string; mode: 'metadata' | 'full' } | null>(null);
+const workspaceUploadProgress = ref<WorkspaceUploadProgress | null>(null);
+const unavailableWorkspaceFullPackages = ref<string[]>([]);
+const workspaceAccessBusy = computed(() => workspacePublishing.value || workspaceDownloadingEntry.value !== null);
 const workspaceProvenance = ref<WorkspaceProvenance | null>(null);
 const workspaceLibraryQuery = ref('');
 const workspaceLibraryEntries = ref<LibraryIndexEntry[]>([]);
 const workspaceLibraryLoading = ref(false);
+const workspaceUploadPercent = computed(() => {
+  const progress = workspaceUploadProgress.value;
+  if (!progress || progress.totalBytes <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((progress.completedBytes / progress.totalBytes) * 100)));
+});
+const workspaceEntryHasFullPackage = (entry: LibraryIndexEntry): boolean =>
+  entry.fullDataAvailable && !unavailableWorkspaceFullPackages.value.includes(entry.entryId);
 let lastInvalidFrameAnalysisWarnPath = '';
 let workspaceSaveQueue: Promise<void> = Promise.resolve();
 
@@ -1111,6 +1130,7 @@ let vsSaveTimer: ReturnType<typeof setTimeout>;
 let frameAnalysisPathSaveTimer: ReturnType<typeof setTimeout>;
 let frameAnalysisValidateTimer: ReturnType<typeof setTimeout>;
 let unlistenNativeDrop: UnlistenFn | null = null;
+let unlistenWorkspaceUploadProgress: UnlistenFn | null = null;
 
 const clearPendingSaveTimers = () => {
   clearTimeout(saveTimer);
@@ -1700,7 +1720,8 @@ const normalizedWorkspaceAliases = (): string[] => Array.from(new Set(
 const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
   if (!workspaceName.value || workspaceAccessBusy.value) return;
   try {
-    workspaceAccessBusy.value = true;
+    workspacePublishing.value = true;
+    workspaceUploadProgress.value = null;
     await saveCurrentWorkspaceTabConfig();
     await workspaceSaveQueue;
     const workspacePath = await getWorkspaceDirPath(workspaceName.value);
@@ -1721,15 +1742,19 @@ const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
     const result = await invoke<WorkspacePublishResult>(command, { request });
     workspaceAccessDialog.value = null;
     ElMessage.success(t('workPage.messages.workspacePublished', { entryId: result.entryId }));
+    void refreshWorkspaceLibraryAfterPublish(result.entryId);
   } catch (error) {
     console.error('Workspace publish failed', error);
     ElMessage.error(t('workPage.messages.workspacePublishFailed'));
   } finally {
-    workspaceAccessBusy.value = false;
+    workspacePublishing.value = false;
+    window.setTimeout(() => {
+      workspaceUploadProgress.value = null;
+    }, workspaceUploadPercent.value >= 100 ? 1400 : 500);
   }
 };
 
-const loadWorkspaceLibraryForDialog = async (): Promise<void> => {
+const loadWorkspaceLibraryForDialog = async (silent = false): Promise<void> => {
   try {
     workspaceLibraryLoading.value = true;
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
@@ -1737,9 +1762,20 @@ const loadWorkspaceLibraryForDialog = async (): Promise<void> => {
     workspaceLibraryEntries.value = (await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset, proxyPort: workspaceAccessProxyPort() })).entries;
   } catch (error) {
     console.error('Workspace library load failed', error);
-    ElMessage.error(t('workPage.messages.workspaceLibraryFailed'));
+    if (!silent) ElMessage.error(t('workPage.messages.workspaceLibraryFailed'));
   } finally {
     workspaceLibraryLoading.value = false;
+  }
+};
+
+const refreshWorkspaceLibraryAfterPublish = async (entryId: string): Promise<void> => {
+  // The index is rebuilt asynchronously by the public-library workflow. Poll a
+  // short time after publishing so the download dialog is normally current when
+  // the user opens it, rather than relying on a later manual refresh.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await loadWorkspaceLibraryForDialog(true);
+    if (workspaceLibraryEntries.value.some((entry) => entry.entryId === entryId)) return;
+    await new Promise((resolve) => window.setTimeout(resolve, 2_000));
   }
 };
 
@@ -1754,32 +1790,46 @@ const filteredWorkspaceLibraryEntries = () => {
   return workspaceLibraryEntries.value.filter((entry) => !query || [entry.workspaceName, entry.attribution, ...entry.drawIB, ...entry.aliases].join('\n').toLocaleLowerCase().includes(query));
 };
 
-const handleLibraryDownload = async (entry: LibraryIndexEntry): Promise<void> => {
+const handleLibraryDownload = async (entry: LibraryIndexEntry, mode: 'metadata' | 'full'): Promise<void> => {
   if (workspaceAccessBusy.value) return;
   try {
-    workspaceAccessBusy.value = true;
+    workspaceDownloadingEntry.value = { entryId: entry.entryId, mode };
     const metadata = await invoke<LibraryMetadata>('workspace_access_fetch_metadata', { rawBaseUrl: null, metadataPath: entry.metadataPath, proxyPort: workspaceAccessProxyPort() });
     const workspaceBase = await getWorkspaceBaseDir();
     if (!workspaceBase) throw new Error('WORKSPACE_BASE_NOT_FOUND');
     const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
     const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
     let imported: WorkspaceArchiveImportResult;
-    if (metadata.fullData.available && metadata.fullData.sha256) {
+    if (mode === 'full') {
+      if (!metadata.fullData.available || !metadata.fullData.sha256) {
+        unavailableWorkspaceFullPackages.value = Array.from(new Set([...unavailableWorkspaceFullPackages.value, entry.entryId]));
+        ElMessage.warning(t('workPage.messages.workspaceFullPackageUnavailable'));
+        return;
+      }
       const diskSpace = await invoke<WorkspaceDiskSpaceReport>('workspace_access_check_disk_space', { path: workspaceBase });
       if (diskSpace.belowRecommended) {
         const availableGiB = ((diskSpace.availableBytes ?? 0) / (1024 ** 3)).toFixed(2);
         const proceed = await ElMessageBox.confirm(t('workPage.dialog.workspaceLibraryLowDiskSpaceMessage', { available: availableGiB }), t('workPage.dialog.workspaceLibraryTitle'), { type: 'warning' }).then(() => true).catch(() => false);
         if (!proceed) return;
       }
-      imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_download_and_import_entry', {
-        workerUrl: WORKSPACE_ACCESS_API_URL,
-        proxyPort: workspaceAccessProxyPort(),
-        entryId: metadata.entryId,
-        expectedSha256: metadata.fullData.sha256,
-        workspaceBase,
-        workspaceName: metadata.workspaceName,
-        gamePreset,
-      });
+      try {
+        imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_download_and_import_entry', {
+          workerUrl: WORKSPACE_ACCESS_API_URL,
+          proxyPort: workspaceAccessProxyPort(),
+          entryId: metadata.entryId,
+          expectedSha256: metadata.fullData.sha256,
+          workspaceBase,
+          workspaceName: metadata.workspaceName,
+          gamePreset,
+        });
+      } catch (error) {
+        if (String(error).includes('DOWNLOAD_HTTP_404')) {
+          unavailableWorkspaceFullPackages.value = Array.from(new Set([...unavailableWorkspaceFullPackages.value, entry.entryId]));
+          ElMessage.warning(t('workPage.messages.workspaceFullPackageUnavailable'));
+          return;
+        }
+        throw error;
+      }
     } else {
       imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_import_metadata_skeleton', { metadata, workspaceBase, workspaceName: metadata.workspaceName });
     }
@@ -1796,10 +1846,9 @@ const handleLibraryDownload = async (entry: LibraryIndexEntry): Promise<void> =>
     console.error('Workspace library download failed', error);
     ElMessage.error(t('workPage.messages.workspaceLibraryFailed'));
   } finally {
-    workspaceAccessBusy.value = false;
+    workspaceDownloadingEntry.value = null;
   }
 };
-const handleLibraryDownloadRow = (entry: unknown): Promise<void> => handleLibraryDownload(entry as LibraryIndexEntry);
 
 const _legacyWorkspaceAccessActions = async (): Promise<void> => {
   if (!workspaceName.value) {
@@ -2730,6 +2779,18 @@ onMounted(() => {
       debugError('WorkPage.DnD', 'Failed to attach native drop listener', error);
     }
   })();
+  void (async () => {
+    try {
+      unlistenWorkspaceUploadProgress = await listen<WorkspaceUploadProgress>('workspace-access-upload-progress', (event) => {
+        workspaceUploadProgress.value = event.payload;
+        // This first event is emitted only after the Worker accepted the
+        // submission and local resumable state was written.
+        if (workspaceAccessDialog.value === 'upload') workspaceAccessDialog.value = null;
+      });
+    } catch (error) {
+      debugError('WorkPage.WorkspaceAccess', 'Failed to attach upload progress listener', error);
+    }
+  })();
 
   ensureTrailingEmptyRow();
   ensureTrailingSkipRow();
@@ -2756,6 +2817,10 @@ onBeforeUnmount(() => {
   if (unlistenNativeDrop) {
     unlistenNativeDrop();
     unlistenNativeDrop = null;
+  }
+  if (unlistenWorkspaceUploadProgress) {
+    unlistenWorkspaceUploadProgress();
+    unlistenWorkspaceUploadProgress = null;
   }
 });
 
@@ -3032,6 +3097,8 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
         :workspaceModifiedTimes="workspaceModifiedTimes"
         :workspaceProvenance="workspaceProvenance"
         :isSpecificIbDumpToggling="isSpecificIbDumpToggling"
+        :workspaceUploadProgress="workspaceUploadPercent"
+        :workspaceUploadActive="workspaceUploadProgress !== null"
         @createWorkspace="handleCreateWorkspace"
         @createFromConfig="handleCreateFromConfig"
         @openWorkspace="handleOpenWorkspace"
@@ -3048,7 +3115,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
 
     </div>
 
-    <el-dialog :model-value="workspaceAccessDialog !== null" @update:model-value="(visible) => { if (!visible) workspaceAccessDialog = null; }" width="min(720px, 92vw)" :close-on-click-modal="!workspaceAccessBusy">
+    <el-dialog class="workspace-access-dialog" :model-value="workspaceAccessDialog !== null" @update:model-value="(visible) => { if (!visible) workspaceAccessDialog = null; }" width="min(760px, 94vw)" :close-on-click-modal="!workspaceAccessBusy">
       <template #header>
         <span>{{ workspaceAccessDialog === 'upload' ? t('workPage.dialog.workspacePublishTitle') : t('workPage.dialog.workspaceLibraryTitle') }}</span>
       </template>
@@ -3070,22 +3137,48 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
       </el-form>
 
       <template v-else>
-        <el-input v-model="workspaceLibraryQuery" clearable :placeholder="t('workPage.placeholders.workspaceLibrarySearch')" />
-        <el-table v-loading="workspaceLibraryLoading" :data="filteredWorkspaceLibraryEntries()" max-height="420" class="workspace-library-table">
-          <el-table-column prop="workspaceName" :label="t('workPage.ui.workspaceName')" min-width="150" />
-          <el-table-column prop="attribution" :label="t('workPage.dialog.workspaceAttributionMessage')" min-width="120" />
-          <el-table-column :label="t('workPage.dialog.workspaceLibraryFullPackage')" width="130">
-            <template #default="scope">{{ scope.row.fullDataAvailable ? `${scope.row.fullDataSize} B` : t('workPage.dialog.workspaceLibraryMetadataOnly') }}</template>
-          </el-table-column>
-          <el-table-column width="110">
-            <template #default="scope"><el-button type="primary" size="small" :loading="workspaceAccessBusy" @click="handleLibraryDownloadRow(scope.row)">{{ t('workPage.actions.openWorkspaceDownload') }}</el-button></template>
-          </el-table-column>
-        </el-table>
+        <div class="workspace-library-toolbar">
+          <el-input v-model="workspaceLibraryQuery" clearable :placeholder="t('workPage.placeholders.workspaceLibrarySearch')" />
+          <el-button text :loading="workspaceLibraryLoading" @click="loadWorkspaceLibraryForDialog()">{{ t('workPage.actions.refresh') }}</el-button>
+        </div>
+        <div v-loading="workspaceLibraryLoading" class="workspace-library-results glass-scrollbar">
+          <article v-for="entry in filteredWorkspaceLibraryEntries()" :key="entry.entryId" class="workspace-library-entry">
+            <div class="workspace-library-entry-main">
+              <div class="workspace-library-entry-heading">
+                <strong>{{ entry.workspaceName }}</strong>
+                <el-tag size="small" effect="plain" :type="workspaceEntryHasFullPackage(entry) ? 'success' : 'info'">
+                  {{ workspaceEntryHasFullPackage(entry) ? t('workPage.dialog.workspaceLibraryFullPackage') : t('workPage.dialog.workspaceLibraryMetadataOnly') }}
+                </el-tag>
+              </div>
+              <p class="workspace-library-entry-attribution">{{ entry.attribution || 'anonymous' }}</p>
+              <p v-if="entry.drawIB.length" class="workspace-library-entry-drawib">{{ entry.drawIB.join(' · ') }}</p>
+              <p v-if="entry.aliases.length" class="workspace-library-entry-aliases">{{ entry.aliases.join(' · ') }}</p>
+            </div>
+            <div class="workspace-library-entry-actions">
+              <el-button
+                size="small"
+                plain
+                :loading="workspaceDownloadingEntry?.entryId === entry.entryId && workspaceDownloadingEntry.mode === 'metadata'"
+                :disabled="workspaceAccessBusy"
+                @click="handleLibraryDownload(entry, 'metadata')"
+              >{{ t('workPage.actions.importWorkspaceMetadata') }}</el-button>
+              <el-button
+                v-if="workspaceEntryHasFullPackage(entry)"
+                size="small"
+                type="primary"
+                :loading="workspaceDownloadingEntry?.entryId === entry.entryId && workspaceDownloadingEntry.mode === 'full'"
+                :disabled="workspaceAccessBusy"
+                @click="handleLibraryDownload(entry, 'full')"
+              >{{ t('workPage.actions.downloadWorkspacePackage') }}</el-button>
+            </div>
+          </article>
+          <el-empty v-if="!workspaceLibraryLoading && filteredWorkspaceLibraryEntries().length === 0" :description="t('workPage.messages.workspaceLibraryNoMatches')" :image-size="76" />
+        </div>
       </template>
 
       <template #footer>
         <el-button @click="workspaceAccessDialog = null" :disabled="workspaceAccessBusy">{{ t('workPage.common.cancel') }}</el-button>
-        <el-button v-if="workspaceAccessDialog === 'upload'" type="primary" :loading="workspaceAccessBusy" @click="handlePublishWorkspaceFromDialog">{{ t('workPage.actions.openWorkspaceUpload') }}</el-button>
+        <el-button v-if="workspaceAccessDialog === 'upload'" type="primary" :loading="workspacePublishing" @click="handlePublishWorkspaceFromDialog">{{ t('workPage.actions.openWorkspaceUpload') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -3426,6 +3519,125 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   border-color: rgba(255, 255, 255, 0.10);
   /* 更透明的 muted 背景以减少灰蓝感 */
   background: rgba(15, 18, 28, 0.45);
+}
+
+:deep(.workspace-access-dialog) {
+  overflow: hidden;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.22);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(var(--theme-surface-tint-rgb), 0.16), transparent 42%),
+    linear-gradient(145deg, rgba(27, 32, 47, 0.98), rgba(15, 18, 29, 0.98));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+}
+
+:deep(.workspace-access-dialog .el-dialog__header) {
+  margin-right: 0;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 1.08rem;
+  font-weight: 650;
+}
+
+:deep(.workspace-access-dialog .el-dialog__body) {
+  padding: 20px 24px;
+}
+
+:deep(.workspace-access-dialog .el-dialog__footer) {
+  padding: 14px 24px 20px;
+  border-top: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
+}
+
+.workspace-library-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.workspace-library-toolbar :deep(.el-input) {
+  flex: 1;
+}
+
+.workspace-library-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 150px;
+  max-height: min(56vh, 500px);
+  overflow: auto;
+  padding: 2px 3px 6px;
+}
+
+.workspace-library-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 16px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.17);
+  border-radius: 15px;
+  background: linear-gradient(120deg, rgba(var(--theme-surface-tint-rgb), 0.10), rgba(255, 255, 255, 0.025));
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+
+.workspace-library-entry:hover {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.32);
+  background: linear-gradient(120deg, rgba(var(--theme-surface-tint-rgb), 0.15), rgba(255, 255, 255, 0.045));
+  transform: translateY(-1px);
+}
+
+.workspace-library-entry-main {
+  min-width: 0;
+}
+
+.workspace-library-entry-heading,
+.workspace-library-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-library-entry-heading strong {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-library-entry-attribution,
+.workspace-library-entry-drawib,
+.workspace-library-entry-aliases {
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-library-entry-drawib {
+  color: rgba(var(--theme-surface-tint-rgb), 0.88);
+}
+
+.workspace-library-entry-actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .workspace-library-entry {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .workspace-library-entry-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 960px) {

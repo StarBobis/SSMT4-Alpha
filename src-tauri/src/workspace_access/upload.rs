@@ -397,6 +397,22 @@ where
     }
     save_state(&state_path, &state)?;
 
+    // Initialization has succeeded and the resumable state is safely on disk.
+    // Emit an initial progress event before requesting the first part URL so the
+    // UI can transition out of its publish dialog as soon as uploading begins.
+    let completed_bytes = state
+        .completed_parts
+        .keys()
+        .map(|part| part_size(*part, info.size))
+        .sum();
+    on_progress(WorkspaceUploadProgress {
+        submission_id: state.submission_id.clone(),
+        completed_bytes,
+        total_bytes: info.size,
+        completed_parts: state.completed_parts.len() as u32,
+        total_parts,
+    });
+
     let missing: Vec<u32> = (1..=total_parts)
         .filter(|part| !state.completed_parts.contains_key(part))
         .collect();

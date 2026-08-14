@@ -16,6 +16,8 @@ const props = defineProps<{
   workspaceModifiedTimes: Record<string, number>;
   workspaceProvenance: { attribution: string; uploadedAt: string; aliases: string[] } | null;
   isSpecificIbDumpToggling: boolean;
+  workspaceUploadProgress: number;
+  workspaceUploadActive: boolean;
 }>();
 
 type WorkspaceSortMode = 'date' | 'name';
@@ -136,10 +138,16 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
               <button
                 type="button"
                 class="workspace-inline-action workspace-inline-action--secondary"
-                :class="{ 'is-disabled': !workspaceName }"
+                :class="{ 'is-disabled': !workspaceName, 'is-uploading': workspaceUploadActive }"
+                :disabled="workspaceUploadActive"
                 @click="workspaceName && emit('openWorkspaceUpload')"
               >
-                <el-icon><UploadFilled /></el-icon>
+                <span
+                  v-if="workspaceUploadActive"
+                  class="workspace-upload-progress-fill"
+                  :style="{ height: `${Math.max(4, workspaceUploadProgress)}%` }"
+                />
+                <el-icon class="workspace-inline-action-icon"><UploadFilled /></el-icon>
               </button>
             </el-tooltip>
             <el-tooltip :content="t('workPage.actions.openWorkspaceDownload')" placement="bottom">
@@ -486,6 +494,8 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
 }
 
 .workspace-inline-action {
+  position: relative;
+  overflow: hidden;
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -498,6 +508,26 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
   color: rgba(var(--theme-surface-tint-rgb), 0.82);
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.workspace-inline-action-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-upload-progress-fill {
+  position: absolute;
+  z-index: 0;
+  inset: auto 0 0;
+  background: linear-gradient(180deg, rgba(92, 205, 255, 0.82), rgba(71, 133, 255, 0.72));
+  transition: height 0.24s ease-out;
+  pointer-events: none;
+}
+
+.workspace-inline-action.is-uploading {
+  cursor: progress;
+  color: rgba(245, 252, 255, 1);
+  border-color: rgba(104, 204, 255, 0.58);
 }
 
 .workspace-inline-action:hover {

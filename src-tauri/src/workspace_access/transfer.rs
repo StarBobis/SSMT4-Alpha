@@ -121,7 +121,7 @@ pub async fn download_archive(
         .await
         .map_err(|_| "DOWNLOAD_REQUEST_FAILED")?;
     if !response.status().is_success() {
-        return Err("DOWNLOAD_HTTP_FAILED".to_string());
+        return Err(format!("DOWNLOAD_HTTP_{}", response.status().as_u16()));
     }
     if response
         .content_length()
