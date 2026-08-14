@@ -46,3 +46,13 @@ bun.lock
 
 *.bak*
 tmp*
+
+# CodeGraph 本地索引缓存（不提交）
+.codegraph/
+
+# 构建产物与调试文件（不提交）
+portable/
+tauri-build.log.err
+app_uib_real.png
+uib_screenshot.png
+uib_wrapper_screenshot.png

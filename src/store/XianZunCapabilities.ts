@@ -122,9 +122,13 @@ const registerAuto = (
   const excluded = new Set<string>(['constructor', 'then', 'catch', ...extraExclude])
   const tools: CapabilityTool[] = []
 
-  for (const [key, value] of Object.entries(module)) {
+  // Static class methods are non-enumerable, so Object.entries() misses them
+  // (for example GlobalConfig.AppSettingsFilePath). Walk own property names so
+  // classes, namespaces and store instances all register correctly.
+  for (const key of Object.getOwnPropertyNames(module)) {
     if (excluded.has(key)) continue
     if (key.startsWith('$') || key.startsWith('_')) continue
+    const value = (module as Record<string, unknown>)[key]
     if (typeof value !== 'function') continue
 
     const fn = value as (...args: unknown[]) => unknown
