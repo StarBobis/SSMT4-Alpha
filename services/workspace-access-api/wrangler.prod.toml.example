@@ -1,0 +1,27 @@
+# Copy to a separately reviewed production configuration. Never point this at
+# the development database or bucket, and never commit the populated file.
+name = "ssmt-workspace-api"
+main = "src/index.js"
+compatibility_date = "2026-08-14"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+PUBLIC_REPO_OWNER = "Perxenic-Acid"
+PUBLIC_REPO_NAME = "SSMT-WorkSpace_Access-Library"
+MAX_SUBMISSIONS_PER_IP_PER_DAY = "50"
+MAX_ARCHIVE_BYTES = "1073741824"
+MAX_ARCHIVE_BYTES_PER_IP_PER_DAY = "5368709120"
+LARGE_REVIEW_THRESHOLD = "209715200"
+UPLOAD_TTL_HOURS = "24"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ssmt-workspace-api"
+database_id = "REPLACE_WITH_PRODUCTION_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "WORKSPACE_BUCKET"
+bucket_name = "ssmt-workspace-access-library"

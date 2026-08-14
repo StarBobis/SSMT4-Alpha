@@ -719,7 +719,26 @@
       "confirmCreateAndApplyTitle": "Confirm Create and Apply",
       "confirmClearTitle": "Confirm Clear",
       "confirmDeleteTitle": "Confirm Delete",
-      "confirmDeleteWorkspaceTabTitle": "Confirm Delete LOD"
+      "confirmDeleteWorkspaceTabTitle": "Confirm Delete LOD",
+      "workspacePreflightTitle": "Workspace Preflight",
+      "importWorkspaceTitle": "Import Workspace Package",
+      "importWorkspaceNameMessage": "Name for the imported workspace",
+      "workspacePublishTitle": "Publish Workspace",
+      "workspaceAccessEndpointMessage": "Workspace access service URL",
+      "workspaceDescriptionMessage": "Public description (optional)",
+      "workspaceCapturedAtMessage": "Capture time in RFC 3339 format",
+      "workspaceGameBuildMessage": "Game build (optional)",
+      "workspaceAttributionMessage": "Public self-supplied attribution (optional, not verified)"
+      ,"workspaceLibraryTitle": "Public Workspace Library",
+      "workspaceLibrarySearchMessage": "Filter by workspace name, attribution, DrawIB, or alias",
+      "workspaceLibrarySortMessage": "Sort by uploadedAt, capturedAt, or fullDataSize",
+      "workspaceLibraryAttributionUnverified": "self-supplied, not verified",
+      "workspaceLibraryFullPackage": "full package",
+      "workspaceLibraryMetadataOnly": "metadata-only",
+      "workspaceLibraryReview": "review",
+      "workspaceLibrarySelectMessage": "Enter an entry number or Entry ID",
+      "workspaceLibraryResultsTitle": "Workspace Entries",
+      "workspaceLibraryDownloadMessage": "This entry includes a complete workspace package. Download and import it?"
     },
     "tabs": {
       "extractByDrawIB": "Extract by DrawIB",
@@ -741,7 +760,10 @@
       "enterSkipIB": "Enter SkipIB",
       "enterIndexCount": "Enter IndexCount",
       "enterFirstIndex": "Enter FirstIndex",
-      "enterVSHash": "Enter VS Hash"
+      "enterVSHash": "Enter VS Hash",
+      "workspaceLibrarySort": "uploadedAt",
+      "workspaceCapturedAt": "2026-08-14T00:00:00Z",
+      "workspaceGameBuild": "Game build"
     },
     "ui": {
       "selectFrameAnalysisFolder": "Select FrameAnalysis folder",
@@ -780,7 +802,14 @@
       "openCommonFolders": "Open Common Folders",
       "extractTextures": "Extract Textures",
       "addWorkspaceTab": "Add LOD",
-      "specificIbDump": "Specific IB Dump"
+      "specificIbDump": "Specific IB Dump",
+      "preflightWorkspace": "Preflight Workspace",
+      "createWorkspaceArchive": "Create .ssmtws Workspace Package",
+      "importWorkspaceArchive": "Import .ssmtws Workspace Package"
+      ,"publishWorkspaceMetadata": "Publish Public Metadata",
+      "publishWorkspaceArchive": "Publish Metadata and .ssmtws Package",
+      "cancelWorkspaceArchiveUpload": "Cancel Workspace Package Upload"
+      ,"browseWorkspaceLibrary": "Browse Public Workspace Library"
     },
     "menu": {
       "open3DmigotoFolder": "Open 3Dmigoto Folder",
@@ -847,6 +876,8 @@
       "workspaceReady": "Workspace {name} is ready",
       "createWorkspaceFailed": "Failed to create workspace: {name}",
       "enterWorkspaceName": "Please enter a workspace name",
+      "workspaceDescription": "Describe this workspace",
+      "workspaceAttribution": "Your public display name",
       "confirmCreateWorkspace": "Create a workspace named \"{name}\"?",
       "workspaceAlreadyExists": "Workspace already exists",
       "enterTabName": "Please enter an LOD name",
@@ -865,7 +896,23 @@
       "clearWorkspaceFailed": "Failed to clear workspace",
       "confirmDeleteWorkspace": "Delete workspace \"{name}\"? The folder and all its contents will be moved to recycle bin.",
       "workspaceDeleted": "Workspace {name} has been moved to recycle bin",
-      "deleteFailed": "Delete failed"
+      "deleteFailed": "Delete failed",
+      "workspacePreflightPassed": "Workspace preflight passed: {files} files, {size} bytes",
+      "workspacePreflightFailed": "Workspace preflight failed",
+      "workspaceArchiveCreated": "Workspace package created: {files} files, {size} bytes",
+      "workspaceArchiveFailed": "Workspace package creation failed",
+      "workspaceArchiveImported": "Imported workspace {name}: {files} files",
+      "workspaceArchiveImportFailed": "Workspace package import failed"
+      ,"workspacePublished": "Workspace published as entry {entryId}",
+      "workspacePublishFailed": "Workspace publish failed",
+      "workspaceUploadCancellationRequested": "Workspace package upload cancellation requested",
+      "workspaceUploadCancelled": "Workspace package upload cancelled",
+      "workspaceUploadCancelFailed": "Workspace package upload cancellation failed"
+      ,"workspaceLibraryEmpty": "The public workspace library has no entries for this game",
+      "workspaceLibraryNoMatches": "No matching workspace entries",
+      "workspaceLibraryInvalidSelection": "That workspace entry was not found",
+      "workspaceLibraryFailed": "Public workspace library request failed",
+      "workspaceMetadataImported": "Imported metadata skeleton: {name}"
     }
   },
   "gameType": {

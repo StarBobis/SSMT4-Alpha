@@ -719,7 +719,26 @@
       "confirmCreateAndApplyTitle": "确认创建并应用",
       "confirmClearTitle": "确认清空",
       "confirmDeleteTitle": "确认删除",
-      "confirmDeleteWorkspaceTabTitle": "确认删除 LOD"
+      "confirmDeleteWorkspaceTabTitle": "确认删除 LOD",
+      "workspacePreflightTitle": "工作空间预检",
+      "importWorkspaceTitle": "导入工作空间包",
+      "importWorkspaceNameMessage": "输入导入后的工作空间名称",
+      "workspacePublishTitle": "发布工作空间",
+      "workspaceAccessEndpointMessage": "工作空间公共库服务地址",
+      "workspaceDescriptionMessage": "公开说明（可选）",
+      "workspaceCapturedAtMessage": "采集时间（RFC 3339 格式）",
+      "workspaceGameBuildMessage": "游戏版本（可选）",
+      "workspaceAttributionMessage": "公开自填署名（可选，未验证）"
+      ,"workspaceLibraryTitle": "公共工作空间库",
+      "workspaceLibrarySearchMessage": "按工作空间名、署名、DrawIB 或别名筛选",
+      "workspaceLibrarySortMessage": "按 uploadedAt、capturedAt 或 fullDataSize 排序",
+      "workspaceLibraryAttributionUnverified": "自填署名，未验证",
+      "workspaceLibraryFullPackage": "完整包",
+      "workspaceLibraryMetadataOnly": "仅元数据",
+      "workspaceLibraryReview": "复审",
+      "workspaceLibrarySelectMessage": "输入条目编号或 Entry ID",
+      "workspaceLibraryResultsTitle": "工作空间条目",
+      "workspaceLibraryDownloadMessage": "该条目包含完整工作空间包，是否下载并导入？"
     },
     "tabs": {
       "extractByDrawIB": "按 DrawIB 提取",
@@ -741,7 +760,10 @@
       "enterSkipIB": "输入 SkipIB",
       "enterIndexCount": "输入 IndexCount",
       "enterFirstIndex": "输入 FirstIndex",
-      "enterVSHash": "输入 VS Hash"
+      "enterVSHash": "输入 VS Hash",
+      "workspaceLibrarySort": "uploadedAt",
+      "workspaceCapturedAt": "2026-08-14T00:00:00Z",
+      "workspaceGameBuild": "游戏版本"
     },
     "ui": {
       "selectFrameAnalysisFolder": "选择 FrameAnalysis 文件夹",
@@ -780,7 +802,14 @@
       "openCommonFolders": "打开常用文件夹",
       "extractTextures": "提取贴图",
       "addWorkspaceTab": "新增 LOD",
-      "specificIbDump": "指定 IB Dump"
+      "specificIbDump": "指定 IB Dump",
+      "preflightWorkspace": "工作空间预检",
+      "createWorkspaceArchive": "生成 .ssmtws 工作空间包",
+      "importWorkspaceArchive": "导入 .ssmtws 工作空间包"
+      ,"publishWorkspaceMetadata": "发布公开元数据",
+      "publishWorkspaceArchive": "发布元数据和 .ssmtws 工作空间包",
+      "cancelWorkspaceArchiveUpload": "取消工作空间包上传"
+      ,"browseWorkspaceLibrary": "浏览公共工作空间库"
     },
     "menu": {
       "open3DmigotoFolder": "打开 3Dmigoto 文件夹",
@@ -847,6 +876,8 @@
       "workspaceReady": "工作空间 {name} 已就绪",
       "createWorkspaceFailed": "创建工作空间失败: {name}",
       "enterWorkspaceName": "请输入工作空间名称",
+      "workspaceDescription": "描述这个工作空间",
+      "workspaceAttribution": "公开显示名称",
       "confirmCreateWorkspace": "确认创建名为 \"{name}\" 的工作空间？",
       "workspaceAlreadyExists": "工作空间已存在",
       "enterTabName": "请输入 LOD 名称",
@@ -865,7 +896,23 @@
       "clearWorkspaceFailed": "清空工作空间失败",
       "confirmDeleteWorkspace": "确认删除工作空间 \"{name}\"？该操作会将文件夹及其全部内容移入回收站。",
       "workspaceDeleted": "工作空间 {name} 已移入回收站",
-      "deleteFailed": "删除失败"
+      "deleteFailed": "删除失败",
+      "workspacePreflightPassed": "工作空间预检通过：{files} 个文件，{size} 字节",
+      "workspacePreflightFailed": "工作空间预检失败",
+      "workspaceArchiveCreated": "工作空间包已生成：{files} 个文件，{size} 字节",
+      "workspaceArchiveFailed": "工作空间包生成失败",
+      "workspaceArchiveImported": "已导入工作空间 {name}：{files} 个文件",
+      "workspaceArchiveImportFailed": "工作空间包导入失败"
+      ,"workspacePublished": "工作空间已发布为条目 {entryId}",
+      "workspacePublishFailed": "工作空间发布失败",
+      "workspaceUploadCancellationRequested": "已请求取消工作空间包上传",
+      "workspaceUploadCancelled": "工作空间包上传已取消",
+      "workspaceUploadCancelFailed": "取消工作空间包上传失败"
+      ,"workspaceLibraryEmpty": "这个游戏暂无公共工作空间条目",
+      "workspaceLibraryNoMatches": "没有匹配的工作空间条目",
+      "workspaceLibraryInvalidSelection": "找不到这个工作空间条目",
+      "workspaceLibraryFailed": "公共工作空间库请求失败",
+      "workspaceMetadataImported": "已导入元数据骨架：{name}"
     }
   },
   "gameType": {

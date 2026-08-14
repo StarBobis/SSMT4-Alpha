@@ -1,0 +1,15 @@
+{
+  "name": "ssmt-workspace-access-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build-index": "node scripts/build-index.mjs",
+    "validate-entries": "node scripts/validate-entries.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "wrangler": "^4.123.0"
+  }
+}

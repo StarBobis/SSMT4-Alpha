@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ssmt4.dev/schema/v1/status.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "entryId", "availability", "moderation", "warning", "deleteAfter", "replacementEntryId"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "entryId": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "availability": { "enum": ["active", "possibly_outdated", "expired"] },
+    "moderation": { "type": "object", "additionalProperties": false, "required": ["reviewRequired", "reviewState", "reviewedAt"], "properties": { "reviewRequired": { "type": "boolean" }, "reviewState": { "enum": ["not_required", "pending", "approved", "rejected"] }, "reviewedAt": { "type": ["string", "null"], "format": "date-time" } } },
+    "warning": { "type": "object", "additionalProperties": false, "required": ["markedAt", "reason"], "properties": { "markedAt": { "type": ["string", "null"], "format": "date-time" }, "reason": { "type": ["string", "null"], "maxLength": 1000 } } },
+    "deleteAfter": { "type": ["string", "null"], "format": "date-time" },
+    "replacementEntryId": { "type": ["string", "null"] }
+  }
+}

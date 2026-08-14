@@ -179,6 +179,7 @@ export class AppSettings {
 	globalDimMaskStrength: number = 2.5
 	uiScale: number = 1
 	DBMTWorkFolder: string = ''
+	workspaceAccessApiUrl: string = ''
 	CurrentGameName: string = 'Default'
 	githubToken: string = ''
 	includePrereleaseUpdates: boolean = true
@@ -259,6 +260,7 @@ export class AppSettings {
 		this.globalDimMaskStrength = init?.globalDimMaskStrength ?? this.globalDimMaskStrength
 		this.uiScale = normalizeAppUiScale(init?.uiScale)
 		this.DBMTWorkFolder = init?.DBMTWorkFolder ?? this.DBMTWorkFolder
+		this.workspaceAccessApiUrl = init?.workspaceAccessApiUrl?.trim() ?? this.workspaceAccessApiUrl
 		this.CurrentGameName = init?.CurrentGameName ?? this.CurrentGameName
 		this.githubToken = init?.githubToken ?? this.githubToken
 		this.includePrereleaseUpdates = init?.includePrereleaseUpdates ?? this.includePrereleaseUpdates

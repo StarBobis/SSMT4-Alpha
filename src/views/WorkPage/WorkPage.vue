@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openPath as openExternal } from '@tauri-apps/plugin-opener';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readDir, readTextFile, writeTextFile, mkdir, stat } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { debugError, debugLog, debugWarn } from '../../utils/debugLog';
@@ -78,6 +78,66 @@ type WorkPageTabConfig = {
 type WorkspaceFrameAnalysisConfig = {
   frameAnalysisFolderPath: string;
   selectedFrameAnalysis: string;
+};
+
+type WorkspaceAccessIssue = {
+  code: string;
+  path?: string;
+};
+
+type WorkspacePreflightReport = {
+  valid: boolean;
+  errors: WorkspaceAccessIssue[];
+  warnings: WorkspaceAccessIssue[];
+  fileCount: number;
+  totalSize: number;
+};
+
+type WorkspaceArchiveBuildResult = {
+  archivePath: string;
+  sha256: string;
+  size: number;
+  uncompressedSize: number;
+  fileCount: number;
+};
+
+type WorkspaceArchiveImportResult = {
+  workspacePath: string;
+  workspaceName: string;
+  fileCount: number;
+  totalSize: number;
+};
+
+type WorkspacePublishResult = {
+  submissionId: string;
+  entryId: string;
+  status: string;
+  metadataPath?: string;
+};
+
+type LibraryIndexEntry = {
+  entryId: string;
+  workspaceName: string;
+  attribution: string;
+  uploadedAt: string;
+  capturedAt: string | null;
+  drawIB: string[];
+  aliases: string[];
+  fullDataAvailable: boolean;
+  fullDataSize: number;
+  availability: string;
+  reviewState: string;
+  metadataPath: string;
+};
+
+type LibraryIndex = { entries: LibraryIndexEntry[] };
+type LibraryMetadata = {
+  schemaVersion: number;
+  entryId: string;
+  gamePreset: string;
+  workspaceName: string;
+  lods: unknown[];
+  fullData: { available: boolean; sha256?: string; size?: number };
 };
 
 type WorkspaceTabSaveSnapshot = {
@@ -356,6 +416,8 @@ const isFrameAnalysisPathConfigLoading = ref(false);
 const isWorkspaceTabConfigLoading = ref(false);
 const isFrameAnalysisPathInvalid = ref(false);
 const isWorkspaceTransitioning = ref(false);
+const activeWorkspaceArchiveUpload = ref<{ workerUrl: string; archivePath: string } | null>(null);
+const isWorkspaceArchiveUploadCancelling = ref(false);
 let lastInvalidFrameAnalysisWarnPath = '';
 let workspaceSaveQueue: Promise<void> = Promise.resolve();
 
@@ -1587,6 +1649,326 @@ const handleTextureMenu = async (cmd: unknown) => {
   });
 };
 
+const handleWorkspaceAccessPreflight = async (): Promise<void> => {
+  if (!workspaceName.value) {
+    ElMessage.warning(t('workPage.messages.selectOrCreateWorkspaceFirst'));
+    return;
+  }
+
+  try {
+    await saveCurrentWorkspaceTabConfig();
+    await workspaceSaveQueue;
+
+    const workspacePath = await getWorkspaceDirPath(workspaceName.value);
+    if (!workspacePath) {
+      ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
+      return;
+    }
+
+    const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
+    const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
+    const report = await invoke<WorkspacePreflightReport>('workspace_access_preflight', {
+      request: {
+        workspacePath,
+        workspaceName: workspaceName.value,
+        gamePreset,
+      },
+    });
+
+    const issues = [...report.errors, ...report.warnings];
+    if (issues.length === 0) {
+      ElMessage.success(t('workPage.messages.workspacePreflightPassed', {
+        files: report.fileCount,
+        size: report.totalSize,
+      }));
+      return;
+    }
+
+    const detail = issues
+      .map((issue) => issue.path ? `${issue.code}: ${issue.path}` : issue.code)
+      .join('\n');
+    await ElMessageBox.alert(detail, t('workPage.dialog.workspacePreflightTitle'), {
+      confirmButtonText: t('workPage.common.confirm'),
+      type: report.valid ? 'warning' : 'error',
+    });
+  } catch (error) {
+    console.error('Workspace access preflight failed', error);
+    ElMessage.error(t('workPage.messages.workspacePreflightFailed'));
+  }
+};
+
+const handleCreateWorkspaceArchive = async (): Promise<void> => {
+  if (!workspaceName.value) {
+    ElMessage.warning(t('workPage.messages.selectOrCreateWorkspaceFirst'));
+    return;
+  }
+
+  try {
+    await saveCurrentWorkspaceTabConfig();
+    await workspaceSaveQueue;
+    const workspacePath = await getWorkspaceDirPath(workspaceName.value);
+    if (!workspacePath) {
+      ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
+      return;
+    }
+    const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
+    const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
+    const outputPath = await saveDialog({
+      defaultPath: `${workspaceName.value}.ssmtws`,
+      filters: [{ name: 'SSMT Workspace', extensions: ['ssmtws'] }],
+    });
+    if (!outputPath) return;
+
+    if (isWorkspaceTransitioning.value) return;
+    isWorkspaceTransitioning.value = true;
+    let result: WorkspaceArchiveBuildResult;
+    try {
+      result = await invoke<WorkspaceArchiveBuildResult>('workspace_access_create_archive', {
+        request: {
+          workspacePath,
+          workspaceName: workspaceName.value,
+          gamePreset,
+          outputPath,
+        },
+      });
+    } finally {
+      isWorkspaceTransitioning.value = false;
+    }
+    ElMessage.success(t('workPage.messages.workspaceArchiveCreated', {
+      files: result.fileCount,
+      size: result.size,
+    }));
+  } catch (error) {
+    console.error('Workspace archive creation failed', error);
+    ElMessage.error(t('workPage.messages.workspaceArchiveFailed'));
+  }
+};
+
+const handleImportWorkspaceArchive = async (): Promise<void> => {
+  try {
+    const archivePath = await openDialog({
+      multiple: false,
+      filters: [{ name: 'SSMT Workspace', extensions: ['ssmtws'] }],
+    });
+    if (!archivePath || Array.isArray(archivePath)) return;
+    const workspaceBase = await getWorkspaceBaseDir();
+    if (!workspaceBase) {
+      ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
+      return;
+    }
+    const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
+    const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
+    const prompt = await ElMessageBox.prompt(
+      t('workPage.dialog.importWorkspaceNameMessage'),
+      t('workPage.dialog.importWorkspaceTitle'),
+      { inputPlaceholder: t('workPage.placeholders.enterWorkspaceName'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+    );
+    const workspaceName = prompt.value.trim();
+    const result = await invoke<WorkspaceArchiveImportResult>('workspace_access_import_archive', {
+      archivePath,
+      workspaceBase,
+      workspaceName,
+      gamePreset,
+    });
+    await refreshWorkspaces();
+    await handleWorkspaceSelectionChange(result.workspaceName);
+    ElMessage.success(t('workPage.messages.workspaceArchiveImported', { name: result.workspaceName, files: result.fileCount }));
+  } catch (error) {
+    if (error === 'cancel' || (error instanceof Error && /cancel|取消/.test(error.message))) return;
+    console.error('Workspace archive import failed', error);
+    ElMessage.error(t('workPage.messages.workspaceArchiveImportFailed'));
+  }
+};
+
+const promptWorkspacePublishDetails = async (withArchive: boolean): Promise<{
+  workerUrl: string;
+  description?: string;
+  capturedAt?: string;
+  gameBuild?: string;
+  attribution: { mode: 'anonymous' | 'custom'; displayName?: string };
+  archivePath?: string;
+} | undefined> => {
+  const endpoint = await ElMessageBox.prompt(
+    t('workPage.dialog.workspaceAccessEndpointMessage'),
+    t('workPage.dialog.workspacePublishTitle'),
+    { inputValue: appSettings.workspaceAccessApiUrl, inputPlaceholder: 'https://...', confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+  );
+  const workerUrl = endpoint.value.trim();
+  appSettings.workspaceAccessApiUrl = workerUrl;
+  const descriptionInput = await ElMessageBox.prompt(
+    t('workPage.dialog.workspaceDescriptionMessage'),
+    t('workPage.dialog.workspacePublishTitle'),
+    { inputPlaceholder: t('workPage.placeholders.workspaceDescription'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel'), inputType: 'textarea' },
+  );
+  const capturedAtInput = await ElMessageBox.prompt(
+    t('workPage.dialog.workspaceCapturedAtMessage'),
+    t('workPage.dialog.workspacePublishTitle'),
+    { inputValue: new Date().toISOString(), inputPlaceholder: t('workPage.placeholders.workspaceCapturedAt'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+  );
+  const gameBuildInput = await ElMessageBox.prompt(
+    t('workPage.dialog.workspaceGameBuildMessage'),
+    t('workPage.dialog.workspacePublishTitle'),
+    { inputPlaceholder: t('workPage.placeholders.workspaceGameBuild'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+  );
+  const attributionInput = await ElMessageBox.prompt(
+    t('workPage.dialog.workspaceAttributionMessage'),
+    t('workPage.dialog.workspacePublishTitle'),
+    { inputPlaceholder: t('workPage.placeholders.workspaceAttribution'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+  );
+  let archivePath: string | undefined;
+  if (withArchive) {
+    const selected = await openDialog({ multiple: false, filters: [{ name: 'SSMT Workspace', extensions: ['ssmtws'] }] });
+    if (!selected || Array.isArray(selected)) return undefined;
+    archivePath = selected;
+  }
+  const displayName = attributionInput.value.trim();
+  return {
+    workerUrl,
+    description: descriptionInput.value.trim() || undefined,
+    capturedAt: capturedAtInput.value.trim() || undefined,
+    gameBuild: gameBuildInput.value.trim() || undefined,
+    attribution: displayName ? { mode: 'custom', displayName } : { mode: 'anonymous' },
+    archivePath,
+  };
+};
+
+const handlePublishWorkspace = async (withArchive: boolean): Promise<void> => {
+  if (!workspaceName.value) {
+    ElMessage.warning(t('workPage.messages.selectOrCreateWorkspaceFirst'));
+    return;
+  }
+  try {
+    await saveCurrentWorkspaceTabConfig();
+    await workspaceSaveQueue;
+    const workspacePath = await getWorkspaceDirPath(workspaceName.value);
+    if (!workspacePath) {
+      ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
+      return;
+    }
+    const details = await promptWorkspacePublishDetails(withArchive);
+    if (!details) return;
+    const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
+    const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
+    if (isWorkspaceTransitioning.value) return;
+    isWorkspaceTransitioning.value = true;
+    if (details.archivePath) {
+      activeWorkspaceArchiveUpload.value = { workerUrl: details.workerUrl, archivePath: details.archivePath };
+    }
+    let result: WorkspacePublishResult;
+    try {
+      result = await invoke<WorkspacePublishResult>('workspace_access_publish', {
+        request: {
+          workerUrl: details.workerUrl,
+          workspacePath,
+          workspaceName: workspaceName.value,
+          gamePreset,
+          description: details.description,
+          capturedAt: details.capturedAt,
+          gameBuild: details.gameBuild,
+          attribution: details.attribution,
+          archivePath: details.archivePath,
+        },
+      });
+    } finally {
+      activeWorkspaceArchiveUpload.value = null;
+      isWorkspaceArchiveUploadCancelling.value = false;
+      isWorkspaceTransitioning.value = false;
+    }
+    ElMessage.success(t('workPage.messages.workspacePublished', { entryId: result.entryId }));
+  } catch (error) {
+    if (error === 'cancel' || (error instanceof Error && /cancel|取消/.test(error.message))) return;
+    if (String(error).includes('UPLOAD_CANCELLED')) {
+      ElMessage.info(t('workPage.messages.workspaceUploadCancelled'));
+      return;
+    }
+    console.error('Workspace publish failed', error);
+    ElMessage.error(t('workPage.messages.workspacePublishFailed'));
+  }
+};
+
+const handleCancelWorkspaceArchiveUpload = async (): Promise<void> => {
+  const upload = activeWorkspaceArchiveUpload.value;
+  if (!upload || isWorkspaceArchiveUploadCancelling.value) return;
+  isWorkspaceArchiveUploadCancelling.value = true;
+  try {
+    await invoke('workspace_access_cancel_upload', upload);
+    ElMessage.info(t('workPage.messages.workspaceUploadCancellationRequested'));
+  } catch (error) {
+    console.error('Workspace archive upload cancellation failed', error);
+    ElMessage.error(t('workPage.messages.workspaceUploadCancelFailed'));
+    isWorkspaceArchiveUploadCancelling.value = false;
+  }
+};
+
+const handleBrowseWorkspaceLibrary = async (): Promise<void> => {
+  try {
+    const gameConfig = await ResourceManager.loadGameConfig(appSettings.CurrentGameName);
+    const gamePreset = (gameConfig?.gamePreset || appSettings.CurrentGameName).trim();
+    const index = await invoke<LibraryIndex>('workspace_access_fetch_index', { rawBaseUrl: null, gamePreset });
+    if (!index.entries.length) {
+      ElMessage.info(t('workPage.messages.workspaceLibraryEmpty'));
+      return;
+    }
+    const queryInput = await ElMessageBox.prompt(
+      t('workPage.dialog.workspaceLibrarySearchMessage'),
+      t('workPage.dialog.workspaceLibraryTitle'),
+      { inputPlaceholder: t('workPage.placeholders.workspaceLibrarySearch'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+    );
+    const query = queryInput.value.trim().toLocaleLowerCase();
+    const sortInput = await ElMessageBox.prompt(
+      t('workPage.dialog.workspaceLibrarySortMessage'),
+      t('workPage.dialog.workspaceLibraryTitle'),
+      { inputValue: 'uploadedAt', inputPlaceholder: t('workPage.placeholders.workspaceLibrarySort'), confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') },
+    );
+    const sortKey = ['capturedAt', 'fullDataSize'].includes(sortInput.value.trim()) ? sortInput.value.trim() : 'uploadedAt';
+    const entries = index.entries.filter((entry) => !query || [entry.workspaceName, entry.attribution, ...entry.drawIB, ...entry.aliases].join('\n').toLocaleLowerCase().includes(query));
+    entries.sort((left, right) => {
+      if (sortKey === 'fullDataSize') return right.fullDataSize - left.fullDataSize || right.uploadedAt.localeCompare(left.uploadedAt);
+      const leftTime = Date.parse(sortKey === 'capturedAt' ? (left.capturedAt || '') : left.uploadedAt) || 0;
+      const rightTime = Date.parse(sortKey === 'capturedAt' ? (right.capturedAt || '') : right.uploadedAt) || 0;
+      return rightTime - leftTime || right.uploadedAt.localeCompare(left.uploadedAt);
+    });
+    entries.splice(50);
+    if (!entries.length) {
+      ElMessage.info(t('workPage.messages.workspaceLibraryNoMatches'));
+      return;
+    }
+    await ElMessageBox.alert(entries.map((entry, index) => `${index + 1}. ${entry.workspaceName} | ${entry.attribution} (${t('workPage.dialog.workspaceLibraryAttributionUnverified')}) | ${entry.fullDataAvailable ? t('workPage.dialog.workspaceLibraryFullPackage') : t('workPage.dialog.workspaceLibraryMetadataOnly')}${entry.fullDataAvailable ? ` ${entry.fullDataSize} bytes` : ''} | ${entry.entryId}${entry.availability !== 'active' ? ` | ${entry.availability}` : ''}${entry.reviewState !== 'not_required' ? ` | ${t('workPage.dialog.workspaceLibraryReview')}: ${entry.reviewState}` : ''}`).join('\n'), t('workPage.dialog.workspaceLibraryResultsTitle'), { confirmButtonText: t('workPage.common.confirm') });
+    const selectedInput = await ElMessageBox.prompt(t('workPage.dialog.workspaceLibrarySelectMessage'), t('workPage.dialog.workspaceLibraryTitle'), { inputPlaceholder: entries[0].entryId, confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') });
+    const selected = entries.find((entry) => entry.entryId === selectedInput.value.trim()) || entries[Number.parseInt(selectedInput.value.trim(), 10) - 1];
+    if (!selected) {
+      ElMessage.warning(t('workPage.messages.workspaceLibraryInvalidSelection'));
+      return;
+    }
+    const metadata = await invoke<LibraryMetadata>('workspace_access_fetch_metadata', { rawBaseUrl: null, metadataPath: selected.metadataPath });
+    const workspaceBase = await getWorkspaceBaseDir();
+    if (!workspaceBase) {
+      ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
+      return;
+    }
+    if (metadata.fullData.available && metadata.fullData.sha256) {
+      const shouldDownload = await ElMessageBox.confirm(t('workPage.dialog.workspaceLibraryDownloadMessage'), t('workPage.dialog.workspaceLibraryTitle'), { confirmButtonText: t('workPage.common.confirm'), cancelButtonText: t('workPage.common.cancel') }).then(() => true).catch(() => false);
+      if (!shouldDownload) return;
+      const destination = await saveDialog({ defaultPath: `${metadata.workspaceName}.ssmtws`, filters: [{ name: 'SSMT Workspace', extensions: ['ssmtws'] }] });
+      if (!destination) return;
+      await invoke('workspace_access_download_entry', { workerUrl: appSettings.workspaceAccessApiUrl, entryId: metadata.entryId, destination, expectedSha256: metadata.fullData.sha256 });
+      const imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_import_archive', { archivePath: destination, workspaceBase, workspaceName: metadata.workspaceName, gamePreset });
+      await refreshWorkspaces();
+      await handleWorkspaceSelectionChange(imported.workspaceName);
+      ElMessage.success(t('workPage.messages.workspaceArchiveImported', { name: imported.workspaceName, files: imported.fileCount }));
+      return;
+    }
+    const imported = await invoke<WorkspaceArchiveImportResult>('workspace_access_import_metadata_skeleton', { metadata, workspaceBase, workspaceName: metadata.workspaceName });
+    await refreshWorkspaces();
+    await handleWorkspaceSelectionChange(imported.workspaceName);
+    ElMessage.success(t('workPage.messages.workspaceMetadataImported', { name: imported.workspaceName }));
+  } catch (error) {
+    if (error === 'cancel' || (error instanceof Error && /cancel|取消/.test(error.message))) return;
+    console.error('Workspace library browse failed', error);
+    ElMessage.error(t('workPage.messages.workspaceLibraryFailed'));
+  }
+};
+
 const collectSpecificIbDumpDrawIbs = (): string[] => Array.from(
   new Set(
     modelRows.value
@@ -2533,6 +2915,8 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
         :workspaceOptions="workspaceOptions"
         :workspaceModifiedTimes="workspaceModifiedTimes"
         :isSpecificIbDumpToggling="isSpecificIbDumpToggling"
+        :isWorkspaceArchiveUploadActive="activeWorkspaceArchiveUpload !== null"
+        :isWorkspaceArchiveUploadCancelling="isWorkspaceArchiveUploadCancelling"
         @createWorkspace="handleCreateWorkspace"
         @createFromConfig="handleCreateFromConfig"
         @openWorkspace="handleOpenWorkspace"
@@ -2542,6 +2926,13 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
         @selectWorkspace="handleWorkspaceSelectionChange"
         @folderMenu="handleFolderMenu"
         @textureMenu="handleTextureMenu"
+        @preflightWorkspace="handleWorkspaceAccessPreflight"
+        @createWorkspaceArchive="handleCreateWorkspaceArchive"
+        @importWorkspaceArchive="handleImportWorkspaceArchive"
+        @publishWorkspaceMetadata="handlePublishWorkspace(false)"
+        @publishWorkspaceArchive="handlePublishWorkspace(true)"
+        @cancelWorkspaceArchiveUpload="handleCancelWorkspaceArchiveUpload"
+        @browseWorkspaceLibrary="handleBrowseWorkspaceLibrary"
         @specificIbDumpToggle="handleSpecificIbDumpToggle"
       />
 

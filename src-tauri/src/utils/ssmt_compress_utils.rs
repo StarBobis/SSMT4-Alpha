@@ -1,7 +1,6 @@
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -696,7 +695,6 @@ impl SSMTCompressUtils {
         // Strip from source_dir itself so files land at the archive root
         // rather than inside an extra folder named after the mod directory.
         let paths = Self::collect_paths_recursive(source_dir)?;
-        let mut buffer = Vec::new();
 
         for path in paths {
             let relative_name = path
@@ -715,11 +713,7 @@ impl SSMTCompressUtils {
                 zip.start_file(relative_name, options)
                     .map_err(|e| e.to_string())?;
                 let mut source_file = fs::File::open(&path).map_err(|e| e.to_string())?;
-                buffer.clear();
-                source_file
-                    .read_to_end(&mut buffer)
-                    .map_err(|e| e.to_string())?;
-                zip.write_all(&buffer).map_err(|e| e.to_string())?;
+                std::io::copy(&mut source_file, &mut zip).map_err(|e| e.to_string())?;
             }
         }
 

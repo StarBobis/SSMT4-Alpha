@@ -15,6 +15,8 @@ const props = defineProps<{
   workspaceOptions: string[];
   workspaceModifiedTimes: Record<string, number>;
   isSpecificIbDumpToggling: boolean;
+  isWorkspaceArchiveUploadActive: boolean;
+  isWorkspaceArchiveUploadCancelling: boolean;
 }>();
 
 type WorkspaceSortMode = 'date' | 'name';
@@ -37,6 +39,13 @@ const emit = defineEmits<{
   selectWorkspace: [name: string];
   folderMenu: [cmd: string];
   textureMenu: [cmd: unknown];
+  preflightWorkspace: [];
+  createWorkspaceArchive: [];
+  importWorkspaceArchive: [];
+  publishWorkspaceMetadata: [];
+  publishWorkspaceArchive: [];
+  cancelWorkspaceArchiveUpload: [];
+  browseWorkspaceLibrary: [];
   specificIbDumpToggle: [value: string | number | boolean];
 }>();
 
@@ -244,6 +253,35 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
           <span>其它功能</span>
         </button>
         <div v-show="!drawerCollapsed.otherFunctions" class="side-drawer-body">
+          <div class="side-menu-list">
+            <button type="button" class="side-menu-trigger" @click="emit('preflightWorkspace')">
+              <span>{{ t('workPage.actions.preflightWorkspace') }}</span>
+            </button>
+            <button type="button" class="side-menu-trigger" @click="emit('createWorkspaceArchive')">
+              <span>{{ t('workPage.actions.createWorkspaceArchive') }}</span>
+            </button>
+            <button type="button" class="side-menu-trigger" @click="emit('importWorkspaceArchive')">
+              <span>{{ t('workPage.actions.importWorkspaceArchive') }}</span>
+            </button>
+            <button type="button" class="side-menu-trigger" @click="emit('publishWorkspaceMetadata')">
+              <span>{{ t('workPage.actions.publishWorkspaceMetadata') }}</span>
+            </button>
+            <button type="button" class="side-menu-trigger" @click="emit('publishWorkspaceArchive')">
+              <span>{{ t('workPage.actions.publishWorkspaceArchive') }}</span>
+            </button>
+            <button
+              v-if="isWorkspaceArchiveUploadActive"
+              type="button"
+              class="side-menu-trigger"
+              :disabled="isWorkspaceArchiveUploadCancelling"
+              @click="emit('cancelWorkspaceArchiveUpload')"
+            >
+              <span>{{ t('workPage.actions.cancelWorkspaceArchiveUpload') }}</span>
+            </button>
+            <button type="button" class="side-menu-trigger" @click="emit('browseWorkspaceLibrary')">
+              <span>{{ t('workPage.actions.browseWorkspaceLibrary') }}</span>
+            </button>
+          </div>
           <div class="specific-ib-dump-toggle">
             <div class="specific-ib-dump-toggle__header">
               <span>{{ t('workPage.actions.specificIbDump') }}</span>

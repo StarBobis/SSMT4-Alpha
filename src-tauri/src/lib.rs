@@ -8,6 +8,7 @@ pub mod helper;
 pub mod ini_container;
 pub mod utils;
 pub mod workspace;
+pub mod workspace_access;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -177,6 +178,17 @@ pub fn run() {
             commands::compress::extract_zip_archive,
             commands::compress::create_rar_archive,
             commands::compress::create_mod_archive,
+            workspace_access::commands::workspace_access_preflight,
+            workspace_access::commands::workspace_access_create_archive,
+            workspace_access::commands::workspace_access_validate_archive,
+            workspace_access::commands::workspace_access_download_archive,
+            workspace_access::commands::workspace_access_import_archive,
+            workspace_access::commands::workspace_access_import_metadata_skeleton,
+            workspace_access::commands::workspace_access_publish,
+            workspace_access::commands::workspace_access_cancel_upload,
+            workspace_access::commands::workspace_access_fetch_index,
+            workspace_access::commands::workspace_access_fetch_metadata,
+            workspace_access::commands::workspace_access_download_entry,
             commands::recycle_bin::move_file_to_recycle_bin,
             commands::recycle_bin::move_dir_to_recycle_bin,
         ])

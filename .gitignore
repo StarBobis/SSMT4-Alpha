@@ -17,6 +17,7 @@ dist-ssr
 *.local
 .env
 .env.*
+.dev.vars*
 
 # 更新签名密钥（永不提交）
 updater-signing.key
@@ -24,6 +25,7 @@ updater-signing.key.pub
 
 # Rust 构建产物
 src-tauri/target
+.wrangler/
 
 # 发布产物
 publish
@@ -48,3 +50,4 @@ bun.lock
 tmp*
 cloudflare_r2.env
 github_app.env
+*.private-key.pem

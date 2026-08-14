@@ -50,6 +50,7 @@ tokio = { version = "1", features = ["full"] }
 sysinfo = "0.30"
 zip = "0.6"
 futures-util = "0.3"
+sha2 = "0.10"
 md5 = "0.7"
 notify = "8.2.0"
 sevenz-rust = { version = "0.6.1", features = ["aes256"] }

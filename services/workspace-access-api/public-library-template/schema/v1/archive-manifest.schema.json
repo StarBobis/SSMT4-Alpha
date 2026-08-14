@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ssmt4.dev/schema/v1/archive-manifest.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["archiveVersion", "createdAt", "generatorVersion", "portableMetadataPath", "fileCount", "totalUncompressedSize", "files"],
+  "properties": {
+    "archiveVersion": { "const": 1 }, "createdAt": { "type": "string", "format": "date-time" }, "generatorVersion": { "type": "string", "maxLength": 64 }, "portableMetadataPath": { "const": "portable-workspace.json" }, "fileCount": { "type": "integer", "minimum": 0 }, "totalUncompressedSize": { "type": "integer", "minimum": 0 },
+    "files": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "role", "size", "sha256"], "properties": { "path": { "type": "string", "pattern": "^payload/[A-Za-z0-9._/-]+$" }, "role": { "type": "string", "maxLength": 64 }, "size": { "type": "integer", "minimum": 0 }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } } }
+  }
+}
