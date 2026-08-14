@@ -84,6 +84,12 @@ const normalizeXianZunApprovalMode = (value: unknown): XianZunApprovalMode =>
 		? (value as XianZunApprovalMode)
 		: 'manual'
 
+const normalizeXianzunMaxToolRounds = (value: unknown): number => {
+	const n = typeof value === 'number' ? value : Number(value)
+	if (!Number.isFinite(n)) return 20
+	return Math.min(200, Math.max(1, Math.trunc(n)))
+}
+
 const normalizeSidebarGameOrder = (value: unknown): string[] => {
 	if (!Array.isArray(value)) {
 		return []
@@ -244,6 +250,7 @@ export class AppSettings {
 	xianzunReasoningEffort: XianZunReasoningEffort = 'auto'
 	xianzunApprovalMode: XianZunApprovalMode = 'manual'
 	xianzunNsfwBlur: boolean = true
+	xianzunMaxToolRounds: number = 20
 
 	constructor(init?: Partial<AppSettings>) {
 		if (init) {
@@ -329,6 +336,7 @@ export class AppSettings {
 		this.xianzunReasoningEffort = normalizeReasoningEffort(init?.xianzunReasoningEffort)
 		this.xianzunApprovalMode = normalizeXianZunApprovalMode(init?.xianzunApprovalMode)
 		this.xianzunNsfwBlur = init?.xianzunNsfwBlur ?? this.xianzunNsfwBlur
+		this.xianzunMaxToolRounds = normalizeXianzunMaxToolRounds(init?.xianzunMaxToolRounds)
 		// VersionNumber is always controlled by current app code version,
 		// not by persisted settings.json.
 		this.VersionNumber = AppSettings.CURRENT_VERSION
@@ -406,6 +414,7 @@ export class AppSettings {
 			xianzunReasoningEffort: this.xianzunReasoningEffort,
 			xianzunApprovalMode: this.xianzunApprovalMode,
 			xianzunNsfwBlur: this.xianzunNsfwBlur,
+			xianzunMaxToolRounds: this.xianzunMaxToolRounds,
 		}
 	}
 }

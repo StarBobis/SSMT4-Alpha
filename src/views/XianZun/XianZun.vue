@@ -8,9 +8,12 @@ import {
   CopyDocument,
   Delete,
   Document,
+  EditPen,
   Link as LinkIcon,
   List,
   MagicStick,
+  Menu,
+  Plus,
   Promotion,
   Setting,
   Tickets,
@@ -44,6 +47,7 @@ import { useModTagStore } from '../../store/ModTagStore'
 import { useModPresetStore } from '../../store/ModPresetStore'
 import { useModStateStore } from '../../store/ModStateStore'
 import { useGameConfigStore } from '../../store/GameConfig'
+import { consumePendingXianZunPrompt } from '../../store/XianZunPendingPrompt'
 import Vditor from 'vditor'
 import vditorLutePath from 'vditor/dist/js/lute/lute.min.js?url'
 import mathJaxBundleUrl from 'vditor/dist/js/mathjax/tex-svg-full.js?url'
@@ -159,6 +163,7 @@ interface ChatMessage {
   lastPromptTokens?: number
   createdAt: number
   toolEvents?: ToolEvent[]
+  hidden?: boolean
 }
 
 interface ToolEvent {
@@ -170,6 +175,14 @@ interface ToolEvent {
   status?: 'pending' | 'running' | 'done'
   streamingArguments?: string
   progress?: { current: number; total: number; stage: string; percent: number }
+}
+
+interface XianZunConversation {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messages: ChatMessage[]
 }
 
 interface InstallProgressEvent {
@@ -383,7 +396,6 @@ const modManager = useModManagerStore()
 const modTagStore = useModTagStore()
 
 const STORAGE_KEY = 'xianzun.messages.v1'
-const MAX_TOOL_ROUNDS = 20
 const STREAM_TEMPERATURE = 0.8
 
 const loadCurrentEnvironment = async () => {
@@ -1018,7 +1030,7 @@ const uiCommands: XianZunCommand[] = [
     description: '清空当前对话历史。',
     inputSchema: { type: 'object', properties: {}, required: [] },
     execute: () => {
-      messages.value = []
+      messages.value.splice(0, messages.value.length)
       persist()
       return '对话已清空'
     },
@@ -1054,7 +1066,17 @@ const commands: XianZunCommand[] = [
    Chat state
    ═══════════════════════════════════════════════ */
 
+const CONVERSATIONS_STORAGE_KEY = 'xianzun.conversations.v1'
+const conversations = ref<XianZunConversation[]>([])
+const activeConversationId = ref('')
+const activeConversation = computed(
+  () => conversations.value.find((c) => c.id === activeConversationId.value) ?? null,
+)
+const sidebarOpen = ref(true)
+const renamingId = ref('')
+const renamingTitle = ref('')
 const messages = ref<ChatMessage[]>([])
+const visibleMessages = computed(() => messages.value.filter((m) => !m.hidden))
 const draft = ref('')
 const vditorHostRef = ref<HTMLElement | null>(null)
 const composerRef = ref<HTMLElement | null>(null)
@@ -1242,44 +1264,220 @@ const capabilityGroups = computed(() => {
    Persistence
    ═══════════════════════════════════════════════ */
 
+const normalizeMessages = (raw: unknown): ChatMessage[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter(
+      (m: unknown): m is ChatMessage =>
+        !!m &&
+        typeof m === 'object' &&
+        ((m as ChatMessage).role === 'user' ||
+          (m as ChatMessage).role === 'assistant' ||
+          (m as ChatMessage).role === 'error') &&
+        typeof (m as ChatMessage).content === 'string',
+    )
+    .map((msg) => {
+      if (msg.role !== 'assistant' || Array.isArray(msg.segments)) return msg
+      const segs: MessageSegment[] = []
+      if (msg.reasoning) segs.push({ kind: 'reasoning', text: msg.reasoning })
+      for (let i = 0; i < (msg.toolEvents?.length ?? 0); i += 1) {
+        segs.push({ kind: 'tool', toolIndex: i })
+      }
+      if (msg.content) segs.push({ kind: 'text', text: msg.content })
+      return { ...msg, segments: segs }
+    })
+}
+
+const createConversation = (title = ''): XianZunConversation => ({
+  id: nextId(),
+  title: title.trim() || t('xianzun.conversationUntitled'),
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  messages: [],
+})
+
 const persist = () => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.value))
+    const active = activeConversation.value
+    if (active) {
+      active.messages = messages.value
+      active.updatedAt = Date.now()
+    }
+    localStorage.setItem(
+      CONVERSATIONS_STORAGE_KEY,
+      JSON.stringify({ activeId: activeConversationId.value, conversations: conversations.value }),
+    )
   } catch {
     // storage may be unavailable — chat still works in memory
   }
 }
 
-const loadMessages = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) {
-      messages.value = parsed
-        .filter(
-          (m: unknown): m is ChatMessage =>
-            !!m &&
-            typeof m === 'object' &&
-            ((m as ChatMessage).role === 'user' ||
-              (m as ChatMessage).role === 'assistant' ||
-              (m as ChatMessage).role === 'error') &&
-            typeof (m as ChatMessage).content === 'string',
-        )
-        .map((msg) => {
-          if (msg.role !== 'assistant' || Array.isArray(msg.segments)) return msg
-          const segs: MessageSegment[] = []
-          if (msg.reasoning) segs.push({ kind: 'reasoning', text: msg.reasoning })
-          for (let i = 0; i < (msg.toolEvents?.length ?? 0); i += 1) {
-            segs.push({ kind: 'tool', toolIndex: i })
-          }
-          if (msg.content) segs.push({ kind: 'text', text: msg.content })
-          return { ...msg, segments: segs }
-        })
-    }
-  } catch {
-    // corrupt storage — start fresh
+const ensureConversation = (): XianZunConversation => {
+  let active = activeConversation.value
+  if (!active) {
+    active = createConversation()
+    conversations.value.unshift(active)
   }
+  activeConversationId.value = active.id
+  messages.value = active.messages
+  persist()
+  return active
+}
+
+const loadConversations = () => {
+  try {
+    const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as {
+        activeId?: string
+        conversations?: XianZunConversation[]
+      }
+      const list = Array.isArray(parsed.conversations)
+        ? parsed.conversations
+            .filter((c): c is XianZunConversation => !!c && typeof c.id === 'string')
+            .map((c) => ({ ...c, messages: normalizeMessages(c.messages) }))
+        : []
+      conversations.value = list
+      const active = list.find((c) => c.id === parsed.activeId) ?? list[0]
+      if (active) {
+        activeConversationId.value = active.id
+        messages.value = active.messages
+      }
+    }
+
+    if (conversations.value.length === 0) {
+      const legacyRaw = localStorage.getItem(STORAGE_KEY)
+      if (legacyRaw) {
+        const legacyMessages = normalizeMessages(JSON.parse(legacyRaw))
+        if (legacyMessages.length > 0) {
+          const migrated = createConversation(t('xianzun.conversationMigrated'))
+          migrated.messages = legacyMessages
+          conversations.value = [migrated]
+          activeConversationId.value = migrated.id
+          messages.value = migrated.messages
+          localStorage.removeItem(STORAGE_KEY)
+          persist()
+          return
+        }
+      }
+    }
+
+    ensureConversation()
+  } catch {
+    conversations.value = []
+    activeConversationId.value = ''
+    messages.value = []
+    ensureConversation()
+  }
+}
+
+const switchConversation = (id: string) => {
+  if (id === activeConversationId.value) return
+  if (isStreaming.value) {
+    ElMessage.warning(t('xianzun.switchWhileStreaming'))
+    return
+  }
+  const target = conversations.value.find((c) => c.id === id)
+  if (!target) return
+  const active = activeConversation.value
+  if (active) active.messages = messages.value
+  activeConversationId.value = id
+  messages.value = target.messages
+  resetTaskPlan()
+  draft.value = ''
+  revealedImages.value = new Set()
+  previewImage.value = ''
+  vditor?.setValue('')
+  persist()
+  void nextTick(() => scrollToBottom(true))
+}
+
+const newConversation = () => {
+  if (isStreaming.value) {
+    ElMessage.warning(t('xianzun.switchWhileStreaming'))
+    return
+  }
+  const active = activeConversation.value
+  if (active) active.messages = messages.value
+  const conversation = createConversation()
+  conversations.value.unshift(conversation)
+  activeConversationId.value = conversation.id
+  messages.value = conversation.messages
+  resetTaskPlan()
+  draft.value = ''
+  revealedImages.value = new Set()
+  previewImage.value = ''
+  vditor?.setValue('')
+  sidebarOpen.value = true
+  persist()
+  void nextTick(() => scrollToBottom(true))
+}
+
+const deleteConversation = async (id: string) => {
+  const conversation = conversations.value.find((c) => c.id === id)
+  if (!conversation) return
+  try {
+    await ElMessageBox.confirm(
+      t('xianzun.conversationDeleteConfirm'),
+      t('xianzun.delete'),
+      {
+        confirmButtonText: t('xianzun.delete'),
+        cancelButtonText: t('xianzun.cancel'),
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  const wasActive = id === activeConversationId.value
+  conversations.value = conversations.value.filter((c) => c.id !== id)
+
+  if (wasActive) {
+    const next = conversations.value[0] ?? createConversation()
+    if (conversations.value.length === 0) conversations.value.push(next)
+    activeConversationId.value = next.id
+    messages.value = next.messages
+    resetTaskPlan()
+  }
+
+  persist()
+}
+
+const renameConversation = (id: string, title: string) => {
+  const conversation = conversations.value.find((c) => c.id === id)
+  if (!conversation) return
+  const normalized = title.trim()
+  if (normalized) conversation.title = normalized
+  conversation.updatedAt = Date.now()
+  persist()
+}
+
+const maybeSetConversationTitle = (text: string) => {
+  const active = activeConversation.value
+  if (!active) return
+  const untitled = t('xianzun.conversationUntitled')
+  if (active.title !== untitled && active.title.trim()) return
+  const clean = text.replace(/s+/g, ' ').trim()
+  if (clean) active.title = clean.slice(0, 32)
+}
+
+const startRename = (conversation: XianZunConversation) => {
+  renamingId.value = conversation.id
+  renamingTitle.value = conversation.title
+}
+
+const commitRename = () => {
+  if (renamingId.value) {
+    renameConversation(renamingId.value, renamingTitle.value)
+  }
+  renamingId.value = ''
+  renamingTitle.value = ''
+}
+
+const cancelRename = () => {
+  renamingId.value = ''
+  renamingTitle.value = ''
 }
 
 /* ═══════════════════════════════════════════════
@@ -1976,6 +2174,7 @@ const runAgentTurn = async () => {
   const toolResultQueue: ApiMessage[] = []
   const model = appSettings.xianzunModel.trim() || 'deepseek-v4-flash'
   const reasoningEffort = appSettings.xianzunReasoningEffort || 'auto'
+  const maxToolRounds = appSettings.xianzunMaxToolRounds || 20
   const approvalContext: ApprovalContext = {
     mode: appSettings.xianzunApprovalMode,
     apiUrl: appSettings.xianzunApiUrl,
@@ -2211,11 +2410,25 @@ const runAgentTurn = async () => {
         })
       }
 
-      if (rounds >= MAX_TOOL_ROUNDS) {
+      if (rounds >= maxToolRounds) {
         hitRoundCap = true
         const capNote = t('xianzun.toolRoundLimit')
         appendSegment(assistantMsg, 'text', capNote)
         recordLog('system', '工具轮次上限', capNote)
+
+        // Persist tool progress so a follow-up "continue" resumes instead of restarting.
+        if (toolResultQueue.length > 0) {
+          const progress = toolResultQueue.map((m) => m.content).join('\n\n')
+          messages.value.push({
+            id: nextId(),
+            role: 'user',
+            content:
+              '[Task progress snapshot] The previous turn hit the tool-call round limit. Below is the work already completed; resume from here and finish the remaining task, do NOT restart from the beginning:\n\n' +
+              progress,
+            hidden: true,
+            createdAt: Date.now(),
+          })
+        }
         break
       }
     }
@@ -2258,6 +2471,7 @@ const sendMessage = async () => {
   draft.value = ''
   vditor?.setValue('')
   messages.value.push({ id: nextId(), role: 'user', content: text, createdAt: Date.now() })
+  maybeSetConversationTitle(text)
   persist()
   void scrollToBottom(true)
   await runAgentTurn()
@@ -2279,6 +2493,13 @@ const sendSuggestion = (suggestion: string) => {
   void sendMessage()
 }
 
+const handlePendingPrompt = () => {
+  const prompt = consumePendingXianZunPrompt()
+  if (prompt) {
+    void sendSuggestion(prompt)
+  }
+}
+
 const clearChat = async () => {
   if (messages.value.length === 0) return
   try {
@@ -2290,7 +2511,7 @@ const clearChat = async () => {
   } catch {
     return
   }
-  messages.value = []
+  messages.value.splice(0, messages.value.length)
   resetTaskPlan()
   persist()
 }
@@ -3608,7 +3829,7 @@ const onGlobalClick = (event: MouseEvent) => {
 }
 
 onMounted(() => {
-  loadMessages()
+  loadConversations()
   loadLogs()
   loadComposerEditorMode()
   installMessageMathObserver()
@@ -3616,6 +3837,7 @@ onMounted(() => {
   void setupProgressListeners()
   nextTick(() => {
     initializeVditor()
+    handlePendingPrompt()
     requestAnimationFrame(updateChatBottomInset)
     if (composerRef.value && typeof ResizeObserver !== 'undefined') {
       composerResizeObserver = new ResizeObserver(updateChatBottomInset)
@@ -3629,6 +3851,7 @@ onBeforeRouteLeave(() => {
   saveScrollPosition()
 })
 onActivated(() => {
+  handlePendingPrompt()
   void restoreScrollPosition()
 })
 
@@ -3727,6 +3950,17 @@ onUnmounted(() => {
       </div>
 
       <div class="xz-header-actions">
+        <el-tooltip :content="t('xianzun.sidebarToggle')" placement="bottom" :show-after="250">
+          <button
+            type="button"
+            class="xz-icon-btn"
+            :class="{ active: sidebarOpen }"
+            @click="sidebarOpen = !sidebarOpen"
+          >
+            <el-icon><Menu /></el-icon>
+          </button>
+        </el-tooltip>
+
         <el-tooltip :content="t('xianzun.nsfwBlur')" placement="bottom" :show-after="250">
           <label class="xz-nsfw-toggle">
             <el-switch v-model="appSettings.xianzunNsfwBlur" size="small" />
@@ -3779,8 +4013,74 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- ═══ Chat list ═══ -->
-    <main
+    <div class="xz-body">
+      <aside class="xz-sidebar" :class="{ collapsed: !sidebarOpen }">
+        <div class="xz-sidebar-head">
+          <span class="xz-sidebar-title">{{ t('xianzun.conversations') }}</span>
+          <button
+            type="button"
+            class="xz-sidebar-new"
+            :title="t('xianzun.newConversation')"
+            @click="newConversation"
+          >
+            <el-icon><Plus /></el-icon>
+          </button>
+        </div>
+
+        <div class="xz-sidebar-list glass-scrollbar">
+          <div
+            v-for="conversation in conversations"
+            :key="conversation.id"
+            class="xz-conversation-item"
+            :class="{ active: conversation.id === activeConversationId }"
+            @click="switchConversation(conversation.id)"
+          >
+            <template v-if="renamingId === conversation.id">
+              <input
+                v-model="renamingTitle"
+                class="xz-conversation-rename"
+                :placeholder="t('xianzun.conversationRenamePlaceholder')"
+                @click.stop
+                @keydown.enter.stop="commitRename"
+                @keydown.esc.stop="cancelRename"
+                @blur="commitRename"
+              />
+            </template>
+            <template v-else>
+              <div class="xz-conversation-main">
+                <span class="xz-conversation-title" :title="conversation.title">{{ conversation.title }}</span>
+                <span class="xz-conversation-time">{{ formatTime(conversation.updatedAt) }}</span>
+              </div>
+              <div class="xz-conversation-actions" @click.stop>
+                <button
+                  type="button"
+                  class="xz-conversation-action"
+                  :title="t('xianzun.rename')"
+                  @click="startRename(conversation)"
+                >
+                  <el-icon><EditPen /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="xz-conversation-action danger"
+                  :title="t('xianzun.delete')"
+                  @click="deleteConversation(conversation.id)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </button>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="conversations.length === 0" class="xz-sidebar-empty">
+            {{ t('xianzun.conversationEmpty') }}
+          </div>
+        </div>
+      </aside>
+
+      <section class="xz-conversation">
+        <!-- ═══ Chat list ═══ -->
+        <main
       ref="chatListRef"
       class="xz-chat glass-scrollbar"
       :style="{ '--xz-chat-bottom-inset': `${chatBottomInset}px` }"
@@ -3833,7 +4133,7 @@ onUnmounted(() => {
       <!-- Messages -->
       <template v-else>
         <div
-          v-for="msg in messages"
+          v-for="msg in visibleMessages"
           :key="msg.id"
           class="xz-msg"
           :class="[msg.role, { streaming: msg.streaming }]"
@@ -4024,6 +4324,9 @@ onUnmounted(() => {
       </div>
     </footer>
 
+      </section>
+    </div>
+
     <!-- ═══ Image lightbox ═══ -->
     <transition name="xz-fade">
       <div
@@ -4164,6 +4467,19 @@ onUnmounted(() => {
         </label>
 
         <label class="xz-field">
+          <span class="xz-field-label">{{ t('xianzun.maxToolRounds') }}</span>
+          <el-input-number
+            v-model="appSettings.xianzunMaxToolRounds"
+            :min="1"
+            :max="200"
+            :step="1"
+            step-strictly
+            class="xz-settings-model"
+          />
+          <span class="xz-field-hint">{{ t('xianzun.maxToolRoundsHint') }}</span>
+        </label>
+
+        <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.systemPrompt') }}</span>
           <el-input
             v-model="appSettings.xianzunSystemPrompt"
@@ -4211,6 +4527,181 @@ onUnmounted(() => {
   flex-direction: column;
   box-sizing: border-box;
   color: rgba(var(--theme-text-primary-rgb), 0.96);
+}
+
+/* ── Conversation sidebar ── */
+.xz-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.xz-conversation {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.xz-sidebar {
+  flex: 0 0 auto;
+  width: 264px;
+  min-width: 264px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
+  background: rgba(var(--theme-surface-rgb, 14, 17, 24), 0.45);
+  overflow: hidden;
+  transition: width 180ms ease, min-width 180ms ease, opacity 180ms ease;
+}
+
+.xz-sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  border-right-width: 0;
+}
+
+.xz-sidebar-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 10px 16px;
+  border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.08);
+}
+
+.xz-sidebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: rgba(var(--theme-text-primary-rgb), 0.9);
+}
+
+.xz-sidebar-new {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.2);
+  background: rgba(var(--theme-surface-tint-rgb), 0.1);
+  color: rgba(var(--theme-text-primary-rgb), 0.9);
+  cursor: pointer;
+}
+
+.xz-sidebar-new:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.2);
+}
+
+.xz-sidebar-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.xz-conversation-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 3px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.xz-conversation-item:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+}
+
+.xz-conversation-item.active {
+  background: rgba(var(--theme-surface-tint-rgb), 0.14);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.22);
+}
+
+.xz-conversation-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.xz-conversation-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: rgba(var(--theme-text-primary-rgb), 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.xz-conversation-time {
+  font-size: 10.5px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.58);
+}
+
+.xz-conversation-actions {
+  flex: 0 0 auto;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.xz-conversation-item:hover .xz-conversation-actions,
+.xz-conversation-item.active .xz-conversation-actions {
+  display: inline-flex;
+}
+
+.xz-conversation-action {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(var(--theme-text-secondary-rgb), 0.7);
+  cursor: pointer;
+}
+
+.xz-conversation-action:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.16);
+  color: rgba(var(--theme-text-primary-rgb), 0.95);
+}
+
+.xz-conversation-action.danger:hover {
+  color: var(--theme-danger);
+}
+
+.xz-conversation-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.3);
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  color: rgba(var(--theme-text-primary-rgb), 0.96);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.xz-sidebar-empty {
+  padding: 18px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.55);
 }
 
 /* ── Header ── */
