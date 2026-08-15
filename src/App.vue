@@ -1,9 +1,10 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
 import { normalizeAppUiScale } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
+import UIBuilderHost from "./views/UIBuilder/UIBuilderHost.vue";
 
 const route = useRoute();
 const appSettings = AppStateManager.appSettings;
@@ -126,6 +127,8 @@ onUnmounted(() => {
                   </KeepAlive>
                 </transition>
               </router-view>
+              <!-- UI 构造器常驻宿主：iframe 不随路由卸载，切页不刷新 -->
+              <UIBuilderHost />
             </div>
           </main>
         </div>

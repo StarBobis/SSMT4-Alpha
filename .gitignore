@@ -61,3 +61,6 @@ tauri-build.log.err
 app_uib_real.png
 uib_screenshot.png
 uib_wrapper_screenshot.png
+
+# Agent 工具上传与临时工作目录（不提交）
+.dsh/
