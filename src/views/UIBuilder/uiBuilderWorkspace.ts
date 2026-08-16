@@ -9,7 +9,6 @@ import {
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { AppStateManager } from '../../store/AppStateManager'
-import { PathHelper } from '../../helper/PathHelper'
 
 const DEFAULT_WORKSPACE_NAME = 'Default'
 
@@ -193,16 +192,6 @@ const removeFilesMatching = async (
   }
 }
 
-const resolveGeneratedModFolder = async (): Promise<string> => {
-  const workspaceName = getCurrentWorkspaceName()
-  const generatedModFolder = await PathHelper.GetWorkspaceGeneratedModFolderPath(workspaceName)
-  if (!generatedModFolder) {
-    throw new Error('无法解析当前工作空间的生成 Mod 目录')
-  }
-
-  return generatedModFolder
-}
-
 const resolveWorkspaceDir = async (): Promise<string> => {
   const workspaceName = getCurrentWorkspaceName()
   const workspaceDir = await getWorkspaceDir(workspaceName)
@@ -236,8 +225,10 @@ export const saveUIBuilderAssets = async (buffer: ArrayBuffer): Promise<string> 
 }
 
 export const saveUIBuilderPreset = async (json: string, hash: string): Promise<string> => {
-  const generatedModFolder = await resolveGeneratedModFolder()
-  const presetsFolder = await join(generatedModFolder, 'presets')
+  // 预设属于工作空间的设计资产，保存到当前工作空间目录下的 presets 子目录，
+  // 而不是生成 Mod 目录（生成目录会在重新生成/清理时被覆盖，且与发布内容混在一起）。
+  const workspaceDir = await resolveWorkspaceDir()
+  const presetsFolder = await join(workspaceDir, 'presets')
   await mkdir(presetsFolder, { recursive: true })
 
   const filePath = await join(

@@ -1192,6 +1192,14 @@
       "configureMigotoPathFirst": "请先配置 3Dmigoto 路径"
     }
   },
+  "uiBuilder": {
+    "refresh": "刷新",
+    "refreshTooltip": "重新加载 UI 构造器页面",
+    "refreshConfirmTitle": "刷新 UI 构造器",
+    "refreshConfirmMessage": "刷新会丢失 UI 构造器中所有未保存的修改，确定要刷新吗？",
+    "refreshConfirmOk": "刷新",
+    "refreshConfirmCancel": "取消"
+  },
   "appState": {
     "common": {
       "errorTitle": "错误",
