@@ -686,20 +686,8 @@ export const applyTextureMarkForCurrentSubMesh = async (args: {
 	const markupList = markupEntries.map(item => item.markup)
 	const targetFolders = targetEntries.map(item => item.folderPath)
 
-	for (const { markup, sourcePath, dedupedFileName } of markupEntries) {
+	for (const { markup, sourcePath } of markupEntries) {
 		await copyTextureToTargets(sourcePath, markup.MarkFileName, targetFolders)
-
-		// Also copy .jpg from DedupedTextures_jpg for DiffuseMap / NormalMap
-		if (markup.MarkName === 'DiffuseMap' || markup.MarkName === 'NormalMap') {
-			const jpgDeduped = dedupedFileName.replace(/\.dds$/i, '.jpg')
-			if (jpgDeduped !== dedupedFileName) {
-				const jpgSourcePath = await join(workspacePath, 'DedupedTextures_jpg', jpgDeduped)
-				if (await exists(jpgSourcePath)) {
-					const jpgTargetFileName = `${subMesh}-${markup.MarkName}.jpg`
-					await copyTextureToTargets(jpgSourcePath, jpgTargetFileName, targetFolders)
-				}
-			}
-		}
 
 		appliedCount += 1
 	}

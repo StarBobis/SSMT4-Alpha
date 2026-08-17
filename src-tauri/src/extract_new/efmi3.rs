@@ -22,7 +22,6 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::helper::texture_convert_helper::TextureConvertHelper;
 use crate::utils::ssmt_timer_utils::SSMTTimerUtils;
 
 //EFMI新渲染方式，全局只有一个Buffer。
@@ -726,9 +725,6 @@ impl EFMI3FullNewExtractor {
         // 根据 unique_str_index_list_dict 中的每个 index，生成工作空间下的总 DedupedTextures 文件夹
         {
             let deduped_folder_path = PathBuf::from(&self.workspace_path).join("DedupedTextures");
-            let deduped_jpg_folder_path =
-                PathBuf::from(&self.workspace_path).join("DedupedTextures_jpg");
-
             let _ = SSMTFileUtils::create_folder_if_not_exists(&deduped_folder_path);
 
             SSMTTimerUtils::start("复制DedupedTextures到工作空间");
@@ -778,14 +774,6 @@ impl EFMI3FullNewExtractor {
             }
             SSMTTimerUtils::end("复制DedupedTextures到工作空间");
 
-            //然后转换贴图
-            SSMTTimerUtils::start("转换DedupedTextures到jpg格式");
-
-            TextureConvertHelper::convert_all_texture_files_to_target_folder(
-                deduped_folder_path.to_string_lossy().as_ref(),
-                deduped_jpg_folder_path.to_string_lossy().as_ref(),
-            )?;
-            SSMTTimerUtils::end("转换DedupedTextures到jpg格式");
         }
 
         //根据unique_str_extracted_dict，移除掉unique_str_index_list_dict中对应的为false的项

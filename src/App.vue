@@ -52,8 +52,10 @@ watch(() => AppStateManager.gamesList.map(game => game.name).join('\n'), async (
   const defaults = new Set(['GIMI', 'SRMI', 'ZZMI', 'WWMI']);
   const selected: string[] = [];
   for (const game of AppStateManager.gamesList) {
-    const config = await ResourceManager.loadGameConfig(game.name);
-    if (defaults.has(String(config.gamePreset || '').toUpperCase())) selected.push(game.name);
+    // Built-in presets are the onboarding defaults. Custom games are only
+    // inherited when the user had already made them visible; sharing a
+    // compatible extractor preset must not select them by itself.
+    if (defaults.has(game.name.toUpperCase()) || game.showSidebar) selected.push(game.name);
   }
   selectedFirstRunGames.value = selected;
   firstRunGamesInitialized.value = true;

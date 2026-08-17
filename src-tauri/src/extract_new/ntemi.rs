@@ -12,7 +12,6 @@ use crate::common::shape_keys::ShapeKeys;
 use crate::config::drawib_config::{DrawIBConfig, DrawIBEntry};
 use crate::config::path_manager::PathManager;
 use crate::extract_new::extract_services::FullExtractDataTypeFilter;
-use crate::helper::texture_convert_helper::TextureConvertHelper;
 use crate::utils::ssmt_binary_utils::SSMTBinaryUtils;
 use crate::utils::ssmt_file_utils::SSMTFileUtils;
 use crate::utils::ssmt_string_utils::SSMTStringUtils;
@@ -1267,7 +1266,6 @@ impl NTEMINewExtractor {
         // --- copy deduped textures and build index JSON ---
         let workspace_path = &self.workspace_path;
         let deduped_folder_path = PathBuf::from(workspace_path).join("DedupedTextures");
-        let deduped_jpg_folder_path = PathBuf::from(workspace_path).join("DedupedTextures_jpg");
         SSMTFileUtils::create_folder_if_not_exists(&deduped_folder_path)?;
 
         if !component_drawcall_index_list_dict.is_empty() {
@@ -1301,10 +1299,6 @@ impl NTEMINewExtractor {
                 }
             }
 
-            TextureConvertHelper::convert_all_texture_files_to_target_folder(
-                deduped_folder_path.to_string_lossy().as_ref(),
-                deduped_jpg_folder_path.to_string_lossy().as_ref(),
-            )?;
 
             let component_json_path = crate::helper::mark_texture_helper::
                 get_workspace_component_name_draw_call_index_list_json_path(workspace_path)?;

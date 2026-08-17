@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, readFile, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { openPath as openExternal, revealItemInDir } from '@tauri-apps/plugin-opener';
@@ -1083,10 +1083,23 @@ const getImageSize = (previewUrl: string): Promise<string> => {
 const buildTexturePreviewUrl = async (
 	workspacePath: string,
 	fileName: string,
-	cacheBustToken: number
+	_cacheBustToken: number
 ): Promise<string> => {
 	const filePath = await findTexturePreviewPath(workspacePath, fileName);
-	return filePath ? `${convertFileSrc(filePath)}?t=${cacheBustToken}` : '';
+	return filePath ? renderDdsThumbnail(filePath) : '';
+};
+
+const renderDdsThumbnail = async (filePath: string): Promise<string> => {
+	try {
+		const preparedPath = await invoke<string>('prepare_dds_webgl_preview', { sourcePath: filePath });
+		const decoded = decodeRgbaDdsPreview(await readFile(preparedPath));
+		const canvas = document.createElement('canvas');
+		renderChannelPreview(canvas, decoded, 15);
+		return canvas.toDataURL('image/webp');
+	} catch (error) {
+		console.warn('Failed to render DDS thumbnail', filePath, error);
+		return '';
+	}
 };
 
 const findTexturePreviewPath = async (workspacePath: string, fileName: string): Promise<string> => {
@@ -1094,15 +1107,9 @@ const findTexturePreviewPath = async (workspacePath: string, fileName: string): 
 		return '';
 	}
 
-	const fileBaseName = fileName.replace(/\.(?:jpg|png)$/i, '');
-	for (const candidateFileName of [`${fileBaseName}.png`, `${fileBaseName}.jpg`]) {
-		const filePath = await join(workspacePath, 'DedupedTextures_jpg', candidateFileName);
-		if (await exists(filePath)) {
-			return filePath;
-		}
-	}
-
-	return '';
+	const ddsFileName = fileName.replace(/\.(?:jpe?g|png)$/i, '.dds');
+	const filePath = await join(workspacePath, 'DedupedTextures', ddsFileName);
+	return await exists(filePath) ? filePath : '';
 };
 
 const createEmptyChannelPreviews = (): TextureChannelPreview[] => {
@@ -1138,33 +1145,16 @@ const getVisibleTextureEntriesForDrawCall = (
 	return entries.filter(([, textureProperty]) => (textureProperty?.FADataDedupedFileName || '').trim().length > 0);
 };
 
-const isBrowserPreviewFileName = (fileName: string): boolean => {
-	return /\.(jpe?g|png|webp|gif|bmp)$/i.test(fileName);
-};
-
 const getAppliedTexturePreviewUrl = async (
 	folderPath: string,
 	markFileName: string,
-	cacheBustToken: number
+	_cacheBustToken: number
 ): Promise<string> => {
 	if (!folderPath || !markFileName) {
 		return '';
 	}
-
-	const jpgFileName = markFileName.replace(/\.[^.]+$/, '.jpg');
-	const previewCandidates = [
-		jpgFileName,
-		...(isBrowserPreviewFileName(markFileName) && markFileName !== jpgFileName ? [markFileName] : []),
-	];
-
-	for (const candidate of previewCandidates) {
-		const filePath = await join(folderPath, candidate);
-		if (await exists(filePath)) {
-			return `${convertFileSrc(filePath)}?t=${cacheBustToken}`;
-		}
-	}
-
-	return '';
+	const filePath = await join(folderPath, markFileName);
+	return await exists(filePath) ? renderDdsThumbnail(filePath) : '';
 };
 
 const findAppliedTextureSourceEntry = (
@@ -1221,7 +1211,7 @@ const getAppliedTextureDedupedPreviewUrl = async (
 	if (directDedupedFileName) {
 		return buildTexturePreviewUrl(
 			source.workspacePath,
-			directDedupedFileName.replace(/\.[^.]+$/, '.jpg'),
+			directDedupedFileName,
 			cacheBustToken
 		);
 	}
@@ -1240,7 +1230,7 @@ const getAppliedTextureDedupedPreviewUrl = async (
 
 	return buildTexturePreviewUrl(
 		source.workspacePath,
-		dedupedFileName.replace(/\.[^.]+$/, '.jpg'),
+		dedupedFileName,
 		cacheBustToken
 	);
 };
@@ -1751,7 +1741,7 @@ const displayCachedChannelPreview = () => {
 const renderActiveChannelPreviews = async () => {
 	const item = activeChannelPreviewItem.value;
 	const renderToken = ++channelPreviewRenderToken;
-	if (!item?.preview) {
+	if (!item?.ddsPath) {
 		return;
 	}
 
@@ -1999,8 +1989,6 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 		}
 
 		const matchedEntries = getVisibleTextureEntriesForDrawCall(source, drawCall);
-		const previewCacheBustToken = Date.now();
-
 		const nextTextureList: TextureItem[] = await Promise.all(
 			matchedEntries.map(async ([textureFileName, textureProperty], index) => {
 				const defaultMarkStyle: MarkStyle =
@@ -2018,9 +2006,9 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 				if (dedupedBaseName) {
 					previewPath = await findTexturePreviewPath(
 						source.workspacePath,
-						`${dedupedBaseName}.png`
+						faLogDedupedFileName
 					);
-					preview = previewPath ? `${convertFileSrc(previewPath)}?t=${previewCacheBustToken}` : '';
+					preview = previewPath ? await renderDdsThumbnail(previewPath) : '';
 					size = await getImageSize(preview);
 				}
 

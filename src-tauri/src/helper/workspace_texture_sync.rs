@@ -7,7 +7,6 @@ use crate::helper::mark_texture_helper::{
     get_workspace_trianglelist_deduped_filename_json_path, ComponentNameDrawCallIndexListJson,
     TrianglelistDedupedFileNameJson, TrianglelistDedupedTextureProperty,
 };
-use crate::helper::texture_convert_helper::TextureConvertHelper;
 use crate::utils::ssmt_file_utils::SSMTFileUtils;
 use crate::utils::ssmt_string_utils::SSMTStringUtils;
 
@@ -234,7 +233,6 @@ pub fn sync_yysls_workspace_deduped_textures_and_json(
         HashMap::new();
 
     let deduped_folder_path = PathBuf::from(workspace_path).join("DedupedTextures");
-    let deduped_jpg_folder_path = PathBuf::from(workspace_path).join("DedupedTextures_jpg");
     SSMTFileUtils::create_folder_if_not_exists(&deduped_folder_path)?;
 
     for entry in drawib_config.entries.iter() {
@@ -363,11 +361,6 @@ pub fn sync_yysls_workspace_deduped_textures_and_json(
         return Ok(());
     }
 
-    TextureConvertHelper::convert_all_texture_files_to_target_folder(
-        deduped_folder_path.to_string_lossy().as_ref(),
-        deduped_jpg_folder_path.to_string_lossy().as_ref(),
-    )?;
-
     let component_json_path =
         get_workspace_component_name_draw_call_index_list_json_path(workspace_path)?;
     let component_json =
@@ -470,7 +463,6 @@ pub fn sync_workspace_deduped_textures_and_json(
     }
 
     let deduped_folder_path = PathBuf::from(workspace_path).join("DedupedTextures");
-    let deduped_jpg_folder_path = PathBuf::from(workspace_path).join("DedupedTextures_jpg");
     SSMTFileUtils::create_folder_if_not_exists(&deduped_folder_path)?;
 
     for index_list in component_drawcall_index_list_dict.values() {
@@ -498,11 +490,6 @@ pub fn sync_workspace_deduped_textures_and_json(
             }
         }
     }
-
-    TextureConvertHelper::convert_all_texture_files_to_target_folder(
-        deduped_folder_path.to_string_lossy().as_ref(),
-        deduped_jpg_folder_path.to_string_lossy().as_ref(),
-    )?;
 
     let component_json_path =
         get_workspace_component_name_draw_call_index_list_json_path(workspace_path)?;

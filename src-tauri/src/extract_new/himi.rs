@@ -11,7 +11,6 @@ use crate::helper::mark_texture_helper::{
     get_workspace_trianglelist_deduped_filename_json_path, ComponentNameDrawCallIndexListJson,
     TrianglelistDedupedFileNameJson, TrianglelistDedupedTextureProperty,
 };
-use crate::helper::texture_convert_helper::TextureConvertHelper;
 use crate::utils::ssmt_binary_utils::SSMTBinaryUtils;
 use crate::utils::ssmt_file_utils::SSMTFileUtils;
 use crate::utils::ssmt_string_utils::SSMTStringUtils;
@@ -903,8 +902,6 @@ impl HIMINewExtractor {
         }
 
         let deduped_folder_path = PathBuf::from(&self.workspace_path).join("DedupedTextures");
-        let deduped_jpg_folder_path =
-            PathBuf::from(&self.workspace_path).join("DedupedTextures_jpg");
         SSMTFileUtils::create_folder_if_not_exists(&deduped_folder_path)?;
 
         // 复制去重贴图
@@ -934,12 +931,6 @@ impl HIMINewExtractor {
                 }
             }
         }
-
-        // 转换为 JPG 预览
-        TextureConvertHelper::convert_all_texture_files_to_target_folder(
-            deduped_folder_path.to_string_lossy().as_ref(),
-            deduped_jpg_folder_path.to_string_lossy().as_ref(),
-        )?;
 
         // 写入 ComponentName_DrawCallIndexList.json
         let component_json_path =

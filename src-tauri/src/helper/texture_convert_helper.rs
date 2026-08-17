@@ -30,89 +30,6 @@ impl TextureConvertHelper {
         }
     }
 
-    pub fn convert_all_texture_files_to_target_folder(
-        source_folder_path: &str,
-        target_folder_path: &str,
-    ) -> Result<(), String> {
-        let source_folder_path = source_folder_path.replace('\\', "/");
-        let target_folder_path = target_folder_path.replace('\\', "/");
-
-        let source_folder = Path::new(&source_folder_path);
-        if !source_folder.exists() || !source_folder.is_dir() {
-            return Err(format!(
-                "Source folder does not exist or is not a directory: {}",
-                source_folder_path
-            ));
-        }
-
-        SSMTFileUtils::create_folder_if_not_exists(&target_folder_path)?;
-
-        let entries = fs::read_dir(source_folder)
-            .map_err(|e| format!("Failed to read source folder {}: {}", source_folder_path, e))?;
-
-        for entry in entries {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let file_path = entry.path();
-
-            if !file_path.is_file() {
-                continue;
-            }
-
-            let extension = file_path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-
-            let file_path_str = file_path.to_string_lossy().replace('\\', "/");
-            let file_name_lower = file_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-
-            if extension == "dds" {
-                if file_name_lower.ends_with("typeless.dds") {
-                    crate::extract_log!("Skip TYPELESS DDS: {}", file_path_str);
-                    continue;
-                }
-
-                if let Err(err) = Self::convert_texture_to_png(&file_path_str, &target_folder_path)
-                {
-                    // Texconv failure should not break overall extraction progress.
-                    crate::extract_log!(
-                        "[TextureConvert] texconv failed, skip file: {}\nreason: {}",
-                        file_path_str, err
-                    );
-                }
-            } else if extension == "jpg" || extension == "png" {
-                let file_name = file_path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .ok_or_else(|| {
-                        format!(
-                            "Failed to get file name from path: {}",
-                            file_path.to_string_lossy()
-                        )
-                    })?;
-
-                let target_file_path = Path::new(&target_folder_path).join(file_name);
-                let target_file_path_str = target_file_path.to_string_lossy().replace('\\', "/");
-
-                SSMTFileUtils::copy_to_file_if_not_exists(&file_path_str, &target_file_path_str)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn convert_texture_to_png(
-        input_file_path: &str,
-        output_texture_path: &str,
-    ) -> Result<(), String> {
-        Self::convert_texture_to_target_fmt(input_file_path, output_texture_path, "png")
-    }
-
     pub fn convert_texture_to_target_fmt(
         input_file_path: &str,
         output_texture_path: &str,
@@ -197,17 +114,8 @@ impl TextureConvertHelper {
             arguments.push(file_suffix.to_string());
         }
 
-        // Match original behavior: for jpg, only keep rgba when source includes BC5_UNORM.
-        let use_rgba_channels = if target_format.eq_ignore_ascii_case("jpg") {
-            source_texture_file_path.contains("BC5_UNORM")
-        } else {
-            true
-        };
-
-        if use_rgba_channels {
-            arguments.push("-f".to_string());
-            arguments.push("rgba".to_string());
-        }
+        arguments.push("-f".to_string());
+        arguments.push("rgba".to_string());
 
         if let Some(swizzle) = swizzle {
             arguments.push("-swizzle".to_string());
