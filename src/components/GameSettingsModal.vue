@@ -1257,25 +1257,34 @@ defineExpose({
                   </svg>
                   <span>{{ t('gameSettingsModal.fields.launcherPath') }}</span>
                 </div>
+                <div class="settings-toggle-row-inline">
+                  <div class="settings-toggle-row-info">
+                    <span class="settings-toggle-row-title">{{ t('gameSettingsModal.fields.launchTargetProgram') }}</span>
+                    <span class="settings-toggle-row-hint">{{ t('gameSettingsModal.fields.launchTargetProgramHint') }}</span>
+                  </div>
+                  <el-checkbox v-model="config.launchTargetProgram" @change="saveConfig">
+                    {{ t('gameSettingsModal.fields.launchTargetProgramCheckbox') }}
+                  </el-checkbox>
+                </div>
                 <div class="settings-path-row">
-                  <input v-model="config.launcherExePath" type="text" class="settings-path-input"
+                  <input v-model="config.launcherExePath" type="text" class="settings-path-input" :disabled="config.launchTargetProgram === false"
                     :placeholder="t('gameSettingsModal.placeholders.selectLauncherOptional')" />
                   <el-tooltip :content="t('gameSettingsModal.actions.selectFile')" placement="top" :show-after="250">
-                  <button class="settings-sm-btn" @click="pickExe('launcherExePath')">
+                  <button class="settings-sm-btn" :disabled="config.launchTargetProgram === false" @click="pickExe('launcherExePath')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
                   </button>
                   </el-tooltip>
                   <el-tooltip :content="t('gameSettingsModal.actions.openLocation')" placement="top" :show-after="250">
-                  <button class="settings-sm-btn" @click="openExeDir('launcherExePath')">
+                  <button class="settings-sm-btn" :disabled="config.launchTargetProgram === false" @click="openExeDir('launcherExePath')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                     </svg>
                   </button>
                   </el-tooltip>
                   <el-tooltip :content="t('gameSettingsModal.actions.autoMatchPath')" placement="top" :show-after="250">
-                    <button class="settings-sm-btn highlight" :disabled="autoMatchingExeField !== null" @click="autoMatchExe('launcherExePath')">
+                    <button class="settings-sm-btn highlight" :disabled="config.launchTargetProgram === false || autoMatchingExeField !== null" @click="autoMatchExe('launcherExePath')">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/>
                       </svg>

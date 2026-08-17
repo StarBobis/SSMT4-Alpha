@@ -117,6 +117,7 @@ export type GameConfig = {
     installDir?: string;
     targetExePath?: string;
     launcherExePath?: string;
+    launchTargetProgram?: boolean;
     launchArgs?: string;
     showErrorPopup?: boolean;
     autoSetAnalyseOptions?: boolean;
@@ -167,6 +168,7 @@ export const useGameConfigStore = defineStore('gameConfig', () => {
             huntingMode: normalizeHuntingMode(config.huntingMode),
             d3d11Mode: normalizeD3d11Mode(config.d3d11Mode, config.gamePreset),
             allowDllUpdates: config.allowDllUpdates !== false,
+            launchTargetProgram: config.launchTargetProgram !== false,
             extraDll,
             extraDlls,
             useShell: extraDlls.length > 0 ? false : !!config.useShell,
@@ -205,6 +207,7 @@ export const useGameConfigStore = defineStore('gameConfig', () => {
             installDir: '',
             targetExePath: '',
             launcherExePath: '',
+            launchTargetProgram: true,
             launchArgs: '',
             showErrorPopup: true,
             autoSetAnalyseOptions: true,

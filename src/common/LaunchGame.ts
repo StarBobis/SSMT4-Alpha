@@ -216,6 +216,7 @@ export class LaunchGame {
     ): Promise<{ migotoDir: string; config: GameConfig; targetExe: string } | null> {
         const config = await ResourceManager.loadGameConfig(gameName);
         const migotoCfg = config ?? {} as GameConfig;
+        const launchTargetProgram = migotoCfg.launchTargetProgram !== false;
         let targetExe = (migotoCfg.targetExePath || '').trim();
         const isConfiguredTargetValid = targetExe.length > 0 && await exists(targetExe);
         const configuredLauncher = (migotoCfg.launcherExePath || '').trim();
@@ -246,7 +247,7 @@ export class LaunchGame {
             }
         }
 
-        if ((!isConfiguredTargetValid || !isConfiguredLauncherValid) && supportsGameDiscovery) {
+        if (launchTargetProgram && (!isConfiguredTargetValid || !isConfiguredLauncherValid) && supportsGameDiscovery) {
             targetExe = '';
             debugLog('GameLauncher', `${gamePreset} target is missing or invalid; starting silent discovery.`);
             const discovered = await invoke<DiscoveredGamePaths | null>('find_game_executable', { gamePreset });
@@ -269,22 +270,22 @@ export class LaunchGame {
             await ResourceManager.saveGameConfig(gameName, migotoCfg);
         }
 
-        if (!targetExe) {
+        if (launchTargetProgram && !targetExe) {
             ElMessage.warning(t('launchGame.messages.targetProcessPathNotConfigured'));
             onNeedsConfigureProcessPath?.();
             return null;
         }
 
-        if (!(await exists(targetExe))) {
+        if (launchTargetProgram && !(await exists(targetExe))) {
             ElMessage.error(t('launchGame.messages.targetProcessFileNotFound'));
             return null;
         }
 
-        if ((migotoCfg.gamePreset || '').trim() === 'WWMI') {
+        if (launchTargetProgram && (migotoCfg.gamePreset || '').trim() === 'WWMI') {
             await this.configureWWMILaunchSettings(targetExe, migotoCfg);
         }
 
-        if ((migotoCfg.gamePreset || '').trim() === 'ZZMI') {
+        if (launchTargetProgram && (migotoCfg.gamePreset || '').trim() === 'ZZMI') {
             await this.configureZZMILaunchSettings(targetExe, migotoCfg);
         }
 
@@ -301,7 +302,7 @@ export class LaunchGame {
         const useUpx = (migotoCfg.useUpx ?? false);
         await this.prepareGameEnvironment(gameName, migotoDir, migotoCfg, useUpx);
 
-        if (!pureMode) {
+        if (!pureMode || !launchTargetProgram) {
             const runExePath = await join(migotoDir, 'Run.exe');
             if (!(await exists(runExePath))) {
                 ElMessage.error(t('launchGame.messages.runExeMissing'));
@@ -330,16 +331,17 @@ export class LaunchGame {
             if (!preflight) return;
 
             const { migotoDir, config, targetExe } = preflight;
+            const launchTargetProgram = config.launchTargetProgram !== false;
             const launcherExePath = (config.launcherExePath || '').trim();
             const targetProcessName = this.getProcessNameFromPath(targetExe);
-            const useShell = config.useShell || false;
+            const useShell = launchTargetProgram && (config.useShell || false);
 
-            if (useShell && !launcherExePath) {
+            if (launchTargetProgram && useShell && !launcherExePath) {
                 ElMessage.warning(t('launchGame.messages.shellLauncherPathRequired'));
                 return;
             }
 
-            if (launcherExePath && !(await exists(launcherExePath))) {
+            if (launchTargetProgram && launcherExePath && !(await exists(launcherExePath))) {
                 ElMessage.error(t('launchGame.messages.launcherProgramFileNotFound', {
                     path: launcherExePath,
                 }));
@@ -369,16 +371,20 @@ export class LaunchGame {
 
             await MigotoManager.patchD3dxForLaunch(gameName);
 
-            const preLaunchPrograms = await this.buildConfiguredPrograms(config.preLaunchPrograms, 'preLaunchPrograms');
+            const preLaunchPrograms = launchTargetProgram
+                ? await this.buildConfiguredPrograms(config.preLaunchPrograms, 'preLaunchPrograms')
+                : [];
             if (!preLaunchPrograms) return;
 
-            const postLaunchPrograms = await this.buildConfiguredPrograms(config.postLaunchPrograms, 'postLaunchPrograms');
+            const postLaunchPrograms = launchTargetProgram
+                ? await this.buildConfiguredPrograms(config.postLaunchPrograms, 'postLaunchPrograms')
+                : [];
             if (!postLaunchPrograms) return;
 
             // Construct programs list
             const programs: ProgramToLaunch[] = [...preLaunchPrograms];
 
-            if (!pureMode) {
+            if (!pureMode || !launchTargetProgram) {
                 // 1. Default flow launches Run.exe first.
                 programs.push({
                     path: await join(migotoDir, 'Run.exe'),
@@ -389,7 +395,7 @@ export class LaunchGame {
             }
 
             // 2. Pure mode launches the target directly; shell mode keeps existing behavior.
-            if (pureMode || useShell) {
+            if (launchTargetProgram && (pureMode || useShell)) {
                 const exePath = useShell ? launcherExePath : targetExe;
                 if (!exePath) {
                     debugWarn('GameLauncher', 'Skipping main launch step because executable path is empty.', {
@@ -406,7 +412,7 @@ export class LaunchGame {
                 });
             }
 
-            const shouldWaitForTargetProcess = !!targetProcessName
+            const shouldWaitForTargetProcess = launchTargetProgram && !!targetProcessName
                 && ((!pureMode && !useShell && !launcherExePath) || postLaunchPrograms.length > 0);
 
             if (shouldWaitForTargetProcess) {
