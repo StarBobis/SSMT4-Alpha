@@ -19,6 +19,8 @@ const emit = defineEmits<{
   'open-mod-group-folder': [group: GroupInfo];
   'open-sub-group-dialog': [group: GroupInfo];
   'set-group-icon': [group: GroupInfo];
+  'auto-match-gamebanana-icon': [group: GroupInfo];
+  'bind-gamebanana-category': [group: GroupInfo];
   'rename-group': [group: GroupInfo];
   'delete-group': [group: GroupInfo];
   'edit-group-tags': [group: GroupInfo];
@@ -92,6 +94,14 @@ watch(() => props.visible, (newVal) => {
       <div class="menu-item" @click="emit('close'); emit('edit-group-tags', target)">
         <el-icon><Plus /></el-icon>
         <span>{{ t('modsManagement.actions.editModTags') }}</span>
+      </div>
+      <div class="menu-item" @click="emit('close'); emit('auto-match-gamebanana-icon', target)">
+        <el-icon><Picture /></el-icon>
+        <span>{{ t('modsManagement.actions.autoMatchGameBananaIcon') }}</span>
+      </div>
+      <div class="menu-item" @click="emit('close'); emit('bind-gamebanana-category', target)">
+        <el-icon><Picture /></el-icon>
+        <span>{{ t('modsManagement.actions.bindGameBananaCategory') }}</span>
       </div>
       <div class="menu-item" @click="emit('close'); emit('toggle-nsfw', target)">
         <el-icon><WarningFilled /></el-icon>

@@ -28,6 +28,7 @@ import EditSwitchKeyList from './EditSwitchKeyList.vue';
 import TagManagement from './TagManagement.vue';
 import ContextMenu from './ContextMenu.vue';
 import GroupContextMenu from './GroupContextMenu.vue';
+import GameBananaCategoryIconDialog from './GameBananaCategoryIconDialog.vue';
 import InstallModDialog from './InstallModDialog.vue';
 import ModCard from './ModCard.vue';
 import ModPresetPopover from './ModPresetPopover.vue';
@@ -3152,6 +3153,23 @@ const navigateToModGroup = async (mod: ModInfo) => {
     await handleGroupClick({ id: groupId, name: groupId.split('/').pop() || groupId, path: groupId, enabled: true } as GroupInfo);
 };
 
+const gameBananaIconDialog = reactive({ visible: false, group: null as GroupInfo | null, mode: 'auto' as 'auto' | 'manual' });
+const openGameBananaIconDialog = (group: GroupInfo, mode: 'auto' | 'manual') => {
+    gameBananaIconDialog.group = group;
+    gameBananaIconDialog.mode = mode;
+    gameBananaIconDialog.visible = true;
+};
+const applyGameBananaGroupIcon = async (group: GroupInfo, iconPath: string) => {
+    try {
+        await ModManager.setModGroupIcon(selectedGame.value, group.path || group.id, iconPath);
+        gameBananaIconDialog.visible = false;
+        ElMessage.success(t('modsManagement.messages.gameBananaIconApplied'));
+        await refreshAfterMutation('structure');
+    } catch (error) {
+        ElMessage.error(t('modsManagement.messages.setIconFailed', { error: String(error) }));
+    }
+};
+
 const modPreviewIndices = reactive<Record<string, number>>({});
 const subgroupPreviewMap = ref<Record<string, string[]>>(loadSubgroupPreviewCache());
 const subgroupPreviewIndices = reactive<Record<string, number>>({});
@@ -4104,11 +4122,22 @@ const {
       @open-mod-group-folder="(group: GroupInfo) => { closeGroupContextMenu(); openModGroupFolder(group); }"
       @open-sub-group-dialog="(group: GroupInfo) => { closeGroupContextMenu(); openSubGroupDialog(group.path || group.id); }"
       @set-group-icon="(group: GroupInfo) => { closeGroupContextMenu(); setGroupIcon(group); }"
+      @auto-match-gamebanana-icon="(group: GroupInfo) => { closeGroupContextMenu(); openGameBananaIconDialog(group, 'auto'); }"
+      @bind-gamebanana-category="(group: GroupInfo) => { closeGroupContextMenu(); openGameBananaIconDialog(group, 'manual'); }"
       @rename-group="(group: GroupInfo) => { closeGroupContextMenu(); renameGroup(group); }"
       @delete-group="(group: GroupInfo) => { closeGroupContextMenu(); deleteGroup(group); }"
       @edit-group-tags="(group: GroupInfo) => { closeGroupContextMenu(); openGroupTagDialogWrapped(group); }"
       @toggle-nsfw="(group: GroupInfo) => { closeGroupContextMenu(); void toggleGroupNsfwMarked(group); }"
       @convert-group-to-mod="(group: GroupInfo) => { closeGroupContextMenu(); convertGroupToMod(group); }"
+    />
+
+    <GameBananaCategoryIconDialog
+      :visible="gameBananaIconDialog.visible"
+      :group="gameBananaIconDialog.group"
+      :game-name="selectedGame"
+      :mode="gameBananaIconDialog.mode"
+      @close="gameBananaIconDialog.visible = false"
+      @apply="applyGameBananaGroupIcon"
     />
 
     <ModPresetPopover
