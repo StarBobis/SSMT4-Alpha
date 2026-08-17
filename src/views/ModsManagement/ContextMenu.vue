@@ -12,6 +12,7 @@ const props = defineProps<{
   target: ModInfo | null;
   groups: GroupInfo[];
   isNsfw?: boolean;
+  currentGroup?: string;
 }>();
 
 const emit = defineEmits<{
@@ -27,6 +28,7 @@ const emit = defineEmits<{
   'delete-mod': [mod: ModInfo];
   'enable-mod-solo': [mod: ModInfo];
   'toggle-nsfw': [mod: ModInfo];
+  'navigate-to-mod-group': [mod: ModInfo];
 }>();
 
 const { t } = useI18n();
@@ -120,6 +122,14 @@ watch(() => props.visible, (newVal) => {
       <div class="menu-item" @click="emit('close'); emit('open-mod-tag-dialog', target as ModInfo)">
         <el-icon><Plus /></el-icon>
         <span>{{ t('modsManagement.actions.editModTags') }}</span>
+      </div>
+      <div
+        v-if="target.group !== 'Root' && target.group !== currentGroup"
+        class="menu-item"
+        @click="emit('close'); emit('navigate-to-mod-group', target as ModInfo)"
+      >
+        <el-icon><ArrowRight /></el-icon>
+        <span>{{ t('modsManagement.actions.navigateToModGroup') }}</span>
       </div>
       <div class="menu-item" @click="emit('close'); emit('toggle-nsfw', target as ModInfo)">
         <el-icon><WarningFilled /></el-icon>

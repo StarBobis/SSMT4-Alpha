@@ -604,6 +604,7 @@
       "centerCanvasView": "回到中心",
       "manageTags": "管理标签",
       "moveTo": "移动到",
+      "navigateToModGroup": "跳转至 Mod 所在目录",
       "moveToModsRoot": "根目录Mods下",
       "createCategory": "创建分类...",
       "createTag": "创建标签",

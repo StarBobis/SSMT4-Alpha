@@ -604,6 +604,7 @@
       "centerCanvasView": "Center Canvas",
       "manageTags": "Manage Tags",
       "moveTo": "Move To",
+      "navigateToModGroup": "Go to Mod directory",
       "moveToModsRoot": "Mods Root",
       "createCategory": "Create Category...",
       "createTag": "Create Tag",

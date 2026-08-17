@@ -164,6 +164,7 @@ pub fn run() {
             commands::mod_library::mod_library_refresh_group,
             commands::mod_library::mod_library_refresh_all,
             commands::mod_library::mod_library_all_mods,
+            commands::mod_library::mod_library_search,
             commands::mod_library::watch_mod_library,
             commands::mod_library::unwatch_mod_library,
             commands::mod_library::find_nested_ini_files,

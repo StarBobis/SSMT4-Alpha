@@ -746,6 +746,11 @@ export const useModManagerStore = defineStore('modManager', () => {
     return invoke<string[]>('find_nested_ini_files', { installDir, groupPath: physicalGroupPath })
   }
 
+  async function searchMods(gameName: string, query: string): Promise<string[]> {
+    const installDir = await getInstallDir(gameName)
+    return invoke<string[]>('mod_library_search', { gameName, installDir, query })
+  }
+
   // -- return public API ----------------------------------------------------
   return {
     getInstallDir,
@@ -775,6 +780,7 @@ export const useModManagerStore = defineStore('modManager', () => {
     openGameModsFolder,
     openModGroupFolder,
     findNestedIniFiles,
+    searchMods,
   }
 })
 
@@ -809,6 +815,7 @@ export const ModManager = {
   get enableParentGroupsForMod() { return useModManagerStore().enableParentGroupsForMod },
   get setModGroupIcon() { return useModManagerStore().setModGroupIcon },
   get openGameModsFolder() { return useModManagerStore().openGameModsFolder },
+  get searchMods() { return useModManagerStore().searchMods },
   get openModGroupFolder() { return useModManagerStore().openModGroupFolder },
   get findNestedIniFiles() { return useModManagerStore().findNestedIniFiles },
 }

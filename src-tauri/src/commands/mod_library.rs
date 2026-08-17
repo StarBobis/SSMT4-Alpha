@@ -1254,6 +1254,69 @@ pub async fn mod_library_all_mods(
     Ok(ScanResult { mods, groups })
 }
 
+fn mod_directory_matches_query(root: &Path, query: &str) -> bool {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if name.contains(query) {
+                return true;
+            }
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() && !file_type.is_symlink() {
+                pending.push(path);
+                continue;
+            }
+            if file_type.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ini"))
+                && fs::metadata(&path)
+                    .map(|metadata| metadata.len() <= 8 * 1024 * 1024)
+                    .unwrap_or(false)
+                && fs::read(&path)
+                    .map(|contents| {
+                        String::from_utf8_lossy(&contents)
+                            .to_lowercase()
+                            .contains(query)
+                    })
+                    .unwrap_or(false)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[tauri::command]
+pub async fn mod_library_search(
+    game_name: String,
+    install_dir: String,
+    query: String,
+) -> Result<Vec<String>, String> {
+    let normalized_query = query.trim().to_lowercase();
+    if normalized_query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let result = mod_library_all_mods(game_name, install_dir).await?;
+    Ok(result
+        .mods
+        .into_iter()
+        .filter(|mod_info| {
+            mod_info.name.to_lowercase().contains(&normalized_query)
+                || mod_directory_matches_query(Path::new(&mod_info.path), &normalized_query)
+        })
+        .map(|mod_info| mod_info.relative_path)
+        .collect())
+}
+
 #[tauri::command]
 pub async fn watch_mod_library(
     app: AppHandle,

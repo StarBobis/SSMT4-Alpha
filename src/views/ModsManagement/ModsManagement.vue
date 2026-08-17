@@ -672,6 +672,10 @@ const currentSubGroups = ref<GroupInfo[]>([]);
 const availableGroups = ref<GroupInfo[]>([]);
 const selectedGame = ref('');
 const searchQuery = ref('');
+const searchMatchedModPaths = ref<Set<string>>(new Set());
+const searchLoading = ref(false);
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+let searchToken = 0;
 
 // View mode & sort state
 type ViewMode = 'grid' | 'list';
@@ -1947,6 +1951,7 @@ onUnmounted(() => {
     if (unlistenWindowFocus) unlistenWindowFocus();
     if (unlistenWindowResize) unlistenWindowResize();
     if (subgroupPreviewPreloadTimer) clearTimeout(subgroupPreviewPreloadTimer);
+    if (searchTimer) clearTimeout(searchTimer);
     if (subgroupPreviewPersistTimer) clearTimeout(subgroupPreviewPersistTimer);
     if (debounceTimer) clearTimeout(debounceTimer);
     clearModAnalysisSubscriptions();
@@ -3074,9 +3079,10 @@ const buildSortComparator = (): ((a: ModInfo, b: ModInfo) => number) => {
 };
 
 const filteredMods = computed(() => {
-    let result = hasActiveTagFilter.value ? [...allModsCatalog.value] : [...mods.value];
+    const searching = !!searchQuery.value.trim();
+    let result = searching || hasActiveTagFilter.value ? [...allModsCatalog.value] : [...mods.value];
 
-    if (!hasActiveTagFilter.value && selectedGroup.value !== 'All') {
+    if (!searching && !hasActiveTagFilter.value && selectedGroup.value !== 'All') {
         result = result.filter(m => m.group === selectedGroup.value);
     }
 
@@ -3084,9 +3090,8 @@ const filteredMods = computed(() => {
         result = result.filter((mod) => activeTagIds.value.every((tagId) => getTagIdsForMod(mod.relativePath).includes(tagId)));
     }
 
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase();
-        result = result.filter(m => m.name.toLowerCase().includes(query));
+    if (searching) {
+        result = result.filter((mod) => searchMatchedModPaths.value.has(mod.relativePath));
     }
 
     return [...result].sort(buildSortComparator());
@@ -3103,7 +3108,7 @@ const emptyModsDescription = computed(() => {
 });
 
 const visibleSubGroups = computed(() => {
-    if (hasActiveTagFilter.value) {
+    if (hasActiveTagFilter.value || searchQuery.value.trim()) {
         return [] as GroupInfo[];
     }
     let result = [...currentSubGroups.value];
@@ -3114,6 +3119,38 @@ const visibleSubGroups = computed(() => {
     const parentId = selectedGroup.value === 'Root' ? ROOT_PARENT_ID : selectedGroup.value;
     return sortGroupsByOrder(selectedGame.value, parentId, result);
 });
+
+watch(searchQuery, (rawQuery) => {
+    const query = rawQuery.trim();
+    const token = ++searchToken;
+    if (searchTimer) clearTimeout(searchTimer);
+    if (!query) {
+        searchMatchedModPaths.value = new Set();
+        searchLoading.value = false;
+        return;
+    }
+    searchLoading.value = true;
+    searchTimer = setTimeout(async () => {
+        try {
+            await refreshAllModsCatalog();
+            const matches = await ModManager.searchMods(selectedGame.value, query);
+            if (token === searchToken) searchMatchedModPaths.value = new Set(matches);
+        } catch (error) {
+            if (token === searchToken) {
+                searchMatchedModPaths.value = new Set();
+                console.error('Failed to search Mods:', error);
+            }
+        } finally {
+            if (token === searchToken) searchLoading.value = false;
+        }
+    }, 250);
+});
+
+const navigateToModGroup = async (mod: ModInfo) => {
+    searchQuery.value = '';
+    const groupId = mod.group || ROOT_GROUP_ID;
+    await handleGroupClick({ id: groupId, name: groupId.split('/').pop() || groupId, path: groupId, enabled: true } as GroupInfo);
+};
 
 const modPreviewIndices = reactive<Record<string, number>>({});
 const subgroupPreviewMap = ref<Record<string, string[]>>(loadSubgroupPreviewCache());
@@ -3669,7 +3706,7 @@ const {
                     :tags="getTagsForMod(mod)"
                     :key-items="getModKeyItems(mod.id)"
                     :group-icon-url="(mod.group !== 'Root' && getGroupIcon(mod.group)) ? getGroupIconUrl((getGroupIcon(mod.group) as string)) : ''"
-                    :group-display-name="mod.group !== 'Root' ? (mod.group.split('/').pop() ?? '') : ''"
+                    :group-display-name="mod.group !== 'Root' ? (searchQuery.trim() ? mod.group : (mod.group.split('/').pop() ?? '')) : ''"
                     :is-root-group="mod.group === 'Root'"
                     :blur-nsfw-preview="appSettings.modsManagementBlurMode === 'all' || (appSettings.modsManagementBlurMode === 'nsfw' && isNsfwMod(mod))"
                     @contextmenu="showModContextMenu($event, mod)"
@@ -3811,7 +3848,7 @@ const {
                     </span>
                     <!-- Group -->
                     <span class="mod-list-cell mod-list-cell--group" :title="mod.group">
-                        {{ mod.group !== 'Root' ? (mod.group.split('/').pop() ?? mod.group) : '—' }}
+                        {{ mod.group !== 'Root' ? (searchQuery.trim() ? mod.group : (mod.group.split('/').pop() ?? mod.group)) : '—' }}
                     </span>
                     <!-- Last modified -->
                     <span class="mod-list-cell mod-list-cell--modified">
@@ -4039,6 +4076,7 @@ const {
       :target="contextMenu.target"
       :groups="groups"
       :is-nsfw="contextMenu.target ? getTagsForMod(contextMenu.target).some(isNsfwTag) : false"
+      :current-group="selectedGroup"
       @close="closeContextMenu"
       @open-mod-folder="(path: string) => { closeContextMenu(); openModFolder(path); }"
       @move-mod-to-group="(mod: ModInfo, groupId: string) => { closeContextMenu(); moveModToGroup(mod, groupId); }"
@@ -4051,6 +4089,7 @@ const {
       @paste-clipboard-preview-image="(mod: ModInfo) => { closeContextMenu(); pasteClipboardPreviewImage(mod); }"
       @enable-mod-solo="(mod: ModInfo) => { closeContextMenu(); enableModSolo(mod); }"
       @delete-mod="(mod: ModInfo) => { closeContextMenu(); deleteMod(mod); }"
+      @navigate-to-mod-group="(mod: ModInfo) => { closeContextMenu(); void navigateToModGroup(mod); }"
     />
 
     <!-- Group Context Menu -->
