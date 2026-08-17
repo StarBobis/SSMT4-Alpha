@@ -12,7 +12,23 @@ const route = useRoute();
 const { t } = useI18n();
 const isMaximized = ref(false);
 const isPinned = ref(false);
+const isSwitchingGame = ref(false);
 const appSettings = AppStateManager.appSettings;
+const titlebarGames = computed(() => AppStateManager.gamesList.filter(game => game.showSidebar));
+const selectedTitlebarGame = computed(() => appSettings.CurrentGameName || '');
+
+const switchTitlebarGame = async (gameName: string) => {
+    if (!gameName || gameName === appSettings.CurrentGameName || isSwitchingGame.value) return;
+    const game = AppStateManager.gamesList.find(item => item.name === gameName);
+    if (!game) return;
+    isSwitchingGame.value = true;
+    try {
+        await AppStateManager.selectGame(game);
+        await AppStateManager.saveSettingsNow();
+    } finally {
+        isSwitchingGame.value = false;
+    }
+};
 
 const checkMaximized = async () => {
     isMaximized.value = await appWindow.isMaximized();
@@ -340,6 +356,35 @@ const togglePin = async () => {
     </div>
     
         <div class="window-controls">
+      <div
+        class="titlebar-game-select-wrap"
+        @mousedown.stop
+        @click.stop
+      >
+        <el-select
+          :model-value="selectedTitlebarGame"
+          class="titlebar-game-select"
+          popper-class="titlebar-game-select-popper"
+          :placeholder="t('titlebar.selectGame')"
+          :disabled="isSwitchingGame"
+          filterable
+          @change="switchTitlebarGame"
+        >
+          <el-option
+            v-for="game in titlebarGames"
+            :key="game.name"
+            :label="game.name"
+            :value="game.name"
+          >
+            <div class="titlebar-game-option">
+              <span class="titlebar-game-option-icon">
+                <img v-if="game.iconPath" :src="game.iconPath" alt="" />
+              </span>
+              <span>{{ game.name }}</span>
+            </div>
+          </el-option>
+        </el-select>
+      </div>
       <!-- Pin/Always-on-Top Toggle Button -->
     <el-tooltip :content="isPinned ? t('titlebar.unpinWindow') : t('titlebar.pinWindow')" placement="bottom" :show-after="250">
     <div class="control-button pin-button" :class="{ active: isPinned }" @click="togglePin">
@@ -506,6 +551,97 @@ const togglePin = async () => {
   flex-shrink: 0;
   z-index: 10001; /* Ensure buttons are top-most */
     position: relative;
+}
+
+.titlebar-game-select-wrap {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 7px 0 5px;
+}
+
+.titlebar-game-select {
+  width: 152px;
+}
+
+.titlebar-game-select :deep(.el-select__wrapper) {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  color: rgba(var(--theme-text-primary-rgb), 0.88);
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.12) inset,
+    0 3px 10px rgba(0, 0, 0, 0.12);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.titlebar-game-select :deep(.el-select__wrapper:hover),
+.titlebar-game-select :deep(.el-select__wrapper.is-focused) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  box-shadow: 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.28) inset;
+}
+
+.titlebar-game-select :deep(.el-select__placeholder),
+.titlebar-game-select :deep(.el-select__selected-item) {
+  color: rgba(var(--theme-text-primary-rgb), 0.86);
+  font-size: 11px;
+}
+
+.titlebar-game-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.titlebar-game-option-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.titlebar-game-option-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+:global(.titlebar-game-select-popper.el-popper) {
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16) !important;
+  border-radius: 9px !important;
+  background: rgba(18, 17, 15, 0.96) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42) !important;
+  backdrop-filter: blur(18px);
+}
+
+:global(.titlebar-game-select-popper .el-popper__arrow::before) {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.16) !important;
+  background: rgba(18, 17, 15, 0.96) !important;
+}
+
+:global(.titlebar-game-select-popper .el-select-dropdown__item) {
+  height: 34px;
+  margin: 2px 5px;
+  padding: 0 9px;
+  border-radius: 6px;
+  color: rgba(var(--theme-text-primary-rgb), 0.74);
+  background: transparent;
+}
+
+:global(.titlebar-game-select-popper .el-select-dropdown__item.is-hovering) {
+  color: rgba(var(--theme-text-primary-rgb), 0.96);
+  background: rgba(var(--theme-surface-tint-rgb), 0.09);
+}
+
+:global(.titlebar-game-select-popper .el-select-dropdown__item.is-selected) {
+  color: rgba(var(--theme-surface-tint-rgb), 0.98);
+  background: rgba(var(--theme-surface-tint-rgb), 0.14);
 }
 
 .control-button {

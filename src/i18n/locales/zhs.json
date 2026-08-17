@@ -249,6 +249,7 @@
     }
   },
   "titlebar": {
+    "selectGame": "快捷切换游戏",
     "switchToGameLibrary": "切换到游戏库",
     "settings": "设置",
     "pinWindow": "点击开启窗口置顶 · Alt + F 快速唤起 SSMT",

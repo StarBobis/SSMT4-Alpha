@@ -249,6 +249,7 @@
     }
   },
   "titlebar": {
+    "selectGame": "Switch game",
     "switchToGameLibrary": "Switch to Game Library",
     "settings": "Settings",
     "pinWindow": "Click to pin window · Alt + F to show SSMT",

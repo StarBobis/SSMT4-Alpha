@@ -12,6 +12,7 @@ import type { D3d11Mode, HuntingMode } from './store/GameConfig';
 
 const route = useRoute();
 const appSettings = AppStateManager.appSettings;
+const gameSwitchRevision = AppStateManager.gameSwitchRevision;
 const { t } = useI18n();
 const selectedFirstRunRole = ref<'author' | 'player' | 'both' | null>(null);
 const firstRunStep = ref(0);
@@ -351,7 +352,7 @@ onUnmounted(() => {
               <router-view v-slot="{ Component }">
                 <transition name="page-blur">
                   <KeepAlive>
-                    <component :is="Component" />
+                    <component :is="Component" :key="`${route.fullPath}:${appSettings.CurrentGameName}:${gameSwitchRevision}`" />
                   </KeepAlive>
                 </transition>
               </router-view>

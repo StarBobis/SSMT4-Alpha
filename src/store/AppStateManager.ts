@@ -36,6 +36,7 @@ const appSettings = reactive(new AppSettings())
 const gamesList = reactive<GameInfo[]>([])
 const gamesDir = ref<string>('')
 const isFirstRunOnboardingOpen = ref(false)
+const gameSwitchRevision = ref(0)
 
 export const useAppStateStore = defineStore('appState', () => {
   const autoUpdateInFlight = new Set<string>()
@@ -204,6 +205,14 @@ export const useAppStateStore = defineStore('appState', () => {
     }
   }
 
+  async function saveSettingsNow() {
+    if (saveDebounceTimer) {
+      clearTimeout(saveDebounceTimer)
+      saveDebounceTimer = null
+    }
+    await GlobalConfig.SaveConfig(new AppSettings({ ...appSettings }))
+  }
+
   function syncShowWindowShortcut() {
     void invoke('set_show_window_shortcut_enabled', {
       enabled: appSettings.showWindowShortcutEnabled,
@@ -267,6 +276,7 @@ export const useAppStateStore = defineStore('appState', () => {
 
   function switchToGame(game: GameInfo) {
     appSettings.CurrentGameName = game.name
+    gameSwitchRevision.value += 1
     const useVideo = game.bgType === BGType.Video
 
     if (useVideo && game.bgVideoPath) {
@@ -401,6 +411,7 @@ export const useAppStateStore = defineStore('appState', () => {
   })
 
   return {
+    saveSettingsNow,
     setSidebarGameOrder,
     prepareWindowForDisplay,
     restoreWindowBoundsFromSettings,
@@ -422,6 +433,8 @@ export const AppStateManager = {
   gamesList,
   gamesDir,
   isFirstRunOnboardingOpen,
+  gameSwitchRevision,
+  get saveSettingsNow() { return useAppStateStore().saveSettingsNow },
   get setSidebarGameOrder() { return useAppStateStore().setSidebarGameOrder },
   get prepareWindowForDisplay() { return useAppStateStore().prepareWindowForDisplay },
   get restoreWindowBoundsFromSettings() { return useAppStateStore().restoreWindowBoundsFromSettings },
