@@ -465,6 +465,7 @@
       "githubToken": "Optional. A personal token raises the GitHub API rate limit for update checks.",
       "workspaceAccessProxyPort": "Only used by the workspace public library. Enter the local HTTP proxy port (for example, 7890); use 0 for the system or environment proxy.",
       "showWindowShortcut": "Press Alt+F to bring SSMT to the front; press it again while focused to minimize the window.",
+      "gameLaunchMode": "Controls whether games start without 3DMigoto injection. In conditional mode, hold Ctrl while clicking Start Game.",
       "language": "Changes the interface language immediately.",
       "textureMarkStyle": "Used as the default when starting a new texture marking task."
     },
@@ -482,6 +483,10 @@
       "workspaceAccessProxyPort": "Workspace Library Proxy Port",
       "workspaceAccessProxyPortPlaceholder": "For example 7890; leave empty for system proxy",
       "showWindowShortcut": "Alt+F Show Window Shortcut",
+      "gameLaunchMode": "Global Game Launch Mode",
+      "gameLaunchModeAlwaysPure": "Always use pure mode",
+      "gameLaunchModeCtrlPure": "Use pure mode while holding Ctrl",
+      "gameLaunchModeAlwaysNormal": "Always use normal mode",
       "githubTokenPlaceholder": "Optional personal access token",
       "includePrereleaseUpdates": "Include Pre-release Updates",
       "includePrereleaseUpdatesHint": "When enabled, d3d11.dll and 3Dmigoto package update checks will also include GitHub pre-releases.",

@@ -1171,19 +1171,6 @@ defineExpose({
                 </div>
               </div>
 
-              <!-- Launch Mode card -->
-              <div class="settings-card settings-card-full">
-                <div class="settings-card-header">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                  <span>{{ t('gameSettingsModal.fields.pureMode') }}</span>
-                </div>
-                <el-select v-model="config.pureMode" class="custom-select" @change="saveConfig">
-                  <el-option :value="false" :label="t('gameSettingsModal.fields.pureMode3dmigoto')" :title="t('gameSettingsModal.fields.pureModeHelp3dmigoto')" />
-                  <el-option :value="true" :label="t('gameSettingsModal.fields.pureModePure')" :title="t('gameSettingsModal.fields.pureModeHelpPure')" />
-                </el-select>
-              </div>
             </div>
 
             <!-- 3Dmigoto Settings -->

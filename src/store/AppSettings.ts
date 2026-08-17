@@ -38,6 +38,7 @@ const normalizeLocale = (value: unknown): SSMTLocale => {
 export type TextureMarkStylePreference = 'Hash' | 'Slot' | 'SharedSlot'
 export type PostProcessPreviewLightingMode = 'half-lambert' | 'unlit' | 'pbr'
 export type ImageBlurMode = 'all' | 'nsfw' | 'none'
+export type GameLaunchMode = 'always-pure' | 'ctrl-pure' | 'always-normal'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 export type GameBananaTranslationFontStyle = 'regular' | 'italic' | 'bold' | 'bold-italic'
 export type GameBananaTranslationFailureMode = 'retry' | 'message' | 'silent'
@@ -283,6 +284,7 @@ export class AppSettings {
 	gamebananaTranslationFontStyle: GameBananaTranslationFontStyle = 'regular'
 	gamebananaTranslationFailureMode: GameBananaTranslationFailureMode = 'message'
 	showWindowShortcutEnabled: boolean = true
+	gameLaunchMode: GameLaunchMode = 'ctrl-pure'
 	pageVisibility: PageVisibilitySettings = { ...DEFAULT_PAGE_VISIBILITY }
 	// Nexus Mods uses a per-user API key and a game URL-domain (for example,
 	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
@@ -371,6 +373,9 @@ export class AppSettings {
 			? 'Ctrl'
 			: savedTranslationShortcut
 		this.showWindowShortcutEnabled = init?.showWindowShortcutEnabled ?? this.showWindowShortcutEnabled
+		this.gameLaunchMode = ['always-pure', 'ctrl-pure', 'always-normal'].includes(init?.gameLaunchMode || '')
+			? init!.gameLaunchMode!
+			: this.gameLaunchMode
 		this.pageVisibility = { ...DEFAULT_PAGE_VISIBILITY, ...(init?.pageVisibility || {}) }
 		this.nexusModsApiKey = init?.nexusModsApiKey ?? this.nexusModsApiKey
 		this.nexusModsGameDomain = init?.nexusModsGameDomain?.trim().toLowerCase() ?? this.nexusModsGameDomain
@@ -461,6 +466,7 @@ export class AppSettings {
 			gamebananaTranslationFontStyle: this.gamebananaTranslationFontStyle,
 			gamebananaTranslationFailureMode: this.gamebananaTranslationFailureMode,
 			showWindowShortcutEnabled: this.showWindowShortcutEnabled,
+			gameLaunchMode: this.gameLaunchMode,
 			pageVisibility: { ...this.pageVisibility },
 			nexusModsApiKey: this.nexusModsApiKey,
 			nexusModsGameDomain: this.nexusModsGameDomain,

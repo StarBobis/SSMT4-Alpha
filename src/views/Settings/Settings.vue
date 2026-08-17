@@ -210,6 +210,23 @@ const openUsageDocs = async () => {
                   />
                 </div>
               </div>
+
+              <div class="setting-row setting-row-wide">
+                <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><Monitor /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.general.gameLaunchMode') }}</div>
+                    <div class="setting-description">{{ t('settings.hints.gameLaunchMode') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control">
+                  <el-select v-model="appSettings.gameLaunchMode" :aria-label="t('settings.general.gameLaunchMode')">
+                    <el-option value="always-pure" :label="t('settings.general.gameLaunchModeAlwaysPure')" />
+                    <el-option value="ctrl-pure" :label="t('settings.general.gameLaunchModeCtrlPure')" />
+                    <el-option value="always-normal" :label="t('settings.general.gameLaunchModeAlwaysNormal')" />
+                  </el-select>
+                </div>
+              </div>
             </div>
           </section>
 

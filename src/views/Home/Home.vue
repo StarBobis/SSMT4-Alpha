@@ -591,7 +591,7 @@ const switchD3d11Mode = async (mode: D3d11Mode) => {
 // Start Game Logic
 const isLaunching = ref(false);
 
-const launchGame = async () => {
+const launchGame = async (event?: MouseEvent) => {
   if (isStartButtonDisabled.value) return;
 
   const gameName = appSettings.CurrentGameName;
@@ -609,7 +609,8 @@ const launchGame = async () => {
         appSettings,
         check3DMigotoPackageUpdate,
         openSettingsTo3Dmigoto,
-        checkD3D11DllUpdate
+        checkD3D11DllUpdate,
+        event?.ctrlKey ?? false
       );
   } finally {
     setTimeout(() => {

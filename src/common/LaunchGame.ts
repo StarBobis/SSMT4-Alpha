@@ -210,13 +210,12 @@ export class LaunchGame {
     static async prepareLaunch(
         gameName: string,
         appSettings: AppSettings,
+        pureMode: boolean,
         onNeedsConfigureProcessPath?: () => void,
         onNeedsPackageUpdate?: () => Promise<boolean | void> | boolean | void
     ): Promise<{ migotoDir: string; config: GameConfig; targetExe: string } | null> {
         const config = await ResourceManager.loadGameConfig(gameName);
         const migotoCfg = config ?? {} as GameConfig;
-        const pureMode = !!migotoCfg.pureMode;
-
         let targetExe = (migotoCfg.targetExePath || '').trim();
         const isConfiguredTargetValid = targetExe.length > 0 && await exists(targetExe);
         const configuredLauncher = (migotoCfg.launcherExePath || '').trim();
@@ -318,18 +317,20 @@ export class LaunchGame {
         appSettings: AppSettings,
         onNeedsUpdate: () => Promise<boolean | void> | boolean | void,
         onNeedsConfigureProcessPath?: () => void,
-        onNeedsDllUpdate?: () => Promise<boolean | void>
+        onNeedsDllUpdate?: () => Promise<boolean | void>,
+        ctrlPressed = false
     ): Promise<void> {
         try {
+            const pureMode = appSettings.gameLaunchMode === 'always-pure'
+                || (appSettings.gameLaunchMode === 'ctrl-pure' && ctrlPressed);
             const libsReady = await this.ensureXXMILibsReady(gameName, onNeedsDllUpdate);
             if (!libsReady) return;
 
-            const preflight = await this.prepareLaunch(gameName, appSettings, onNeedsConfigureProcessPath, onNeedsUpdate);
+            const preflight = await this.prepareLaunch(gameName, appSettings, pureMode, onNeedsConfigureProcessPath, onNeedsUpdate);
             if (!preflight) return;
 
             const { migotoDir, config, targetExe } = preflight;
             const launcherExePath = (config.launcherExePath || '').trim();
-            const pureMode = !!config.pureMode;
             const targetProcessName = this.getProcessNameFromPath(targetExe);
             const useShell = config.useShell || false;
 
