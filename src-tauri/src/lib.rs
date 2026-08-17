@@ -176,6 +176,7 @@ pub fn run() {
             commands::vscheck::generate_vscheck,
             commands::extract_textures::extract_deduped_textures,
             commands::extract_textures::extract_trianglelist_textures,
+            commands::extract_textures::prepare_dds_webgl_preview,
             commands::compress::extract_zip_archive,
             commands::compress::create_rar_archive,
             commands::compress::create_mod_archive,

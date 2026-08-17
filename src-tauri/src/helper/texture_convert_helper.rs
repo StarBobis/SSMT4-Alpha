@@ -146,6 +146,20 @@ impl TextureConvertHelper {
         )
     }
 
+    pub fn convert_texture_to_rgba_dds(
+        input_file_path: &str,
+        output_texture_path: &str,
+    ) -> Result<(), String> {
+        Self::convert_texture_to_target_fmt_with_options(
+            input_file_path,
+            output_texture_path,
+            "dds",
+            None,
+            None,
+            None,
+        )
+    }
+
     fn convert_texture_to_target_fmt_with_options(
         input_file_path: &str,
         output_texture_path: &str,
