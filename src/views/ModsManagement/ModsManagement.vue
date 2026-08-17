@@ -83,6 +83,14 @@ const isNsfwMod = (mod: ModInfo): boolean => {
     return /\bnsfw\b|\br[- ]?18\b|\b18\+|\badult\b|\bhentai\b|\bnud(?:e|ity)\b|\bnaked\b|\bsex(?:ual)?\b|成人|色情|裸露|无码/.test(text);
 };
 
+const isNsfwGroup = (group: GroupInfo): boolean => {
+    const taggedGroups = [group.id, ...getGroupAncestors(group.id)]
+        .filter((groupId, index, values) => !!groupId && values.indexOf(groupId) === index)
+        .flatMap((groupId) => getTagsForGroup({ id: groupId, name: groupId, path: groupId, enabled: true } as GroupInfo).map((tag) => tag.name));
+    const text = [group.name, group.id, group.path, ...taggedGroups].join(' ').toLowerCase();
+    return /\bnsfw\b|\br[- ]?18\b|\b18\+|\badult\b|\bhentai\b|\bnud(?:e|ity)\b|\bnaked\b|\bsex(?:ual)?\b|成人|色情|裸露|无码/.test(text);
+};
+
 type ElTreeNode = { key?: string; level: number; expanded: boolean; data: GroupInfo; childNodes: ElTreeNode[]; expand: () => void; collapse: () => void; setExpandedKeys?: (keys: string[]) => void }
 
 const modPulseState = reactive<Record<string, boolean>>({});
@@ -3605,6 +3613,10 @@ const {
                             v-if="getSubgroupPreviewUrl(group)"
                             :key="getSubgroupPreviewUrl(group)"
                             class="subgroup-bg-preview"
+                            :class="{
+                                'is-nsfw-blurred': appSettings.modsManagementBlurMode === 'all' || (appSettings.modsManagementBlurMode === 'nsfw' && isNsfwGroup(group)),
+                                'can-hover-reveal': appSettings.revealBlurredImagesOnHover,
+                            }"
                             :style="{ backgroundImage: `url(${getSubgroupPreviewUrl(group)})` }"
                         ></div>
                     </transition>
@@ -5269,6 +5281,17 @@ const {
 .subgroup-card.is-disabled .subgroup-bg-preview {
     opacity: 0.80;
     filter: none;
+}
+
+.subgroup-card .subgroup-bg-preview.is-nsfw-blurred,
+.subgroup-card:hover .subgroup-bg-preview.is-nsfw-blurred {
+    filter: blur(18px) brightness(0.82) saturate(0.75);
+    transform: scale(1.16);
+}
+
+.subgroup-card:hover .subgroup-bg-preview.is-nsfw-blurred.can-hover-reveal {
+    filter: brightness(1.12) saturate(1.12) contrast(1.04);
+    transform: scale(1.04);
 }
 
 .subgroup-bg-slide-enter-active,
