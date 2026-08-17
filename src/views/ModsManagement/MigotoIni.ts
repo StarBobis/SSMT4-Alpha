@@ -170,6 +170,40 @@ const KNOWN_KEY_TYPES = new Set(['default', 'hold', 'toggle', 'cycle'])
 const CYCLE_ONLY_PROPERTIES = new Set(['wrap', 'smart'])
 const HOLD_ONLY_PROPERTIES = new Set(['delay', 'release_delay'])
 
+const MIGOTO_VKEY_NAMES = new Set(`LBUTTON RBUTTON CANCEL MBUTTON XBUTTON1 XBUTTON2 BACK BACKSPACE BACK_SPACE TAB CLEAR RETURN ENTER SHIFT CONTROL CTRL MENU ALT PAUSE CAPITAL CAPS CAPSLOCK CAPS_LOCK KANA HANGUEL HANGUL JUNJA FINAL HANJA KANJI ESCAPE CONVERT NONCONVERT ACCEPT MODECHANGE SPACE PRIOR PGUP PAGEUP PAGE_UP NEXT PGDN PAGEDOWN PAGE_DOWN END HOME LEFT UP RIGHT DOWN SELECT PRINT EXECUTE SNAPSHOT PRSCR PRINTSCREEN PRINT_SCREEN INSERT DELETE HELP LWIN LEFT_WIN LEFT_WINDOWS RWIN RIGHT_WIN RIGHT_WINDOWS APPS SLEEP MULTIPLY ADD SEPARATOR SUBTRACT DECIMAL DIVIDE NUMLOCK SCROLL LSHIFT LEFT_SHIFT RSHIFT RIGHT_SHIFT LCONTROL LEFT_CONTROL LCTRL LEFT_CTRL RCONTROL RIGHT_CONTROL RCTRL RIGHT_CTRL LMENU LEFT_MENU LALT LEFT_ALT RMENU RIGHT_MENU RALT RIGHT_ALT BROWSER_BACK BROWSER_FORWARD BROWSER_REFRESH BROWSER_STOP BROWSER_SEARCH BROWSER_FAVORITES BROWSER_HOME VOLUME_MUTE VOLUME_DOWN VOLUME_UP MEDIA_NEXT_TRACK MEDIA_PREV_TRACK MEDIA_STOP MEDIA_PLAY_PAUSE LAUNCH_MAIL LAUNCH_MEDIA_SELECT LAUNCH_APP1 LAUNCH_APP2 OEM_1 COLON SEMICOLON SEMI_COLON OEM_PLUS PLUS EQUALS OEM_COMMA COMMA OEM_MINUS MINUS UNDERSCORE OEM_PERIOD PERIOD OEM_2 SLASH FORWARD_SLASH QUESTION QUESTION_MARK OEM_3 TILDE GRAVE OEM_4 OEM_5 BACKSLASH BACK_SLASH PIPE VERTICAL_BAR OEM_6 OEM_7 QUOTE DOUBLE_QUOTE OEM_8 OEM_102 PROCESSKEY ATTN CRSEL EXSEL EREOF PLAY ZOOM NONAME PA1 OEM_CLEAR`.split(' '))
+for (let index = 0; index <= 9; index += 1) MIGOTO_VKEY_NAMES.add(`NUMPAD${index}`)
+for (let index = 1; index <= 24; index += 1) MIGOTO_VKEY_NAMES.add(`F${index}`)
+const MIGOTO_SYMBOL_KEYS = new Set([';', ':', '=', ',', '<', '_', '.', '>', '/', '?', '`', '~', '[', '{', '\\', '|', ']', '}', "'", '"', '*', '-', '+'])
+const MIGOTO_LEGACY_SINGLE_KEYS = new Set(['NUM 1', 'NUM 2', 'NUM 3', 'NUM 4', 'NUM 5', 'NUM 6', 'NUM 7', 'NUM 8', 'NUM 9', 'NUM /', 'PRNT SCRN'])
+const MIGOTO_XINPUT_BUTTONS = new Set(['DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', 'START', 'BACK', 'LEFT_THUMB', 'RIGHT_THUMB', 'LEFT_SHOULDER', 'RIGHT_SHOULDER', 'A', 'B', 'X', 'Y', 'GUIDE'])
+
+const isMigotoVKey = (rawToken: string): boolean => {
+  let token = rawToken.trim().toUpperCase()
+  if (token.startsWith('NO_')) token = token.slice(3)
+  if (/^[A-Z0-9]$/.test(token) || /^0X[0-9A-F]+$/.test(token)) return true
+  if (token.startsWith('VK_')) token = token.slice(3)
+  return MIGOTO_VKEY_NAMES.has(token) || MIGOTO_SYMBOL_KEYS.has(token)
+}
+
+const isMigotoXInputKey = (rawValue: string): boolean => {
+  let value = rawValue.trim().toUpperCase()
+  if (value.startsWith('NO_')) value = value.slice(3)
+  const match = value.match(/^XB([1-4])?_(.+)$/)
+  if (!match) return false
+  if (MIGOTO_XINPUT_BUTTONS.has(match[2])) return true
+  const trigger = match[2].match(/^(LEFT_TRIGGER|RIGHT_TRIGGER)(?:\s*>\s*(\d+))?$/)
+  return !!trigger && (trigger[2] === undefined || Number(trigger[2]) <= 255)
+}
+
+export const validateMigotoKeyBinding = (rawValue: string): string | null => {
+  const value = rawValue.trim()
+  if (!value) return 'Key binding cannot be empty'
+  if (MIGOTO_LEGACY_SINGLE_KEYS.has(value.toUpperCase()) || isMigotoVKey(value) || isMigotoXInputKey(value)) return null
+  const tokens = value.split(/ +/).filter(Boolean)
+  if (tokens.length && tokens.every((token) => token.toLowerCase() === 'no_modifiers' || isMigotoVKey(token) || isMigotoXInputKey(token))) return null
+  return `Invalid 3Dmigoto key binding: ${value}`
+}
+
 const joinPath = (...parts: string[]) => parts
   .map((part, index) => {
     const normalized = String(part || '').replace(/\\/g, '/')
@@ -1521,6 +1555,10 @@ const validateModKeyItem = (item: ModKeyInfo) => {
   const keys = item.keys.map((value) => value.trim()).filter(Boolean)
   if (keys.length === 0) {
     throw new Error(`Section [${item.sectionName}] must contain at least one Key entry`)
+  }
+  for (const key of [...keys, ...item.backs.map((value) => value.trim()).filter(Boolean)]) {
+    const error = validateMigotoKeyBinding(key)
+    if (error) throw new Error(`${error} in [${item.sectionName}]`)
   }
 
   const keyTypeLower = item.keyType.trim().toLowerCase()

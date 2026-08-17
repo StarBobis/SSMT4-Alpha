@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ModKeyInfo } from './ModsManagement.types';
+import { validateMigotoKeyBinding } from './MigotoIni';
 
 const { t } = useI18n();
 
-defineProps<{
+const props = defineProps<{
   visible: boolean;
   loading: boolean;
   saving: boolean;
@@ -20,10 +22,17 @@ const emit = defineEmits<{
   removeBindingInput: [values: string[], index: number];
   addBackBindingInput: [values: string[]];
   removeBackBindingInput: [values: string[], index: number];
-  setCycleValueText: [entry: ModKeyInfo['cycleValues'][number], value: string];
 }>();
 
-const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
+const keyBindingError = (value: string, optional = false) => {
+  if (optional && !value.trim()) return null;
+  return validateMigotoKeyBinding(value);
+};
+
+const hasInvalidBindings = computed(() => props.items.some(item =>
+  item.keys.some(value => !!keyBindingError(value))
+  || item.backs.some(value => !!keyBindingError(value, true)),
+));
 </script>
 
 <template>
@@ -40,13 +49,13 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
               <span class="ek-title">
                 {{ t('modsManagement.dialog.editModKeysTitle', { mod: modName || '-' }) }}
               </span>
-              <span class="ek-badge">EDITOR</span>
+              <span class="ek-badge">KEYS</span>
             </div>
             <div class="ek-header-actions">
               <button
                 type="button"
                 class="ek-header-btn ek-header-btn--save"
-                :disabled="saving"
+                :disabled="saving || loading || hasInvalidBindings"
                 @click="emit('save')"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -98,17 +107,6 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
                       <div class="ek-card-title">{{ getModKeySectionTitle(item) }}</div>
                       <div class="ek-card-meta">{{ item.sourceIni }}</div>
                     </div>
-                    <div class="ek-card-type">
-                      <span class="ek-label">{{ t('modsManagement.fields.modKeyType') }}</span>
-                      <div class="ek-select-wrap">
-                        <select v-model="item.keyType" class="ek-select">
-                          <option v-for="opt in typeOptions" :key="opt" :value="opt">{{ opt }}</option>
-                        </select>
-                        <svg class="ek-select-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <polyline points="6 9 12 15 18 9"/>
-                        </svg>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
@@ -137,7 +135,12 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
                               v-model="item.keys[keyIndex]"
                               :placeholder="t('modsManagement.placeholders.modKeyBinding')"
                               class="ek-input"
+                              :class="{ 'is-invalid': !!keyBindingError(item.keys[keyIndex]) }"
+                              :aria-invalid="!!keyBindingError(item.keys[keyIndex])"
                             />
+                            <span v-if="keyBindingError(item.keys[keyIndex])" class="ek-binding-error">
+                              {{ t('modsManagement.actions.invalidModKeyBinding', { key: item.keys[keyIndex] || t('modsManagement.actions.emptyModKeyBinding') }) }}
+                            </span>
                           </div>
                           <button
                             class="ek-remove-btn"
@@ -174,7 +177,12 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
                               v-model="item.backs[backIndex]"
                               :placeholder="t('modsManagement.placeholders.modKeyBackBinding')"
                               class="ek-input"
+                              :class="{ 'is-invalid': !!keyBindingError(item.backs[backIndex], true) }"
+                              :aria-invalid="!!keyBindingError(item.backs[backIndex], true)"
                             />
+                            <span v-if="keyBindingError(item.backs[backIndex], true)" class="ek-binding-error">
+                              {{ t('modsManagement.actions.invalidModKeyBinding', { key: item.backs[backIndex] }) }}
+                            </span>
                           </div>
                           <button
                             class="ek-remove-btn"
@@ -191,91 +199,6 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
                   </div>
                 </div>
 
-                <!-- Condition -->
-                <div class="ek-card-section">
-                  <span class="ek-label">{{ t('modsManagement.fields.modKeyCondition') }}</span>
-                  <div class="ek-input-wrap">
-                    <input
-                      v-model="item.conditionSummary"
-                      :placeholder="t('modsManagement.placeholders.modKeyCondition')"
-                      class="ek-input"
-                    />
-                  </div>
-                </div>
-
-                <!-- Extra Properties -->
-                <div v-if="item.extraProperties.length" class="ek-card-section">
-                  <span class="ek-label">{{ t('modsManagement.fields.modKeyInitialValues') }}</span>
-                  <div class="ek-prop-grid">
-                    <div v-for="entry in item.extraProperties" :key="entry.id" class="ek-prop-row">
-                      <span class="ek-prop-name">{{ entry.key }}</span>
-                      <div class="ek-input-wrap">
-                        <input v-model="entry.value" class="ek-input" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Scalar Values -->
-                <div v-if="item.activeValues.length" class="ek-card-section">
-                  <span class="ek-label">{{ t('modsManagement.fields.modKeyScalarValues') }}</span>
-                  <div class="ek-prop-grid">
-                    <div v-for="entry in item.activeValues" :key="`${item.id}-${entry.name}`" class="ek-prop-row">
-                      <span class="ek-prop-name">{{ entry.name }}</span>
-                      <div class="ek-prop-inputs">
-                        <div class="ek-prop-input-group">
-                          <span class="ek-prop-meta">{{ t('modsManagement.fields.modKeyAssignedValue') }}</span>
-                          <div class="ek-input-wrap">
-                            <input v-model="entry.value" class="ek-input" />
-                          </div>
-                        </div>
-                        <div class="ek-prop-input-group">
-                          <span class="ek-prop-meta">{{ t('modsManagement.fields.modKeyConstantInitialValue') }}</span>
-                          <div class="ek-input-wrap">
-                            <input
-                              v-model="entry.constantBinding.initialValue"
-                              :placeholder="t('modsManagement.placeholders.modKeyConstantInitialValue')"
-                              class="ek-input"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Cycle Values -->
-                <div v-if="item.cycleValues.length" class="ek-card-section">
-                  <span class="ek-label">{{ t('modsManagement.fields.modKeyCycleValues') }}</span>
-                  <div class="ek-prop-grid">
-                    <div v-for="entry in item.cycleValues" :key="`${item.id}-${entry.name}`" class="ek-prop-row">
-                      <span class="ek-prop-name">{{ entry.name }}</span>
-                      <div class="ek-prop-inputs">
-                        <div class="ek-prop-input-group">
-                          <span class="ek-prop-meta">{{ t('modsManagement.fields.modKeyAssignedValue') }}</span>
-                          <div class="ek-input-wrap">
-                            <input
-                              :value="entry.values.join(', ')"
-                              @input="emit('setCycleValueText', entry, ($event.target as HTMLInputElement).value)"
-                              :placeholder="t('modsManagement.placeholders.modKeyCycleValues')"
-                              class="ek-input"
-                            />
-                          </div>
-                        </div>
-                        <div class="ek-prop-input-group">
-                          <span class="ek-prop-meta">{{ t('modsManagement.fields.modKeyConstantInitialValue') }}</span>
-                          <div class="ek-input-wrap">
-                            <input
-                              v-model="entry.constantBinding.initialValue"
-                              :placeholder="t('modsManagement.placeholders.modKeyConstantInitialValue')"
-                              class="ek-input"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </section>
             </div>
           </div>
@@ -614,7 +537,7 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
 
 /* ── Multi Row List ── */
 .ek-multi-list { display: flex; flex-direction: column; gap: 10px; }
-.ek-multi-row { display: flex; gap: 10px; align-items: center; }
+.ek-multi-row { display: flex; gap: 10px; align-items: flex-start; }
 .ek-multi-row .ek-input-wrap { flex: 1; }
 
 /* ── Input ── */
@@ -638,6 +561,17 @@ const typeOptions = ['default', 'hold', 'toggle', 'cycle'];
   box-shadow: 0 0 0 3px rgba(var(--theme-surface-tint-rgb), 0.06);
 }
 .ek-input::placeholder { color: rgba(255,255,255,0.25); }
+.ek-input.is-invalid {
+  border-color: rgba(255, 88, 88, 0.72);
+  box-shadow: 0 0 0 2px rgba(255, 70, 70, 0.08);
+}
+.ek-binding-error {
+  display: block;
+  margin: 5px 4px 0;
+  color: rgba(255, 125, 125, 0.92);
+  font-size: 11px;
+  line-height: 1.35;
+}
 
 /* ── Remove Btn ── */
 .ek-remove-btn {

@@ -623,6 +623,8 @@
       "saveModTags": "保存标签",
       "editModKeys": "编辑按键切换",
       "saveModKeys": "保存按键切换",
+      "invalidModKeyBinding": "无效的 3Dmigoto 按键：{key}",
+      "emptyModKeyBinding": "空值",
       "addKeyBinding": "添加 Key",
       "addBackBinding": "添加 Back",
       "removeBinding": "移除",

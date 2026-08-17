@@ -35,6 +35,7 @@ const emit = defineEmits<{
   'open-tag-dialog': [];
   'show-key-floater': [event: MouseEvent];
   'hide-key-floater': [];
+  'edit-keys': [];
   'prev-preview': [];
   'next-preview': [];
   'set-preview-index': [index: number];
@@ -98,8 +99,10 @@ const onModCardMouseLeave = (e: MouseEvent) => {
             type="button"
             class="mod-key-badge"
             :aria-label="t('modsManagement.ui.modKeyListTitle')"
+            :title="t('modsManagement.actions.editModKeys')"
             @mouseenter="emit('show-key-floater', $event)"
             @mouseleave="emit('hide-key-floater')"
+            @click.stop="emit('edit-keys')"
             @mousedown.stop
             @dblclick.stop
           >

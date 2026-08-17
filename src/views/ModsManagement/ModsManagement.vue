@@ -3231,7 +3231,6 @@ const {
     getModKeyItems,
     getModKeyDisplayName,
     getModKeySectionTitle,
-    setCycleValueText,
     addBindingInput,
     removeBindingInput,
     loadModKeyList,
@@ -3735,6 +3734,7 @@ const {
                     @open-tag-dialog="openModTagDialog(mod)"
                     @show-key-floater="showKeyFloater(mod, $event)"
                     @hide-key-floater="hideKeyFloater"
+                    @edit-keys="openModKeyEditor(mod)"
                     @prev-preview="prevPreview(mod)"
                     @next-preview="nextPreview(mod)"
                     @set-preview-index="(idx: number) => setPreviewIndex(mod, idx)"
@@ -3943,7 +3943,6 @@ const {
       @remove-binding-input="removeBindingInput"
       @add-back-binding-input="(values: string[]) => addBindingInput(values)"
       @remove-back-binding-input="(values: string[], index: number) => removeBindingInput(values, index)"
-      @set-cycle-value-text="setCycleValueText"
     />
 
     <!-- Key Floater (floating card next to K badge) -->
@@ -4095,6 +4094,7 @@ const {
       :groups="groups"
       :is-nsfw="contextMenu.target ? getTagsForMod(contextMenu.target).some(isNsfwTag) : false"
       :current-group="selectedGroup"
+      :has-mod-keys="contextMenu.target ? getModKeyItems(contextMenu.target.id).length > 0 : false"
       @close="closeContextMenu"
       @open-mod-folder="(path: string) => { closeContextMenu(); openModFolder(path); }"
       @move-mod-to-group="(mod: ModInfo, groupId: string) => { closeContextMenu(); moveModToGroup(mod, groupId); }"
@@ -4102,6 +4102,7 @@ const {
       @rename-mod="(mod: ModInfo) => { closeContextMenu(); renameMod(mod); }"
       @export-mod-archive="(mod: ModInfo) => { closeContextMenu(); openExportArchiveDialog(mod); }"
       @open-mod-tag-dialog="(mod: ModInfo) => { closeContextMenu(); openModTagDialogWrapped(mod); }"
+      @edit-mod-keys="(mod: ModInfo) => { closeContextMenu(); openModKeyEditor(mod); }"
       @toggle-nsfw="(mod: ModInfo) => { closeContextMenu(); void toggleModNsfwMarked(mod); }"
       @add-preview-images="(mod: ModInfo) => { closeContextMenu(); addPreviewImages(mod); }"
       @paste-clipboard-preview-image="(mod: ModInfo) => { closeContextMenu(); pasteClipboardPreviewImage(mod); }"

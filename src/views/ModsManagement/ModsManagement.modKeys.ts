@@ -130,13 +130,6 @@ export const useModsManagementModKeys = (options: UseModsManagementModKeysOption
         return getModKeyDisplayName(item);
     };
 
-    const setCycleValueText = (entry: ModKeyInfo['cycleValues'][number], value: string) => {
-        entry.values = value
-            .split(',')
-            .map((segment) => segment.trim())
-            .filter(Boolean);
-    };
-
     const addBindingInput = (values: string[]) => {
         values.push('');
     };
@@ -237,7 +230,6 @@ export const useModsManagementModKeys = (options: UseModsManagementModKeysOption
         getModKeyItems,
         getModKeyDisplayName,
         getModKeySectionTitle,
-        setCycleValueText,
         addBindingInput,
         removeBindingInput,
         loadModKeyList,

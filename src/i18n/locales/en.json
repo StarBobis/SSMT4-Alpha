@@ -623,6 +623,8 @@
       "saveModTags": "Save Tags",
       "editModKeys": "Edit Key Switches",
       "saveModKeys": "Save Key Switches",
+      "invalidModKeyBinding": "Invalid 3Dmigoto key binding: {key}",
+      "emptyModKeyBinding": "empty value",
       "addKeyBinding": "Add Key",
       "addBackBinding": "Add Back",
       "removeBinding": "Remove",
