@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
 import { exists, readDir, readFile, readTextFile } from '@tauri-apps/plugin-fs';
@@ -94,6 +94,25 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const MAX_PREVIEW_INDEX_COUNT = 600_000;
+const PREVIEW_GEOMETRY_YIELD_TRIANGLES = 4096;
+const yieldPreviewGeometryWork = (): Promise<void> => new Promise(resolve => globalThis.setTimeout(resolve, 0));
+const SUBMESH_TASK_CONCURRENCY = 7;
+const mapWithConcurrency = async <T, R>(
+	items: readonly T[],
+	mapper: (item: T, index: number) => Promise<R>,
+	shouldContinue: () => boolean = () => true
+): Promise<R[]> => {
+	const results = new Array<R>(items.length);
+	let nextIndex = 0;
+	const workers = Array.from({ length: Math.min(SUBMESH_TASK_CONCURRENCY, items.length) }, async () => {
+		while (nextIndex < items.length && shouldContinue()) {
+			const index = nextIndex++;
+			results[index] = await mapper(items[index]!, index);
+		}
+	});
+	await Promise.all(workers);
+	return results;
+};
 const DDS_3D_TEXTURE_MAX_DIMENSION = 1024;
 const PREVIEW_LIGHTING_MODE_STORAGE_KEY = 'ssmt4:post-processing-preview:lighting-mode';
 // Preview-space coordinates are metres.  Values beyond this threshold usually
@@ -412,7 +431,7 @@ const loadDataTypes = async () => {
 
 		const entries = await readDir(rootPath);
 		const candidates = entries.filter(entry => entry.isDirectory && entry.name?.startsWith('TYPE_') && entry.name);
-		const loadedItems = await Promise.all(candidates.map(entry => loadDataTypeItem(rootPath, entry.name!)));
+		const loadedItems = await mapWithConcurrency(candidates, entry => loadDataTypeItem(rootPath, entry.name!));
 
 		if (token !== loadToken) {
 			return;
@@ -1311,11 +1330,11 @@ const applyFullSizeZoomTextures = async () => {
 		diffuse: source.material.uniforms.uDiffuseMap.value as THREE.Texture | null,
 		normal: source.material.uniforms.uNormalMap.value as THREE.Texture | null,
 	}));
-	const loaded = await Promise.all(previewMaterialTextureSources.map(async source => ({
+	const loaded = await mapWithConcurrency(previewMaterialTextureSources, async source => ({
 		source,
 		diffuse: await loadDdsTexture(source.diffuseDdsPath, true, undefined),
 		normal: await loadDdsTexture(source.normalDdsPath, false, undefined),
-	})));
+	}));
 	if (!previewZoomOpen.value || activeToken !== zoomTextureToken) {
 		for (const item of loaded) {
 			item.diffuse?.dispose();
@@ -1420,6 +1439,10 @@ const createPreviewGeometry = async (
 	const shouldReverseWinding = REVERSED_WINDING_GAME_PRESETS.has(normalizeSemantic(dataType.json.GamePreset));
 
 	for (let indexOffset = 0; indexOffset < maxIndexCount; indexOffset += 3) {
+		if (indexOffset > 0 && indexOffset % (PREVIEW_GEOMETRY_YIELD_TRIANGLES * 3) === 0) {
+			await yieldPreviewGeometryWork();
+			if (buildToken !== previewBuildToken) return undefined;
+		}
 		const triangleSourceIndices = sourceIndices
 			.slice(indexOffset, indexOffset + 3)
 			.map(index => index - vertexSlice.indexOffset);
@@ -1554,6 +1577,10 @@ const createPermissivePreviewGeometry = async (
 	const shouldReverseWinding = REVERSED_WINDING_GAME_PRESETS.has(normalizeSemantic(dataType.json.GamePreset));
 
 	for (let indexOffset = 0; indexOffset < maxIndexCount; indexOffset += 3) {
+		if (indexOffset > 0 && indexOffset % (PREVIEW_GEOMETRY_YIELD_TRIANGLES * 3) === 0) {
+			await yieldPreviewGeometryWork();
+			if (buildToken !== previewBuildToken) return undefined;
+		}
 		const triangle = sourceIndices.slice(indexOffset, indexOffset + 3).map(rawIndex => (
 			rawIndex >= 0 && rawIndex < capacity
 				? rawIndex
@@ -1662,7 +1689,7 @@ const buildPreviewGeometry = async (buildToken: number) => {
 	const otherTargets = visibleSubMeshTargets.value.filter(target => (
 		target.workspacePath !== props.workspacePath || target.subMeshName !== props.subMeshName
 	));
-	const passiveSources = await Promise.all(otherTargets.map(async target => {
+	const passiveSources = await mapWithConcurrency(otherTargets, async target => {
 		const source = await loadDefaultDataTypeForTarget(target);
 		if (!source || buildToken !== previewBuildToken) {
 			return undefined;
@@ -1676,15 +1703,15 @@ const buildPreviewGeometry = async (buildToken: number) => {
 			const geometry = await createPermissivePreviewGeometry(source.dataType, buildToken).catch(() => undefined);
 			return geometry ? { target, geometry } : undefined;
 		}
-	}));
-	const passiveRenderables = await Promise.all(passiveSources.map(async source => {
+	}, () => buildToken === previewBuildToken);
+	const passiveRenderables = await mapWithConcurrency(passiveSources, async source => {
 		if (!source) return undefined;
 		const [diffuse, normal] = await Promise.all([
 			loadPreviewTexture(source.target.diffuseDdsPath || '', source.target.diffuseUrl || '', true),
 			loadPreviewTexture(source.target.normalDdsPath || '', source.target.normalUrl || '', false),
 		]);
 		return { source, diffuse, normal };
-	}));
+	}, () => buildToken === previewBuildToken);
 	if (buildToken !== previewBuildToken) {
 		activeGeometry?.geometry.dispose();
 		for (const renderable of passiveRenderables) {
@@ -1975,7 +2002,20 @@ onBeforeUnmount(() => {
 // This view is route-cached. Explicitly close the teleported overlay whenever
 // the page is deactivated so it cannot survive a page switch.
 onDeactivated(() => {
+	loadToken += 1;
+	previewBuildToken += 1;
+	textureLoadToken += 1;
 	closeZoomPreview();
+	disposeRenderer();
+});
+
+onActivated(async () => {
+	if (renderer) return;
+	initializeRenderer();
+	await nextTick();
+	void loadDataTypes();
+	schedulePreviewRebuild();
+	void updateMaterialTextures();
 });
 </script>
 

@@ -2855,6 +2855,8 @@ const handleCreateWorkspace = async () => {
   await createWorkspaceDirectory(targetWorkspaceName, { switchAfterCreate: true });
 };
 
+let hasSeenInitialActivation = false;
+
 onMounted(() => {
   void (async () => {
     try {
@@ -2918,6 +2920,12 @@ onBeforeUnmount(() => {
 
 // If KeepAlive is enabled, onActivated will also fire.
 onActivated(() => {
+    // KeepAlive activates once immediately after mount. onMounted already owns
+    // that initialization, so do not scan every workspace twice.
+    if (!hasSeenInitialActivation) {
+      hasSeenInitialActivation = true;
+      return;
+    }
     if (frameAnalysisOptions.value.length === 0) {
       refreshFrameAnalysisFolders();
     }

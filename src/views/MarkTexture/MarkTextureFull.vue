@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, readFile, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
@@ -101,6 +101,7 @@ type SubMeshMarkedTextureSummary = {
 	status: 'applied' | 'pending';
 	textureHash: string;
 	ddsPath: string;
+	previewFolderPath?: string;
 };
 
 type DecodedDdsPreview = { width: number; height: number; pixels: Uint8Array };
@@ -158,6 +159,25 @@ const appSettings = AppStateManager.appSettings;
 const { t } = useI18n();
 
 const logPrefix = '[MarkTextureFull]';
+const SUBMESH_TASK_CONCURRENCY = 7;
+
+const mapWithConcurrency = async <T, R>(
+	items: readonly T[],
+	limit: number,
+	mapper: (item: T, index: number) => Promise<R>,
+	shouldContinue: () => boolean = () => true
+): Promise<R[]> => {
+	const results = new Array<R>(items.length);
+	let nextIndex = 0;
+	const workers = Array.from({ length: Math.min(Math.max(1, limit), items.length) }, async () => {
+		while (nextIndex < items.length && shouldContinue()) {
+			const index = nextIndex++;
+			results[index] = await mapper(items[index]!, index);
+		}
+	});
+	await Promise.all(workers);
+	return results;
+};
 
 const workspaceSources = ref<WorkspaceMarkTextureSource[]>([]);
 const subMeshOptions = ref<string[]>([]);
@@ -205,9 +225,12 @@ const pendingDrawerDrawCallSelection = ref('');
 let textureMemorySaveTimer: ReturnType<typeof setTimeout> | undefined;
 let selectionMemorySaveTimer: ReturnType<typeof setTimeout> | undefined;
 let workspaceUiConfigSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let workspaceReloadTimer: ReturnType<typeof setTimeout> | undefined;
 let rgbaPreviewResizeCleanup: (() => void) | undefined;
 let channelPreviewRenderToken = 0;
 let textureListLoadToken = 0;
+let subMeshOptionsLoadToken = 0;
+let markedTextureSummaryLoadToken = 0;
 let markedTexturePreviewCacheSeed = 0;
 let lastValidSubMeshSelection = '';
 let lastValidDrawCallSelection = '';
@@ -760,8 +783,10 @@ const loadWorkspaceMarkTextureSource = async (
 	try {
 		// Repair mappings produced by older builds from the extracted folders.
 		// This is intentionally independent of Blender's Import.json selections.
-		await invoke('regenerate_draw_ib_component_json', { lodWorkspacePath: workspacePath })
-			.catch(error => console.warn(`${logPrefix} failed to rebuild component map`, error));
+		if (!(await exists(drawIBComponentJsonPath))) {
+			await invoke('regenerate_draw_ib_component_json', { lodWorkspacePath: workspacePath })
+				.catch(error => console.warn(`${logPrefix} failed to rebuild component map`, error));
+		}
 
 		const [componentContent, trianglelistContent, drawIBConfigEntries] = await Promise.all([
 			readTextFile(componentJsonPath),
@@ -826,29 +851,10 @@ const loadWorkspaceMarkTextureSource = async (
 
 		const subMeshDrawCallMap: Record<string, string[]> = {};
 		if (Object.keys(drawIBComponentMap).length > 0) {
-			const persistedDrawCallLists = await Promise.all(
-				Object.keys(drawIBComponentMap).map(async subMeshName => [
-					subMeshName,
-					await readPersistedSubMeshDrawCallIndexes({ workspacePath, subMesh: subMeshName }),
-				] as const)
-			);
-			for (const [subMeshName, persistedDrawCalls] of persistedDrawCallLists) {
-				// New extraction results persist the component's own draw-call list
-				// directly beside its geometry.  Prefer it over the legacy aggregate
-				// file, which can become stale after component selection changes.
-				const directLegacyDrawCalls = rawSubMeshDrawCallMap[subMeshName] ?? [];
-				const drawCallsMatchedByPersistedMarks = persistedDrawCalls.length === 0 && directLegacyDrawCalls.length === 0
-					? await readDrawCallIndexesMatchedByPersistedSubMeshMarks({
-						workspacePath,
-						subMesh: subMeshName,
-						trianglelistDedupedDict: parsedTrianglelist,
-					})
-					: [];
-				subMeshDrawCallMap[subMeshName] = persistedDrawCalls.length > 0
-					? persistedDrawCalls
-					: directLegacyDrawCalls.length > 0
-						? directLegacyDrawCalls
-						: drawCallsMatchedByPersistedMarks;
+			for (const subMeshName of Object.keys(drawIBComponentMap)) {
+				// Publish the complete Submesh structure immediately. Per-Submesh
+				// persisted draw calls are hydrated through the bounded background queue.
+				subMeshDrawCallMap[subMeshName] = rawSubMeshDrawCallMap[subMeshName] ?? [];
 			}
 		} else {
 			Object.assign(subMeshDrawCallMap, rawSubMeshDrawCallMap);
@@ -946,9 +952,15 @@ const loadPresetMarkOptions = async () => {
 };
 
 const loadSubMeshOptions = async () => {
+	const loadToken = ++subMeshOptionsLoadToken;
+	// Invalidate child work immediately. Serialized selection ids can be equal
+	// across games, in which case Vue watchers would otherwise keep old data.
+	markedTextureSummaryLoadToken += 1;
+	textureListLoadToken += 1;
 	console.log(`${logPrefix} loadSubMeshOptions start`);
 	try {
 		const workspacePath = await getWorkspacePath();
+		if (loadToken !== subMeshOptionsLoadToken) return;
 		if (!workspacePath) {
 			console.warn(`${logPrefix} workspacePath unavailable, clear SubMesh options`);
 			workspaceSources.value = [];
@@ -963,6 +975,7 @@ const loadSubMeshOptions = async () => {
 
 		const tabsIndexPath = await join(workspacePath, 'Config', 'WorkPageTabs.json');
 		const tabsIndexContent = await readTextFile(tabsIndexPath);
+		if (loadToken !== subMeshOptionsLoadToken) return;
 		const tabsIndex = JSON.parse(tabsIndexContent) as WorkPageTabsIndex;
 		const tabs = Array.isArray(tabsIndex.tabs)
 			? tabsIndex.tabs
@@ -972,15 +985,18 @@ const loadSubMeshOptions = async () => {
 			: [];
 
 		const sources = (
-			await Promise.all(
-				tabs.map(async tab => {
+			await mapWithConcurrency(
+				tabs, SUBMESH_TASK_CONCURRENCY, async tab => {
 					const workspaceLodPath = await resolveWorkspaceLodPathForTab(workspacePath, tab.name);
 					return loadWorkspaceMarkTextureSource(workspaceLodPath, tab);
-				})
+				},
+				() => loadToken === subMeshOptionsLoadToken
 			)
 		).filter((item): item is WorkspaceMarkTextureSource => !!item);
+		if (loadToken !== subMeshOptionsLoadToken) return;
 
 		workspaceSources.value = sources;
+		void hydrateWorkspaceSourceDrawCalls(sources, loadToken);
 		const nextSubMeshOptions = sources
 			.flatMap(source => {
 				return Object.keys(source.subMeshDrawCallMap)
@@ -1047,9 +1063,18 @@ const loadSubMeshOptions = async () => {
 		if (subMeshOptions.value.length === 0) {
 			ElMessage.warning(t('markTexture.messages.noSubMeshConfigEntries'));
 		}
+		// Let Vue paint Tier/Submesh controls before texture discovery, mark
+		// previews and 3D geometry begin consuming the background queues.
+		await nextTick();
+		if (loadToken !== subMeshOptionsLoadToken) return;
 
-		await refreshSubMeshMarkedTextureSummary();
+		// Reload explicitly even when the new game happens to use the same tab,
+		// submesh and draw-call ids as the previous game.
+		await loadTextureListByDrawCall(selectedDrawCall.value);
+		if (loadToken !== subMeshOptionsLoadToken) return;
+		await refreshSubMeshMarkedTextureSummary(undefined, loadToken);
 	} catch (error) {
+		if (loadToken !== subMeshOptionsLoadToken) return;
 		workspaceSources.value = [];
 		subMeshOptions.value = [];
 		drawCallOptions.value = [];
@@ -1100,6 +1125,39 @@ const buildTexturePreviewUrl = async (
 ): Promise<string> => {
 	const filePath = await findTexturePreviewPath(workspacePath, fileName);
 	return filePath ? renderDdsThumbnail(filePath) : '';
+};
+
+const hydrateWorkspaceSourceDrawCalls = async (
+	sources: WorkspaceMarkTextureSource[],
+	ownerLoadToken: number
+) => {
+	const tasks = sources.flatMap(source => Object.keys(source.subMeshDrawCallMap).map(subMeshName => ({ source, subMeshName })));
+	await mapWithConcurrency(
+		tasks,
+		SUBMESH_TASK_CONCURRENCY,
+		async ({ source, subMeshName }) => {
+			const persisted = await readPersistedSubMeshDrawCallIndexes({
+				workspacePath: source.workspacePath,
+				subMesh: subMeshName,
+			});
+			if (ownerLoadToken !== subMeshOptionsLoadToken) return;
+			const direct = source.subMeshDrawCallMap[subMeshName] ?? [];
+			const matched = persisted.length === 0 && direct.length === 0
+				? await readDrawCallIndexesMatchedByPersistedSubMeshMarks({
+					workspacePath: source.workspacePath,
+					subMesh: subMeshName,
+					trianglelistDedupedDict: source.trianglelistDedupedData,
+				})
+				: [];
+			if (ownerLoadToken !== subMeshOptionsLoadToken) return;
+			source.subMeshDrawCallMap[subMeshName] = persisted.length > 0 ? persisted : direct.length > 0 ? direct : matched;
+			workspaceSources.value = [...workspaceSources.value];
+			if (parseSubMeshSelection(selectedSubMesh.value)?.subMeshName === subMeshName) {
+				syncDrawCallOptionsBySubMesh();
+			}
+		},
+		() => ownerLoadToken === subMeshOptionsLoadToken
+	);
 };
 
 const renderDdsThumbnail = async (filePath: string): Promise<string> => {
@@ -1315,8 +1373,8 @@ const buildMarkedTextureSummaryForSubMesh = async (
 		subMesh: subMeshName,
 	});
 
-	return Promise.all(
-		appliedMarks.map(async mark => {
+	return mapWithConcurrency(
+		appliedMarks, SUBMESH_TASK_CONCURRENCY, async mark => {
 			const ddsPath = await join(source.workspacePath, 'DedupedTextures', mark.markDedupedFileName);
 			const id = [
 				source.tabId,
@@ -1327,22 +1385,6 @@ const buildMarkedTextureSummaryForSubMesh = async (
 				mark.markHash,
 				mark.markSlot,
 			].join('-');
-			const sourcePreview = await getAppliedTextureDedupedPreviewUrl(
-				source,
-				subMeshName,
-				mark.markDedupedFileName,
-				mark.markHash,
-				mark.markSlot,
-				cacheBustToken
-			);
-			const copiedPreview = sourcePreview
-				? ''
-				: await getAppliedTexturePreviewUrl(
-					mark.folderPath,
-					mark.markFileName,
-					cacheBustToken
-				);
-
 			return {
 				id,
 				drawCallSelectionValue: resolveDrawCallSelectionForAppliedMark(
@@ -1352,7 +1394,7 @@ const buildMarkedTextureSummaryForSubMesh = async (
 					mark.markHash,
 					mark.markSlot
 				),
-				preview: sourcePreview || copiedPreview,
+				preview: '',
 				previewKey: `${id}-${cacheBustToken}`,
 				textureName: mark.markFileName,
 				dedupedFileName: mark.markDedupedFileName,
@@ -1362,9 +1404,46 @@ const buildMarkedTextureSummaryForSubMesh = async (
 				status: 'applied',
 				textureHash: mark.markHash,
 				ddsPath,
+				previewFolderPath: mark.folderPath,
 			};
-		})
+		}
 	);
+};
+
+const populateAppliedMarkedTexturePreviews = async (
+	targetValues: string[],
+	summaryLoadToken: number,
+	ownerLoadToken: number,
+	cacheBustToken: number,
+	sourceSnapshot: WorkspaceMarkTextureSource[]
+) => {
+	const tasks = targetValues.flatMap(value => {
+		const parsed = parseSubMeshSelection(value);
+		const source = parsed ? sourceSnapshot.find(item => item.tabId === parsed.tabId) : undefined;
+		return !parsed || !source ? [] : (subMeshMarkedTextureMap.value[value] ?? [])
+			.filter(summary => summary.status === 'applied')
+			.map(summary => ({ value, parsed, source, summary }));
+	});
+	await mapWithConcurrency(tasks, SUBMESH_TASK_CONCURRENCY, async ({ value, parsed, source, summary }) => {
+		const sourcePreview = await getAppliedTextureDedupedPreviewUrl(
+			source,
+			parsed.subMeshName,
+			summary.dedupedFileName,
+			summary.textureHash,
+			summary.slot,
+			cacheBustToken
+		);
+		const copiedPreview = sourcePreview ? '' : await getAppliedTexturePreviewUrl(
+			summary.previewFolderPath || '',
+			summary.textureName,
+			cacheBustToken
+		);
+		if (summaryLoadToken !== markedTextureSummaryLoadToken || ownerLoadToken !== subMeshOptionsLoadToken) return;
+		const liveSummary = (subMeshMarkedTextureMap.value[value] ?? []).find(item => item.id === summary.id);
+		if (!liveSummary) return;
+		liveSummary.preview = sourcePreview || copiedPreview;
+		liveSummary.previewKey = `${summary.id}-${cacheBustToken}`;
+	}, () => summaryLoadToken === markedTextureSummaryLoadToken && ownerLoadToken === subMeshOptionsLoadToken);
 };
 
 const buildPendingTextureSummaryForCurrentSubMesh = (): SubMeshMarkedTextureSummary[] => {
@@ -1452,18 +1531,23 @@ const syncPendingTextureSummaryForCurrentSubMesh = () => {
 	};
 };
 
-const refreshSubMeshMarkedTextureSummary = async (selectionValue?: string) => {
+const refreshSubMeshMarkedTextureSummary = async (
+	selectionValue?: string,
+	ownerLoadToken = subMeshOptionsLoadToken
+) => {
+	const summaryLoadToken = ++markedTextureSummaryLoadToken;
+	const sourceSnapshot = workspaceSources.value;
 	const nextMap = selectionValue
 		? { ...subMeshMarkedTextureMap.value }
 		: {};
 	const targetValues = selectionValue ? [selectionValue] : subMeshOptions.value;
 	const cacheBustToken = nextMarkedTexturePreviewCacheBustToken();
 
-	await Promise.all(
-		targetValues.map(async value => {
+	await mapWithConcurrency(
+		targetValues, SUBMESH_TASK_CONCURRENCY, async value => {
 			const parsed = parseSubMeshSelection(value);
 			const source = parsed
-				? workspaceSources.value.find(item => item.tabId === parsed.tabId)
+				? sourceSnapshot.find(item => item.tabId === parsed.tabId)
 				: undefined;
 
 			if (!parsed || !source) {
@@ -1476,11 +1560,26 @@ const refreshSubMeshMarkedTextureSummary = async (selectionValue?: string) => {
 				parsed.subMeshName,
 				cacheBustToken
 			);
-		})
+			if (summaryLoadToken === markedTextureSummaryLoadToken && ownerLoadToken === subMeshOptionsLoadToken) {
+				subMeshMarkedTextureMap.value = { ...nextMap };
+			}
+		},
+		() => summaryLoadToken === markedTextureSummaryLoadToken && ownerLoadToken === subMeshOptionsLoadToken
 	);
+	if (
+		summaryLoadToken !== markedTextureSummaryLoadToken ||
+		ownerLoadToken !== subMeshOptionsLoadToken
+	) return;
 
 	subMeshMarkedTextureMap.value = nextMap;
 	syncPendingTextureSummaryForCurrentSubMesh();
+	void populateAppliedMarkedTexturePreviews(
+		targetValues,
+		summaryLoadToken,
+		ownerLoadToken,
+		cacheBustToken,
+		sourceSnapshot
+	);
 };
 
 const invalidateSubMeshMarkedTextureSummaryCache = (selectionValue: string) => {
@@ -1981,13 +2080,26 @@ const scheduleSaveTextureMemory = () => {
 	if (isApplyingTextureMemory.value) {
 		return;
 	}
+	if (textureList.value.length === 0) return;
+	const gameName = currentGameName.value;
+	const psHash = textureList.value[0]?.ps_hash || '';
+	const items = textureList.value.map(item => ({
+		slot: item.slot,
+		markName: item.markName,
+		markStyle: item.markStyle,
+		render: item.render,
+		suffix: item.suffix,
+	}));
+	if (!psHash) return;
 
 	if (textureMemorySaveTimer) {
 		clearTimeout(textureMemorySaveTimer);
 	}
 
 	textureMemorySaveTimer = setTimeout(() => {
-		void saveTextureMemoryForCurrentList();
+		// Keep the target and payload from the edit that scheduled this save.
+		// Switching games must not redirect it into the new game's configuration.
+		void saveTextureMemoryByPSHash(gameName, psHash, items);
 	}, 250);
 };
 
@@ -2024,8 +2136,8 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 		}
 
 		const matchedEntries = getVisibleTextureEntriesForDrawCall(source, drawCall);
-		const nextTextureList: TextureItem[] = await Promise.all(
-			matchedEntries.map(async ([textureFileName, textureProperty], index) => {
+		const nextTextureList: TextureItem[] = await mapWithConcurrency(
+			matchedEntries, SUBMESH_TASK_CONCURRENCY, async ([textureFileName, textureProperty], index) => {
 				const defaultMarkStyle: MarkStyle =
 					appSettings.textureMarkStylePreference === 'Slot' ? 'Slot' : 'Hash';
 				const faLogDedupedFileName = (textureProperty?.FALogDedupedFileName || '').trim();
@@ -2062,7 +2174,7 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 					markName: '',
 					markStyle: defaultMarkStyle,
 				};
-			})
+			}
 		);
 
 		if (
@@ -2692,7 +2804,29 @@ onMounted(() => {
 	ensureRgbaPreviewCardSize();
 	window.addEventListener('resize', syncRgbaPreviewCardSizeToViewport);
 });
+let hasSeenInitialActivation = false;
+const cancelMarkTextureBackgroundWork = () => {
+	if (workspaceReloadTimer) {
+		clearTimeout(workspaceReloadTimer);
+		workspaceReloadTimer = undefined;
+	}
+	subMeshOptionsLoadToken += 1;
+	markedTextureSummaryLoadToken += 1;
+	textureListLoadToken += 1;
+	channelPreviewRenderToken += 1;
+};
+
+onActivated(() => {
+	if (!hasSeenInitialActivation) {
+		hasSeenInitialActivation = true;
+		return;
+	}
+	void loadSubMeshOptions();
+});
+
+onDeactivated(cancelMarkTextureBackgroundWork);
 onBeforeUnmount(() => {
+	cancelMarkTextureBackgroundWork();
 	stopRgbaPreviewResize();
 	stopChannelPreviewDrag();
 	channelPreviewCombinationCache.clear();
@@ -2715,12 +2849,21 @@ onBeforeUnmount(() => {
 watch(
 	() => [appSettings.DBMTWorkFolder, appSettings.CurrentGameName, appSettings.CurrentWorkSpace],
 	() => {
+		// Cancel ownership immediately; the debounce only delays starting new work.
+		subMeshOptionsLoadToken += 1;
+		markedTextureSummaryLoadToken += 1;
+		textureListLoadToken += 1;
 		console.log(`${logPrefix} workspace-related setting changed, reload SubMesh options`, {
 			dbmtWorkFolder: appSettings.DBMTWorkFolder,
 			currentGameName: appSettings.CurrentGameName,
 			currentWorkSpace: appSettings.CurrentWorkSpace,
 		});
-		void loadSubMeshOptions();
+		if (workspaceReloadTimer) clearTimeout(workspaceReloadTimer);
+		workspaceReloadTimer = setTimeout(() => {
+			workspaceReloadTimer = undefined;
+			void Promise.all([loadPresetMarkOptions(), loadSelectionMemory()])
+				.then(() => loadSubMeshOptions());
+		}, 80);
 	},
 	{ immediate: false }
 );

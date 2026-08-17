@@ -19,9 +19,9 @@ const appSettings = AppStateManager.appSettings;
 const titlebarGames = computed(() => AppStateManager.gamesList.filter(game => game.showSidebar));
 const selectedTitlebarGame = computed(() => appSettings.CurrentGameName || '');
 
-const selectLatestWorkspaceForGame = async (gameName: string) => {
+const findLatestWorkspaceForGame = async (gameName: string): Promise<string> => {
     const cacheRoot = (appSettings.DBMTWorkFolder || '').trim();
-    if (!cacheRoot) return;
+    if (!cacheRoot) return '';
     try {
         const workspaceRoot = await join(cacheRoot, 'WorkSpace', gameName);
         const folders = (await readDir(workspaceRoot)).filter(entry => entry.isDirectory && entry.name);
@@ -30,14 +30,10 @@ const selectLatestWorkspaceForGame = async (gameName: string) => {
             modified: (await stat(await join(workspaceRoot, entry.name!))).mtime?.getTime() ?? 0,
         })));
         const latest = dated.sort((left, right) => right.modified - left.modified)[0]?.name;
-        if (!latest) return;
-        appSettings.CurrentWorkSpace = latest;
-        appSettings.CurrentWorkSpaceByGame = {
-            ...(appSettings.CurrentWorkSpaceByGame || {}),
-            [gameName]: latest,
-        };
+        return latest || '';
     } catch {
         // A game without workspaces is valid; the destination page handles it.
+        return '';
     }
 };
 
@@ -47,8 +43,15 @@ const switchTitlebarGame = async (gameName: string) => {
     if (!game) return;
     isSwitchingGame.value = true;
     try {
-        await selectLatestWorkspaceForGame(gameName);
+        const latestWorkspace = await findLatestWorkspaceForGame(gameName);
         await AppStateManager.selectGame(game);
+        // Commit the matching workspace in the same Vue update batch as the game
+        // switch. Never expose "old game + new workspace" to active pages.
+        appSettings.CurrentWorkSpace = latestWorkspace;
+        appSettings.CurrentWorkSpaceByGame = {
+            ...(appSettings.CurrentWorkSpaceByGame || {}),
+            [gameName]: latestWorkspace,
+        };
         await AppStateManager.saveSettingsNow();
         AppStateManager.refreshCurrentPage();
     } finally {
