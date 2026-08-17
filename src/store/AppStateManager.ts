@@ -276,7 +276,6 @@ export const useAppStateStore = defineStore('appState', () => {
 
   function switchToGame(game: GameInfo) {
     appSettings.CurrentGameName = game.name
-    gameSwitchRevision.value += 1
     const useVideo = game.bgType === BGType.Video
 
     if (useVideo && game.bgVideoPath) {
@@ -301,6 +300,10 @@ export const useAppStateStore = defineStore('appState', () => {
     }
 
     void autoUpdateBackgroundIfNeeded(game)
+  }
+
+  function refreshCurrentPage() {
+    gameSwitchRevision.value += 1
   }
 
   function switchToDefaultGame() {
@@ -418,6 +421,7 @@ export const useAppStateStore = defineStore('appState', () => {
     loadGames,
     selectGame,
     switchToGame,
+    refreshCurrentPage,
     switchToDefaultGame,
     hasSelectedGame,
     hasLoadedInitialState,
@@ -441,6 +445,7 @@ export const AppStateManager = {
   get loadGames() { return useAppStateStore().loadGames },
   get selectGame() { return useAppStateStore().selectGame },
   get switchToGame() { return useAppStateStore().switchToGame },
+  get refreshCurrentPage() { return useAppStateStore().refreshCurrentPage },
   get switchToDefaultGame() { return useAppStateStore().switchToDefaultGame },
   get hasSelectedGame() { return useAppStateStore().hasSelectedGame },
   get hasLoadedInitialState() { return useAppStateStore().hasLoadedInitialState },

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
 import { exists, readDir, readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -14,6 +15,7 @@ type PreviewTextureOption = {
 	label: string;
 	url: string;
 	markName?: string;
+	ddsPath: string;
 };
 
 type PreviewSubMeshTarget = {
@@ -22,6 +24,8 @@ type PreviewSubMeshTarget = {
 	subMeshName: string;
 	diffuseUrl?: string;
 	normalUrl?: string;
+	diffuseDdsPath?: string;
+	normalDdsPath?: string;
 };
 
 type SubMeshElement = {
@@ -90,6 +94,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const MAX_PREVIEW_INDEX_COUNT = 600_000;
+const DDS_3D_TEXTURE_MAX_DIMENSION = 1024;
 const PREVIEW_LIGHTING_MODE_STORAGE_KEY = 'ssmt4:post-processing-preview:lighting-mode';
 // Preview-space coordinates are metres.  Values beyond this threshold usually
 // mean an incomplete/misinterpreted vertex stream rather than an intentional
@@ -121,6 +126,7 @@ const previewSettingsOpen = ref(false);
 const previewZoomOpen = ref(false);
 let loadToken = 0;
 let previewBuildToken = 0;
+let rebuildScheduled = false;
 let textureLoadToken = 0;
 
 let renderer: THREE.WebGLRenderer | undefined;
@@ -137,6 +143,14 @@ let passiveMaterials: THREE.ShaderMaterial[] = [];
 let resizeObserver: ResizeObserver | undefined;
 let zoomResizeObserver: ResizeObserver | undefined;
 let zoomBoundsObserver: ResizeObserver | undefined;
+let zoomTextureToken = 0;
+let zoomTextureSnapshots: Array<{
+	material: THREE.ShaderMaterial;
+	diffuse: THREE.Texture | null;
+	normal: THREE.Texture | null;
+}> = [];
+let zoomFullTextures: THREE.Texture[] = [];
+let previewMaterialTextureSources: Array<{ material: THREE.ShaderMaterial; diffuseDdsPath: string; normalDdsPath: string }> = [];
 let disposePreviewPointerControls: (() => void) | undefined;
 let disposeZoomPointerControls: (() => void) | undefined;
 let diffuseTexture: THREE.Texture | undefined;
@@ -372,7 +386,7 @@ const loadDefaultDataTypeForTarget = async (
 };
 
 const findMarkedTexture = (markName: 'DiffuseMap' | 'NormalMap'): PreviewTextureOption | undefined => {
-	return props.textureOptions.find(item => item.url && item.markName?.trim().toLowerCase() === markName.toLowerCase());
+	return props.textureOptions.find(item => item.ddsPath && item.markName?.trim().toLowerCase() === markName.toLowerCase());
 };
 
 const loadDataTypes = async () => {
@@ -417,14 +431,14 @@ const loadDataTypes = async () => {
 		}
 		// TYPE_* folder names and UV ids are often the same across SubMesh entries.
 		// The selected ids may therefore not change, so explicitly rebuild with the new buffers.
-		void rebuildPreview();
+		schedulePreviewRebuild();
 	} catch (error) {
 		if (token === loadToken) {
 			dataTypes.value = [];
 			selectedDataTypeId.value = '';
 			selectedUvLayerId.value = '';
 			previewError.value = String(error);
-			void rebuildPreview();
+			schedulePreviewRebuild();
 		}
 	} finally {
 		if (token === loadToken) {
@@ -797,10 +811,12 @@ const openZoomPreview = () => {
 	void nextTick(() => {
 		updateZoomPreviewBounds();
 		initializeZoomRenderer();
+		void applyFullSizeZoomTextures();
 	});
 };
 
 const closeZoomPreview = () => {
+	restoreEmbeddedPreviewTextures();
 	previewZoomOpen.value = false;
 	disposeZoomRenderer();
 };
@@ -1163,11 +1179,174 @@ const loadTexture = (url: string, colorTexture: boolean): Promise<THREE.Texture 
 	});
 };
 
+const decodeRgbaDds = (bytes: Uint8Array): { width: number; height: number; pixels: Uint8Array } => {
+	if (bytes.byteLength < 128 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'DDS ') {
+		throw new Error('Invalid DDS texture');
+	}
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	const height = view.getUint32(12, true);
+	const width = view.getUint32(16, true);
+	const hasDx10Header = view.getUint32(84, true) === 0x30315844;
+	const dataOffset = hasDx10Header ? 148 : 128;
+	const byteLength = width * height * 4;
+	if (!width || !height || dataOffset + byteLength > bytes.byteLength) {
+		throw new Error('Incomplete DDS texture');
+	}
+	return { width, height, pixels: bytes.slice(dataOffset, dataOffset + byteLength) };
+};
+
+const loadCompressedDdsTexture = async (ddsPath: string, colorTexture: boolean): Promise<THREE.Texture | undefined> => {
+	if (!renderer || !ddsPath) return undefined;
+	const bytes = await readFile(ddsPath);
+	if (bytes.byteLength < 128 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'DDS ') return undefined;
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	const width = view.getUint32(16, true);
+	const height = view.getUint32(12, true);
+	const mipCount = Math.max(1, view.getUint32(28, true));
+	const fourCc = view.getUint32(84, true);
+	const hasDx10Header = fourCc === 0x30315844;
+	const dxgiFormat = hasDx10Header ? view.getUint32(128, true) : 0;
+	const legacyFourCc = String.fromCharCode(fourCc & 0xff, (fourCc >>> 8) & 0xff, (fourCc >>> 16) & 0xff, (fourCc >>> 24) & 0xff);
+	let format: THREE.CompressedPixelFormat | undefined;
+	let blockBytes = 16;
+	let extensionName = '';
+	if (dxgiFormat === 71 || dxgiFormat === 72 || legacyFourCc === 'DXT1') {
+		format = THREE.RGBA_S3TC_DXT1_Format;
+		blockBytes = 8;
+		extensionName = 'WEBGL_compressed_texture_s3tc';
+	} else if (dxgiFormat === 74 || dxgiFormat === 75 || legacyFourCc === 'DXT3') {
+		format = THREE.RGBA_S3TC_DXT3_Format;
+		extensionName = 'WEBGL_compressed_texture_s3tc';
+	} else if (dxgiFormat === 77 || dxgiFormat === 78 || legacyFourCc === 'DXT5') {
+		format = THREE.RGBA_S3TC_DXT5_Format;
+		extensionName = 'WEBGL_compressed_texture_s3tc';
+	} else if (dxgiFormat === 80 || dxgiFormat === 81 || legacyFourCc === 'ATI1' || legacyFourCc === 'BC4U') {
+		format = dxgiFormat === 81 ? THREE.SIGNED_RED_RGTC1_Format : THREE.RED_RGTC1_Format;
+		blockBytes = 8;
+		extensionName = 'EXT_texture_compression_rgtc';
+	} else if (dxgiFormat === 83 || dxgiFormat === 84 || legacyFourCc === 'ATI2' || legacyFourCc === 'BC5U') {
+		format = dxgiFormat === 84 ? THREE.SIGNED_RED_GREEN_RGTC2_Format : THREE.RED_GREEN_RGTC2_Format;
+		extensionName = 'EXT_texture_compression_rgtc';
+	} else if (dxgiFormat === 98 || dxgiFormat === 99) {
+		format = THREE.RGBA_BPTC_Format;
+		extensionName = 'EXT_texture_compression_bptc';
+	}
+	if (!format || !renderer.getContext().getExtension(extensionName)) return undefined;
+	let offset = hasDx10Header ? 148 : 128;
+	let mipWidth = width;
+	let mipHeight = height;
+	const mipmaps: Array<{ data: Uint8Array; width: number; height: number }> = [];
+	for (let level = 0; level < mipCount; level += 1) {
+		const byteLength = Math.max(1, Math.ceil(mipWidth / 4)) * Math.max(1, Math.ceil(mipHeight / 4)) * blockBytes;
+		if (offset + byteLength > bytes.byteLength) return undefined;
+		mipmaps.push({ data: bytes.subarray(offset, offset + byteLength), width: mipWidth, height: mipHeight });
+		offset += byteLength;
+		mipWidth = Math.max(1, mipWidth >> 1);
+		mipHeight = Math.max(1, mipHeight >> 1);
+	}
+	const texture = new THREE.CompressedTexture(mipmaps, width, height, format, THREE.UnsignedByteType);
+	texture.colorSpace = colorTexture ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+	texture.wrapS = THREE.RepeatWrapping;
+	texture.wrapT = THREE.RepeatWrapping;
+	// Geometry already converts the DDS/3DMigoto V coordinate to Blender's UV
+	// convention. Keep raw and compressed uploads identical and do not flip twice.
+	texture.flipY = false;
+	texture.generateMipmaps = false;
+	texture.minFilter = mipmaps.length > 1 ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+	texture.magFilter = THREE.LinearFilter;
+	texture.needsUpdate = true;
+	return texture;
+};
+
+const loadDdsTexture = async (
+	ddsPath: string,
+	colorTexture: boolean,
+	maxDimension: number | undefined = DDS_3D_TEXTURE_MAX_DIMENSION
+): Promise<THREE.Texture | undefined> => {
+	if (!ddsPath) return undefined;
+	try {
+		const compressedTexture = await loadCompressedDdsTexture(ddsPath, colorTexture);
+		if (compressedTexture) return compressedTexture;
+		const preparedPath = await invoke<string>('prepare_dds_webgl_preview', maxDimension
+			? { sourcePath: ddsPath, maxDimension }
+			: { sourcePath: ddsPath });
+		const decoded = decodeRgbaDds(await readFile(preparedPath));
+		const texture = new THREE.DataTexture(decoded.pixels, decoded.width, decoded.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+		texture.colorSpace = colorTexture ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+		texture.wrapS = THREE.RepeatWrapping;
+		texture.wrapT = THREE.RepeatWrapping;
+		// The geometry owns the V-axis conversion; DDS pixels stay in source order.
+		texture.flipY = false;
+		texture.generateMipmaps = true;
+		texture.minFilter = THREE.LinearMipmapLinearFilter;
+		texture.magFilter = THREE.LinearFilter;
+		texture.needsUpdate = true;
+		return texture;
+	} catch (error) {
+		console.warn('Failed to load DDS preview texture', ddsPath, error);
+		return undefined;
+	}
+};
+
+const restoreEmbeddedPreviewTextures = () => {
+	zoomTextureToken += 1;
+	for (const snapshot of zoomTextureSnapshots) {
+		snapshot.material.uniforms.uDiffuseMap.value = snapshot.diffuse;
+		snapshot.material.uniforms.uHasDiffuseMap.value = snapshot.diffuse ? 1 : 0;
+		snapshot.material.uniforms.uNormalMap.value = snapshot.normal;
+		snapshot.material.uniforms.uHasNormalMap.value = snapshot.normal ? 1 : 0;
+	}
+	zoomTextureSnapshots = [];
+	for (const texture of zoomFullTextures) texture.dispose();
+	zoomFullTextures = [];
+	renderPreview();
+};
+
+const applyFullSizeZoomTextures = async () => {
+	restoreEmbeddedPreviewTextures();
+	// restoreEmbeddedPreviewTextures increments the token to invalidate older work.
+	const activeToken = ++zoomTextureToken;
+	zoomTextureSnapshots = previewMaterialTextureSources.map(source => ({
+		material: source.material,
+		diffuse: source.material.uniforms.uDiffuseMap.value as THREE.Texture | null,
+		normal: source.material.uniforms.uNormalMap.value as THREE.Texture | null,
+	}));
+	const loaded = await Promise.all(previewMaterialTextureSources.map(async source => ({
+		source,
+		diffuse: await loadDdsTexture(source.diffuseDdsPath, true, undefined),
+		normal: await loadDdsTexture(source.normalDdsPath, false, undefined),
+	})));
+	if (!previewZoomOpen.value || activeToken !== zoomTextureToken) {
+		for (const item of loaded) {
+			item.diffuse?.dispose();
+			item.normal?.dispose();
+		}
+		return;
+	}
+	for (const item of loaded) {
+		if (item.diffuse) {
+			item.source.material.uniforms.uDiffuseMap.value = item.diffuse;
+			item.source.material.uniforms.uHasDiffuseMap.value = 1;
+			zoomFullTextures.push(item.diffuse);
+		}
+		if (item.normal) {
+			item.source.material.uniforms.uNormalMap.value = item.normal;
+			item.source.material.uniforms.uHasNormalMap.value = 1;
+			zoomFullTextures.push(item.normal);
+		}
+	}
+	renderPreview();
+};
+
+const loadPreviewTexture = (ddsPath: string, url: string, colorTexture: boolean) => (
+	ddsPath ? loadDdsTexture(ddsPath, colorTexture) : loadTexture(url, colorTexture)
+);
+
 const updateMaterialTextures = async () => {
 	const token = ++textureLoadToken;
 	const [nextDiffuse, nextNormal] = await Promise.all([
-		loadTexture(selectedDiffuse.value?.url || '', true),
-		loadTexture(selectedNormal.value?.url || '', false),
+		loadPreviewTexture(selectedDiffuse.value?.ddsPath || '', selectedDiffuse.value?.url || '', true),
+		loadPreviewTexture(selectedNormal.value?.ddsPath || '', selectedNormal.value?.url || '', false),
 	]);
 	if (token !== textureLoadToken) {
 		nextDiffuse?.dispose();
@@ -1282,9 +1461,10 @@ const createPreviewGeometry = async (
 					useSourceNormals = false;
 					normals.push(0, 0, 0);
 				}
-				// The importer writes Blender UVs as (u, 1 - v).  Keep the
-				// preview's mesh data in that same convention for every UV layer.
-				uvs.push(uv[0], 1 - uv[1]);
+				// Keep 3DMigoto's UVs unchanged. DDS rows and Direct3D UVs share a
+				// top-origin convention; uploading DDS data without flipY preserves it.
+				// Blender's importer uses 1 - v for Blender only and is not applicable here.
+				uvs.push(uv[0], uv[1]);
 			}
 			remappedIndices.push(targetIndex);
 		}
@@ -1500,8 +1680,8 @@ const buildPreviewGeometry = async (buildToken: number) => {
 	const passiveRenderables = await Promise.all(passiveSources.map(async source => {
 		if (!source) return undefined;
 		const [diffuse, normal] = await Promise.all([
-			loadTexture(source.target.diffuseUrl || '', true),
-			loadTexture(source.target.normalUrl || '', false),
+			loadPreviewTexture(source.target.diffuseDdsPath || '', source.target.diffuseUrl || '', true),
+			loadPreviewTexture(source.target.normalDdsPath || '', source.target.normalUrl || '', false),
 		]);
 		return { source, diffuse, normal };
 	}));
@@ -1516,6 +1696,7 @@ const buildPreviewGeometry = async (buildToken: number) => {
 	}
 
 	clearPreviewMesh();
+	previewMaterialTextureSources = [];
 	previewRoot = new THREE.Group();
 	previewRoot.rotation.x = THREE.MathUtils.degToRad(PREVIEW_MODEL_X_ROTATION_DEGREES);
 	const meshes: THREE.Mesh[] = [];
@@ -1526,6 +1707,14 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		previewRoot.add(mesh);
 		meshes.push(mesh);
 		if (!activeGeometry.needsReview) healthyMeshes.push(mesh);
+		const activeTextureTarget = visibleSubMeshTargets.value.find(target => (
+			target.workspacePath === props.workspacePath && target.subMeshName === props.subMeshName
+		));
+		previewMaterialTextureSources.push({
+			material,
+			diffuseDdsPath: activeTextureTarget?.diffuseDdsPath || selectedDiffuse.value?.ddsPath || '',
+			normalDdsPath: activeTextureTarget?.normalDdsPath || selectedNormal.value?.ddsPath || '',
+		});
 	}
 	for (const renderable of passiveRenderables) {
 		if (!renderable) continue;
@@ -1537,6 +1726,11 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		applyTextureToMaterial(passiveMaterial, 'diffuse', diffuse);
 		applyTextureToMaterial(passiveMaterial, 'normal', normal);
 		passiveMaterials.push(passiveMaterial);
+		previewMaterialTextureSources.push({
+			material: passiveMaterial,
+			diffuseDdsPath: source.target.diffuseDdsPath || '',
+			normalDdsPath: source.target.normalDdsPath || '',
+		});
 		const passiveMesh = new THREE.Mesh(source.geometry.geometry, passiveMaterial);
 		previewRoot.add(passiveMesh);
 		meshes.push(passiveMesh);
@@ -1570,6 +1764,7 @@ const buildPreviewGeometry = async (buildToken: number) => {
 };
 
 const rebuildPreview = async () => {
+	if (previewZoomOpen.value) closeZoomPreview();
 	const token = ++previewBuildToken;
 	previewError.value = '';
 	if (!renderer) {
@@ -1589,6 +1784,15 @@ const rebuildPreview = async () => {
 			isBuildingPreview.value = false;
 		}
 	}
+};
+
+const schedulePreviewRebuild = () => {
+	if (rebuildScheduled) return;
+	rebuildScheduled = true;
+	queueMicrotask(() => {
+		rebuildScheduled = false;
+		if (renderer) void rebuildPreview();
+	});
 };
 
 const deleteOtherDataTypes = async () => {
@@ -1716,16 +1920,16 @@ watch(
 
 watch(
 	() => visibleSubMeshTargets.value
-		.map(target => `${target.id}:${target.workspacePath}:${target.subMeshName}:${target.diffuseUrl || ''}:${target.normalUrl || ''}`)
+		.map(target => `${target.id}:${target.workspacePath}:${target.subMeshName}:${target.diffuseDdsPath || ''}:${target.normalDdsPath || ''}`)
 		.join('|'),
 	() => {
-		void rebuildPreview();
+		schedulePreviewRebuild();
 	},
 	{ immediate: true }
 );
 
 watch(
-	() => props.textureOptions.map(item => `${item.id}:${item.markName || ''}:${item.url}`).join('|'),
+	() => props.textureOptions.map(item => `${item.id}:${item.markName || ''}:${item.ddsPath}`).join('|'),
 	() => {
 		void updateMaterialTextures();
 	},
@@ -1737,11 +1941,11 @@ watch(selectedDataTypeId, () => {
 	if (!layers.some(item => item.id === selectedUvLayerId.value)) {
 		selectedUvLayerId.value = layers[0]?.id ?? '';
 	}
-	void rebuildPreview();
+	schedulePreviewRebuild();
 });
 
 watch(selectedUvLayerId, () => {
-	void rebuildPreview();
+	schedulePreviewRebuild();
 });
 
 watch(lightingMode, mode => {
@@ -1757,7 +1961,7 @@ onMounted(async () => {
 	restoreLightingModePreference();
 	initializeRenderer();
 	await nextTick();
-	await rebuildPreview();
+	schedulePreviewRebuild();
 	void updateMaterialTextures();
 });
 

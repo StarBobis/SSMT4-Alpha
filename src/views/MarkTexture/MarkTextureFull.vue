@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, readFile, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
@@ -75,6 +75,7 @@ type PreviewTextureOption = {
 	label: string;
 	url: string;
 	markName: string;
+	ddsPath: string;
 };
 
 type PreviewSubMeshTarget = {
@@ -83,6 +84,8 @@ type PreviewSubMeshTarget = {
 	subMeshName: string;
 	diffuseUrl?: string;
 	normalUrl?: string;
+	diffuseDdsPath?: string;
+	normalDdsPath?: string;
 };
 
 type SubMeshMarkedTextureSummary = {
@@ -214,6 +217,9 @@ const RGBA_PREVIEW_CARD_INITIAL_RATIO = 0.6;
 const RGBA_PREVIEW_CARD_VIEWPORT_MARGIN = 32;
 const RGBA_PREVIEW_MODAL_HEADER_HEIGHT = 44;
 const RGBA_PREVIEW_RENDER_MAX_DIMENSION = 1024;
+const DDS_THUMBNAIL_MAX_DIMENSION = 256;
+const DDS_THUMBNAIL_MEMORY_CACHE_LIMIT = 256;
+const ddsThumbnailMemoryCache = new Map<string, Promise<string>>();
 const channelPreviewCanvas = ref<HTMLCanvasElement | null>(null);
 const enabledPreviewChannels = ref<Record<TextureChannelKey, boolean>>({ R: true, G: true, B: true, A: true });
 const channelPreviewScale = ref(1);
@@ -619,12 +625,17 @@ const previewSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
 				summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.preview
 			))?.preview;
 		};
+		const findMarkedDdsPath = (markName: string): string | undefined => markedTextures.find(summary => (
+			summary.markName.trim().toLowerCase() === markName.toLowerCase()
+		))?.ddsPath;
 		return [{
 			id: item.value,
 			workspacePath: source.workspacePath,
 			subMeshName: parsed.subMeshName,
 			diffuseUrl: findMarkedPreview('DiffuseMap'),
 			normalUrl: findMarkedPreview('NormalMap'),
+			diffuseDdsPath: findMarkedDdsPath('DiffuseMap'),
+			normalDdsPath: findMarkedDdsPath('NormalMap'),
 		}];
 	});
 });
@@ -634,7 +645,7 @@ const previewTextureOptions = computed<PreviewTextureOption[]>(() => {
 	const appliedOrPendingMarks = subMeshMarkedTextureMap.value[selectedSubMesh.value] ?? [];
 
 	for (const mark of appliedOrPendingMarks) {
-		if (!mark.preview) {
+		if (!mark.ddsPath) {
 			continue;
 		}
 		options.set(`mark:${mark.id}`, {
@@ -642,11 +653,12 @@ const previewTextureOptions = computed<PreviewTextureOption[]>(() => {
 			label: `${mark.markName || t('markTexture.preview.unmarkedTexture')} · ${mark.textureName}`,
 			url: mark.preview,
 			markName: mark.markName,
+			ddsPath: mark.ddsPath,
 		});
 	}
 
 	for (const item of textureList.value) {
-		if (!item.preview) {
+		if (!item.ddsPath) {
 			continue;
 		}
 		options.set(`current:${item.id}`, {
@@ -654,6 +666,7 @@ const previewTextureOptions = computed<PreviewTextureOption[]>(() => {
 			label: `${item.markName || t('markTexture.preview.unmarkedTexture')} · ${item.name}`,
 			url: item.preview,
 			markName: item.markName,
+			ddsPath: item.ddsPath,
 		});
 	}
 
@@ -1091,11 +1104,33 @@ const buildTexturePreviewUrl = async (
 
 const renderDdsThumbnail = async (filePath: string): Promise<string> => {
 	try {
-		const preparedPath = await invoke<string>('prepare_dds_webgl_preview', { sourcePath: filePath });
-		const decoded = decodeRgbaDdsPreview(await readFile(preparedPath));
-		const canvas = document.createElement('canvas');
-		renderChannelPreview(canvas, decoded, 15);
-		return canvas.toDataURL('image/webp');
+		const preparedPath = await invoke<string>('prepare_dds_webgl_preview', {
+			sourcePath: filePath,
+			maxDimension: DDS_THUMBNAIL_MAX_DIMENSION,
+		});
+		const cached = ddsThumbnailMemoryCache.get(preparedPath);
+		if (cached) return await cached;
+
+		const rendering = (async () => {
+			const decoded = decodeRgbaDdsPreview(await readFile(preparedPath));
+			const canvas = document.createElement('canvas');
+			renderChannelPreview(canvas, decoded, 15);
+			return canvas.toDataURL('image/webp');
+		})();
+		ddsThumbnailMemoryCache.set(preparedPath, rendering);
+		if (ddsThumbnailMemoryCache.size > DDS_THUMBNAIL_MEMORY_CACHE_LIMIT) {
+			const oldestKey = ddsThumbnailMemoryCache.keys().next().value;
+			if (oldestKey) ddsThumbnailMemoryCache.delete(oldestKey);
+		}
+		try {
+			return await rendering;
+		} catch (error) {
+			// A failed or incomplete parse must never become reusable cache state.
+			if (ddsThumbnailMemoryCache.get(preparedPath) === rendering) {
+				ddsThumbnailMemoryCache.delete(preparedPath);
+			}
+			throw error;
+		}
 	} catch (error) {
 		console.warn('Failed to render DDS thumbnail', filePath, error);
 		return '';
@@ -1999,17 +2034,15 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 					? faLogDedupedFileName.replace(/\.[^.]+$/, '')
 					: '';
 
-				let preview = '';
+				const preview = '';
 				let previewPath = '';
-				let size = '-';
+				const size = '-';
 				const channelPreviews = createEmptyChannelPreviews();
 				if (dedupedBaseName) {
 					previewPath = await findTexturePreviewPath(
 						source.workspacePath,
 						faLogDedupedFileName
 					);
-					preview = previewPath ? await renderDdsThumbnail(previewPath) : '';
-					size = await getImageSize(preview);
 				}
 
 				return {
@@ -2045,6 +2078,7 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 		if (loadToken !== textureListLoadToken) {
 			return;
 		}
+		void populateTexturePreviews(textureList.value, loadToken);
 		console.log(`${logPrefix} texture list loaded`, {
 			count: nextTextureList.length,
 			drawCall,
@@ -2200,6 +2234,31 @@ const initializeMarkTexturePage = async () => {
 	await Promise.all([loadSelectionMemory(), loadGlobalUiConfig()]);
 	await Promise.all([loadPresetMarkOptions(), loadSubMeshOptions()]);
 	console.log(`${logPrefix} initializeMarkTexturePage done`);
+};
+
+const yieldForTexturePreview = (): Promise<void> => new Promise(resolve => {
+	if ('requestIdleCallback' in window) {
+		window.requestIdleCallback(() => resolve(), { timeout: 120 });
+		return;
+	}
+	globalThis.setTimeout(resolve, 16);
+});
+
+const populateTexturePreviews = async (items: TextureItem[], loadToken: number) => {
+	for (const item of items) {
+		if (loadToken !== textureListLoadToken) return;
+		await yieldForTexturePreview();
+		if (loadToken !== textureListLoadToken) return;
+		if (!item.previewPath) continue;
+		const preview = await renderDdsThumbnail(item.previewPath);
+		if (loadToken !== textureListLoadToken) return;
+		// Texture memory application may replace the reactive array. Resolve the
+		// current item instead of mutating an object that Vue no longer renders.
+		const liveItem = textureList.value.find(candidate => candidate.id === item.id);
+		if (!liveItem) continue;
+		liveItem.preview = preview;
+		liveItem.size = await getImageSize(preview);
+	}
 };
 
 const revealTextureInDedupedFolder = async (item: TextureItem) => {
@@ -2629,7 +2688,6 @@ const exportSlotStyleTextureModTemplate = async () => {
 };
 
 onMounted(initializeMarkTexturePage);
-onActivated(initializeMarkTexturePage);
 onMounted(() => {
 	ensureRgbaPreviewCardSize();
 	window.addEventListener('resize', syncRgbaPreviewCardSizeToViewport);

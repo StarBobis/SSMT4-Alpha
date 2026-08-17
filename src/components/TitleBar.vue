@@ -1,6 +1,8 @@
 ﻿<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { join } from '@tauri-apps/api/path';
+import { readDir, stat } from '@tauri-apps/plugin-fs';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { getAlwaysOnTop, setAlwaysOnTop } from '../store/WindowPinStore';
@@ -17,14 +19,38 @@ const appSettings = AppStateManager.appSettings;
 const titlebarGames = computed(() => AppStateManager.gamesList.filter(game => game.showSidebar));
 const selectedTitlebarGame = computed(() => appSettings.CurrentGameName || '');
 
+const selectLatestWorkspaceForGame = async (gameName: string) => {
+    const cacheRoot = (appSettings.DBMTWorkFolder || '').trim();
+    if (!cacheRoot) return;
+    try {
+        const workspaceRoot = await join(cacheRoot, 'WorkSpace', gameName);
+        const folders = (await readDir(workspaceRoot)).filter(entry => entry.isDirectory && entry.name);
+        const dated = await Promise.all(folders.map(async entry => ({
+            name: entry.name!,
+            modified: (await stat(await join(workspaceRoot, entry.name!))).mtime?.getTime() ?? 0,
+        })));
+        const latest = dated.sort((left, right) => right.modified - left.modified)[0]?.name;
+        if (!latest) return;
+        appSettings.CurrentWorkSpace = latest;
+        appSettings.CurrentWorkSpaceByGame = {
+            ...(appSettings.CurrentWorkSpaceByGame || {}),
+            [gameName]: latest,
+        };
+    } catch {
+        // A game without workspaces is valid; the destination page handles it.
+    }
+};
+
 const switchTitlebarGame = async (gameName: string) => {
     if (!gameName || gameName === appSettings.CurrentGameName || isSwitchingGame.value) return;
     const game = AppStateManager.gamesList.find(item => item.name === gameName);
     if (!game) return;
     isSwitchingGame.value = true;
     try {
+        await selectLatestWorkspaceForGame(gameName);
         await AppStateManager.selectGame(game);
         await AppStateManager.saveSettingsNow();
+        AppStateManager.refreshCurrentPage();
     } finally {
         isSwitchingGame.value = false;
     }
