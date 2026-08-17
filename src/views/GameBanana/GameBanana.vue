@@ -232,6 +232,10 @@ const loadingComments = ref(false);
 const loadingMoreComments = ref(false);
 const installingFileId = ref<number | null>(null);
 const installGroup = ref('');
+type InstallGroupMode = 'automatic' | 'manual' | 'matching-icon';
+const installGroupMode = ref<InstallGroupMode>('automatic');
+const matchingIconGroups = ref<Array<{ id: string; iconPath: string }>>([]);
+const loadingMatchingIconGroups = ref(false);
 const installStatus = ref('');
 const installPhase = ref<'idle' | 'downloading' | 'installing'>('idle');
 const downloadProgress = ref(0);
@@ -1180,10 +1184,15 @@ const gamebananaInstallGroup = (mod: GbModCard): string => gamebananaInstallGrou
 const resolveGamebananaInstallTarget = async (mod: GbModCard, fallbackGameName = '') => {
   const categoryTrail = await resolveGamebananaCategoryTrail(mod);
   const automaticGroup = gamebananaInstallGroupFromTrail(categoryTrail, fallbackGameName);
+  const targetGroup = installGroupMode.value === 'automatic'
+    ? automaticGroup
+    : installGroupMode.value === 'manual'
+      ? (installGroup.value.trim() || 'Root')
+      : (installGroup.value.trim() || automaticGroup);
   return {
     categoryTrail,
     automaticGroup,
-    targetGroup: installGroup.value.trim() || automaticGroup,
+    targetGroup,
     targetName: sanitizeInstallName(mod.title),
   };
 };
@@ -1302,7 +1311,8 @@ const installButtonClass = (file: GbFile) => ({
 const isCancellableDownload = (file: GbFile) => installingFileId.value === (file._idRow ?? -1)
   && installPhase.value === 'downloading';
 
-const isFileActionDisabled = (file: GbFile) => isInstalling.value && !isCancellableDownload(file);
+const isFileActionDisabled = (file: GbFile) => (isInstalling.value && !isCancellableDownload(file))
+  || (installGroupMode.value === 'matching-icon' && !installGroup.value);
 
 const installButtonLabel = (file: GbFile) => isCancellableDownload(file)
   ? installStatus.value === t('gameBanana.cancellingDownload')
@@ -1394,7 +1404,7 @@ const downloadAndInstall = async (file: GbFile) => {
       backupExisting: true,
       previewUrls,
     });
-    if (!context.fallbackGameName && target.targetGroup === target.automaticGroup) {
+    if (!context.fallbackGameName && installGroupMode.value === 'automatic' && target.targetGroup === target.automaticGroup) {
       await applyGamebananaCategoryIcons(context.gameName, target.categoryTrail);
     }
     downloadedFileIds.value = new Set(detail.value.files.map((item) => item._idRow ?? -1));
@@ -1540,6 +1550,39 @@ const resolveTranslationLoading = (block: HTMLElement, translation: string, rich
     block.innerHTML = translatedParagraphHtml(translation);
   } else {
     block.textContent = translation;
+  }
+};
+
+const loadMatchingIconGroups = async () => {
+  const mod = detail.value;
+  if (!mod || !currentGameName.value || currentGameName.value === 'Default') {
+    matchingIconGroups.value = [];
+    return;
+  }
+  loadingMatchingIconGroups.value = true;
+  matchingIconGroups.value = [];
+  try {
+    const trail = await resolveGamebananaCategoryTrail(mod);
+    const leaf = trail.at(-1);
+    if (!leaf) return;
+    const targetIcon = await cacheGamebananaCategoryIcon(leaf);
+    if (!targetIcon) return;
+    const targetHash = await invoke<string>('file_md5', { path: targetIcon });
+    const { groups } = await ModManager.scanAllMods(currentGameName.value);
+    const candidates = groups.filter((group) => !!group.iconPath && group.id !== 'Root' && group.id !== 'All');
+    const matches = await Promise.all(candidates.map(async (group) => {
+      try {
+        const hash = await invoke<string>('file_md5', { path: group.iconPath as string });
+        return hash === targetHash ? { id: group.id, iconPath: group.iconPath as string } : null;
+      } catch { return null; }
+    }));
+    matchingIconGroups.value = matches.filter((item): item is { id: string; iconPath: string } => item !== null);
+    installGroup.value = matchingIconGroups.value[0]?.id || '';
+  } catch (error) {
+    console.warn('Unable to find groups with matching GameBanana category icon:', error);
+    ElMessage.warning(t('gameBanana.matchingIconPathsFailed', { error: String(error) }));
+  } finally {
+    loadingMatchingIconGroups.value = false;
   }
 };
 
@@ -1959,6 +2002,17 @@ watch(() => [route.query.mod, route.query.game, route.query.gameName], () => {
 
 watch([() => detail.value?.id, installGroup, currentGameName], () => {
   void refreshDownloadedFileState();
+});
+
+watch(() => detail.value?.id, () => {
+  installGroupMode.value = 'automatic';
+  installGroup.value = '';
+  matchingIconGroups.value = [];
+});
+
+watch(installGroupMode, (mode) => {
+  installGroup.value = '';
+  if (mode === 'matching-icon') void loadMatchingIconGroups();
 });
 
 watch(showTranslationSettings, (visible) => {
@@ -2467,10 +2521,34 @@ onBeforeUnmount(() => {
 
           <div v-if="detail.files.length" class="gb-files">
             <h3>{{ t('gameBanana.files') }}</h3>
-            <label class="gb-install-group">
-              <span>{{ t('gameBanana.installGroup') }}</span>
-              <input v-model="installGroup" type="text" :placeholder="gamebananaInstallGroup(detail)" />
-            </label>
+            <div class="gb-install-target">
+              <span class="gb-install-target-label">{{ t('gameBanana.installGroup') }}</span>
+              <el-radio-group v-model="installGroupMode" class="gb-install-group-modes" size="small">
+                <el-radio-button value="automatic">{{ t('gameBanana.installGroupAutomatic') }}</el-radio-button>
+                <el-radio-button value="manual">{{ t('gameBanana.installGroupManual') }}</el-radio-button>
+                <el-radio-button value="matching-icon">{{ t('gameBanana.installGroupMatchingIcon') }}</el-radio-button>
+              </el-radio-group>
+              <label v-if="installGroupMode === 'automatic'" class="gb-install-group">
+                <input :value="gamebananaInstallGroup(detail)" type="text" readonly />
+              </label>
+              <label v-else-if="installGroupMode === 'manual'" class="gb-install-group">
+                <input v-model="installGroup" type="text" :placeholder="t('gameBanana.installGroupManualPlaceholder')" />
+              </label>
+              <label v-else class="gb-install-group">
+                <el-select
+                  v-model="installGroup"
+                  class="gb-install-path-select"
+                  popper-class="gamebanana-select-popper"
+                  :loading="loadingMatchingIconGroups"
+                  :disabled="loadingMatchingIconGroups || matchingIconGroups.length === 0"
+                  :placeholder="loadingMatchingIconGroups ? t('gameBanana.loadingMatchingIconPaths') : t('gameBanana.noMatchingIconPaths')"
+                  :no-data-text="t('gameBanana.noMatchingIconPaths')"
+                >
+                  <el-option v-for="group in matchingIconGroups" :key="group.id" :label="group.id" :value="group.id" />
+                </el-select>
+                <button type="button" class="gb-install-path-refresh" :disabled="loadingMatchingIconGroups" @click="loadMatchingIconGroups">↻</button>
+              </label>
+            </div>
             <div v-for="file in detail.files" :key="file._idRow || file._sFile" class="gb-file">
               <span>
                 <strong data-gb-translate>{{ file._sFile || t('gameBanana.download') }}</strong>
@@ -2892,7 +2970,7 @@ onBeforeUnmount(() => {
 .gb-rich-text :deep(p:hover), .gb-rich-text :deep(li:hover), .gb-rich-text :deep(blockquote:hover), .gb-rich-text :deep(pre:hover), .gb-rich-text :deep(td:hover), .gb-rich-text :deep(th:hover) { outline: 1px dashed rgba(var(--theme-surface-tint-rgb),.36); outline-offset: 3px; }
 .gb-files { display: grid; gap: 6px; }
 .gb-files h3 { color: rgba(var(--theme-text-primary-rgb), 0.8); font-size: 12px; }
-.gb-install-group { display: flex; align-items: center; gap: 8px; color: rgba(var(--theme-text-secondary-rgb),.66); font-size: 10px; }.gb-install-group input { min-width: 0; flex: 1; height: 25px; padding: 0 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; background: rgba(0,0,0,.18); color: rgba(var(--theme-text-primary-rgb),.86); font: inherit; }
+.gb-install-target { display:grid; gap:6px; padding:7px; border:1px solid rgba(255,255,255,.08); border-radius:7px; background:rgba(255,255,255,.025); }.gb-install-target-label { color:rgba(var(--theme-text-secondary-rgb),.66); font-size:10px; }.gb-install-group-modes { display:flex; min-height:27px; overflow:hidden; border-radius:6px; }.gb-install-group-modes :deep(.el-radio-button) { flex:1 1 0; min-width:0; }.gb-install-group-modes :deep(.el-radio-button__inner) { display:flex; align-items:center; justify-content:center; box-sizing:border-box; width:100%; min-height:27px; padding:0 7px; border:none!important; outline:none!important; background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.78); font:inherit; font-size:10px; line-height:1; box-shadow:none!important; transition:background .16s ease,color .16s ease; }.gb-install-group-modes :deep(.el-radio-button__inner:hover) { background:rgba(var(--theme-surface-tint-rgb),.16); color:rgba(var(--theme-text-primary-rgb),.96); }.gb-install-group-modes :deep(.el-radio-button.is-active .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.22); color:rgba(var(--theme-text-primary-rgb),.98); box-shadow:none!important; }.gb-install-group { display:flex; align-items:center; gap:6px; color:rgba(var(--theme-text-secondary-rgb),.66); font-size:10px; }.gb-install-group input { min-width:0; flex:1; height:27px; box-sizing:border-box; padding:0 8px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:5px; outline:none; background:rgba(var(--theme-surface-tint-rgb),.055); color:rgba(var(--theme-text-primary-rgb),.86); font:inherit; }.gb-install-group input[readonly] { color:rgba(var(--theme-text-secondary-rgb),.72); cursor:default; }.gb-install-path-select { min-width:0; flex:1; }.gb-install-path-select :deep(.el-select__wrapper) { min-height:27px; padding:0 8px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:5px; background:rgba(var(--theme-surface-tint-rgb),.055); box-shadow:none!important; }.gb-install-path-select :deep(.el-select__selected-item),.gb-install-path-select :deep(.el-select__placeholder) { color:rgba(var(--theme-text-primary-rgb),.86); font-size:10px; }.gb-install-path-select :deep(.el-select__wrapper.is-focused) { border-color:rgba(var(--theme-surface-tint-rgb),.48); box-shadow:0 0 0 2px rgba(var(--theme-surface-tint-rgb),.10)!important; }.gb-install-path-refresh { width:27px; height:27px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:5px; background:rgba(var(--theme-surface-tint-rgb),.07); color:rgba(var(--theme-text-primary-rgb),.82); cursor:pointer; }.gb-install-path-refresh:hover:not(:disabled) { background:rgba(var(--theme-surface-tint-rgb),.16); }.gb-install-path-refresh:disabled { opacity:.45; cursor:default; }
 .gb-file { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; background: rgba(255,255,255,0.035); color: inherit; text-align: left; }
 .gb-file:hover { background: rgba(var(--theme-surface-tint-rgb), 0.1); border-color: rgba(var(--theme-surface-tint-rgb), 0.25); }
 .gb-file > span:first-child { display: grid; min-width: 0; gap: 2px; }
