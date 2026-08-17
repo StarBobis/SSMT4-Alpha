@@ -4,15 +4,34 @@ export enum BGType {
 }
 
 export enum SSMTLocale {
+	de = 'de',
 	en = 'en',
+	es = 'es',
+	fr = 'fr',
+	it = 'it',
+	ja = 'ja',
+	ko = 'ko',
+	ru = 'ru',
 	zhs = 'zhs',
 	zht = 'zht',
 }
 
+export const SSMT_LOCALE_OPTIONS = [
+	{ value: SSMTLocale.de, label: 'Deutsch', badge: 'DE' },
+	{ value: SSMTLocale.en, label: 'English', badge: 'EN' },
+	{ value: SSMTLocale.es, label: 'Español', badge: 'ES' },
+	{ value: SSMTLocale.fr, label: 'Français', badge: 'FR' },
+	{ value: SSMTLocale.it, label: 'Italiano', badge: 'IT' },
+	{ value: SSMTLocale.ja, label: '日本語', badge: '日' },
+	{ value: SSMTLocale.ko, label: '한국어', badge: '한' },
+	{ value: SSMTLocale.ru, label: 'Русский', badge: 'RU' },
+	{ value: SSMTLocale.zhs, label: '简体中文', badge: '中' },
+	{ value: SSMTLocale.zht, label: '繁體中文', badge: '繁' },
+] as const
+
 const normalizeLocale = (value: unknown): SSMTLocale => {
-	if (value === SSMTLocale.en || value === SSMTLocale.zhs || value === SSMTLocale.zht) {
-		return value
-	}
+	const locale = SSMT_LOCALE_OPTIONS.find(option => option.value === value)?.value
+	if (locale) return locale
 	return SSMTLocale.en
 }
 

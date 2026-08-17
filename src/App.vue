@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
-import { normalizeAppUiScale, SSMTLocale, type PageVisibilitySettings } from "./store/AppSettings";
+import { normalizeAppUiScale, SSMT_LOCALE_OPTIONS, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
 import { useI18n } from 'vue-i18n';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -259,16 +259,16 @@ onUnmounted(() => {
           <div :key="currentFirstRunStep" class="first-run-body">
             <div v-if="currentFirstRunStep === 'language'" class="first-run-lang-grid">
               <button
-                v-for="lang in ([SSMTLocale.en, SSMTLocale.zhs, SSMTLocale.zht] as const)"
-                :key="lang"
+                v-for="language in SSMT_LOCALE_OPTIONS"
+                :key="language.value"
                 type="button"
                 class="first-run-lang"
-                :class="{ 'is-selected': appSettings.locale === lang }"
-                @click="appSettings.locale = lang"
+                :class="{ 'is-selected': appSettings.locale === language.value }"
+                @click="appSettings.locale = language.value"
               >
-                <span class="first-run-lang-code">{{ lang === SSMTLocale.en ? 'EN' : lang === SSMTLocale.zht ? '繁' : '中' }}</span>
-                <span class="first-run-lang-name">{{ t(`settings.personalization.languageOptions.${lang}`) }}</span>
-                <i v-if="appSettings.locale === lang" class="first-run-check"></i>
+                <span class="first-run-lang-code">{{ language.badge }}</span>
+                <span class="first-run-lang-name">{{ language.label }}</span>
+                <i v-if="appSettings.locale === language.value" class="first-run-check"></i>
               </button>
             </div>
             <div v-else-if="currentFirstRunStep === 'role'" class="first-run-role-grid">

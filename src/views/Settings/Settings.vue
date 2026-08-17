@@ -4,7 +4,7 @@ import {
   APP_UI_SCALE_MAX,
   APP_UI_SCALE_MIN,
   APP_UI_SCALE_STEP,
-  SSMTLocale,
+  SSMT_LOCALE_OPTIONS,
 } from '../../store/AppSettings'
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -37,11 +37,7 @@ const appSettings = AppStateManager.appSettings;
 const textureMarkStyleOptions = ['Hash', 'Slot', 'SharedSlot'] as const;
 const { t } = useI18n();
 
-const languageOptions = computed(() => [
-  { value: SSMTLocale.en, label: t('settings.personalization.languageOptions.en') },
-  { value: SSMTLocale.zhs, label: t('settings.personalization.languageOptions.zhs') },
-  { value: SSMTLocale.zht, label: t('settings.personalization.languageOptions.zht') },
-]);
+const languageOptions = SSMT_LOCALE_OPTIONS;
 
 const appVersion = ref('1.0.0');
 const workspaceAccessProxyPortInput = ref('');
