@@ -115,6 +115,15 @@ const mapWithConcurrency = async <T, R>(
 };
 const DDS_3D_TEXTURE_MAX_DIMENSION = 1024;
 const PREVIEW_LIGHTING_MODE_STORAGE_KEY = 'ssmt4:post-processing-preview:lighting-mode';
+const PREVIEW_OUTLINE_STORAGE_KEY = 'ssmt4:post-processing-preview:outline';
+const PREVIEW_OUTLINE_WIDTH_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-width';
+const PREVIEW_OUTLINE_COLOR_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-color';
+const PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-direction';
+const PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-weight';
+const PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-visualization';
+const PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-skip-transparent';
+const OUTLINE_WIDTH_MIN = 0.0001;
+const OUTLINE_WIDTH_MAX = 0.01;
 // Preview-space coordinates are metres.  Values beyond this threshold usually
 // mean an incomplete/misinterpreted vertex stream rather than an intentional
 // game model.  Keep it rendered, but mark it for the user and exclude it from
@@ -137,6 +146,20 @@ const lightingMode = ref<LightingMode>(AppStateManager.appSettings.postProcessPr
 // This controls the tangent-space normal's tilt, not mesh vertex displacement.
 // Keeping 1.0 as the default applies a normal map without exaggerating it.
 const normalStrength = ref(1);
+const outlineEnabled = ref(localStorage.getItem(PREVIEW_OUTLINE_STORAGE_KEY) === 'true');
+const outlineWidth = ref(Number.parseFloat(localStorage.getItem(PREVIEW_OUTLINE_WIDTH_STORAGE_KEY) || '0.001'));
+const outlineColor = ref(localStorage.getItem(PREVIEW_OUTLINE_COLOR_STORAGE_KEY) || '#080a0f');
+const outlineDirectionSource = ref<OutlineDirectionSource>((localStorage.getItem(PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY) as OutlineDirectionSource) || 'normal');
+const outlineWeightSource = ref<OutlineWeightSource>((localStorage.getItem(PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY) as OutlineWeightSource) || 'constant');
+const outlineVisualization = ref<OutlineVisualization>((localStorage.getItem(PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY) as OutlineVisualization) || 'outline');
+const outlineSkipTransparent = ref(localStorage.getItem(PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY) !== 'false');
+const outlineWidthSlider = computed({
+	get: () => Math.log(outlineWidth.value / OUTLINE_WIDTH_MIN) / Math.log(OUTLINE_WIDTH_MAX / OUTLINE_WIDTH_MIN),
+	set: (position: number) => {
+		outlineWidth.value = OUTLINE_WIDTH_MIN * Math.pow(OUTLINE_WIDTH_MAX / OUTLINE_WIDTH_MIN, position);
+	},
+});
+const outlineWidthMarks = { 0: '0.0001', 0.5: '0.001', 1: '0.01' };
 const isLoading = ref(false);
 const isBuildingPreview = ref(false);
 const previewError = ref('');
@@ -159,6 +182,144 @@ let mesh: THREE.Mesh | undefined;
 let previewRoot: THREE.Group | undefined;
 let framingMeshes: THREE.Mesh[] = [];
 let passiveMaterials: THREE.ShaderMaterial[] = [];
+type OutlineDirectionSource = 'normal' | 'tangent' | '-tangent' | 'auto';
+type OutlineWeightSource = 'constant' | 'color-a-raw' | 'color-a-signed';
+type OutlineVisualization = 'outline' | 'normal' | 'tangent' | 'color-a' | 'weight';
+type OutlineSettings = {
+	enabled: boolean;
+	width: number;
+	color: string;
+	directionSource: OutlineDirectionSource;
+	weightSource: OutlineWeightSource;
+	visualization: OutlineVisualization;
+	skipTransparent: boolean;
+};
+
+class OutlineController {
+	private readonly proxies = new Map<THREE.Mesh, THREE.Mesh>();
+	private settings: OutlineSettings;
+
+	constructor(settings: OutlineSettings) {
+		this.settings = settings;
+	}
+
+	attach(sourceMesh: THREE.Mesh): void {
+		if (this.proxies.has(sourceMesh)) return;
+		const geometry = sourceMesh.geometry;
+		geometry.computeBoundingSphere();
+		const radius = geometry.boundingSphere?.radius || 1;
+		const outlineMaterial = new THREE.ShaderMaterial({
+			uniforms: {
+				uOutlineWidth: { value: Math.max(radius * this.settings.width, 0.0001) },
+				uOutlineColor: { value: new THREE.Color(this.settings.color) },
+				uDirectionSource: { value: ['normal', 'tangent', '-tangent', 'auto'].indexOf(this.settings.directionSource) },
+				uWeightSource: { value: ['constant', 'color-a-raw', 'color-a-signed'].indexOf(this.settings.weightSource) },
+				uVisualization: { value: ['outline', 'normal', 'tangent', 'color-a', 'weight'].indexOf(this.settings.visualization) },
+			},
+			vertexShader: `
+				uniform float uOutlineWidth;
+				uniform int uDirectionSource;
+				uniform int uWeightSource;
+				attribute vec4 ssmtRawTangent;
+				attribute vec4 ssmtRawColor;
+				varying vec3 vOutlineDirection;
+				varying vec3 vRawTangent;
+				varying float vColorA;
+				varying float vOutlineWeight;
+				void main() {
+					vec3 safeNormal = length(normal) > 0.00001 ? normalize(normal) : vec3(0.0, 1.0, 0.0);
+					bool hasTangent = length(ssmtRawTangent.xyz) > 0.00001;
+					vec3 safeTangent = hasTangent ? normalize(ssmtRawTangent.xyz) : safeNormal;
+					vec3 outlineDirection = safeNormal;
+					if (uDirectionSource == 1) outlineDirection = safeTangent;
+					if (uDirectionSource == 2) outlineDirection = -safeTangent;
+					if (uDirectionSource == 3) outlineDirection = hasTangent ? safeTangent : safeNormal;
+					float outlineWeight = 1.0;
+					if (uWeightSource == 1) outlineWeight = ssmtRawColor.a;
+					if (uWeightSource == 2) outlineWeight = ssmtRawColor.a * 2.0 - 1.0;
+					vec3 transformedPosition = position + outlineDirection * uOutlineWidth * outlineWeight;
+					vOutlineDirection = outlineDirection;
+					vRawTangent = safeTangent;
+					vColorA = ssmtRawColor.a;
+					vOutlineWeight = outlineWeight;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4(transformedPosition, 1.0);
+				}
+			`,
+			fragmentShader: `
+				uniform vec3 uOutlineColor;
+				uniform int uVisualization;
+				varying vec3 vOutlineDirection;
+				varying vec3 vRawTangent;
+				varying float vColorA;
+				varying float vOutlineWeight;
+				void main() {
+					vec3 debugColor = uOutlineColor;
+					if (uVisualization == 1) debugColor = vOutlineDirection * 0.5 + 0.5;
+					if (uVisualization == 2) debugColor = vRawTangent * 0.5 + 0.5;
+					if (uVisualization == 3) debugColor = vec3(vColorA);
+					if (uVisualization == 4) debugColor = vec3(vOutlineWeight * 0.5 + 0.5);
+					gl_FragColor = vec4(debugColor, 1.0);
+					#include <colorspace_fragment>
+				}
+			`,
+			side: THREE.BackSide,
+			depthTest: true,
+			depthWrite: false,
+		});
+		const proxy = new THREE.Mesh(geometry, outlineMaterial);
+		proxy.name = '__ssmt_outline_proxy__';
+		proxy.renderOrder = sourceMesh.renderOrder + 1;
+		proxy.visible = this.settings.enabled && !this.shouldSkip(sourceMesh);
+		proxy.frustumCulled = sourceMesh.frustumCulled;
+		sourceMesh.add(proxy);
+		this.proxies.set(sourceMesh, proxy);
+	}
+
+	detach(sourceMesh: THREE.Mesh): void {
+		const proxy = this.proxies.get(sourceMesh);
+		if (!proxy) return;
+		proxy.removeFromParent();
+		(proxy.material as THREE.Material).dispose();
+		this.proxies.delete(sourceMesh);
+	}
+
+	updateSettings(settings: OutlineSettings): void {
+		this.settings = settings;
+		for (const [sourceMesh, proxy] of this.proxies) {
+			const geometry = sourceMesh.geometry;
+			geometry.computeBoundingSphere();
+			const radius = geometry.boundingSphere?.radius || 1;
+			const proxyMaterial = proxy.material as THREE.ShaderMaterial;
+			proxy.visible = settings.enabled && !this.shouldSkip(sourceMesh);
+			proxyMaterial.uniforms.uOutlineWidth.value = Math.max(radius * settings.width, 0.0001);
+			proxyMaterial.uniforms.uOutlineColor.value.set(settings.color);
+			proxyMaterial.uniforms.uDirectionSource.value = ['normal', 'tangent', '-tangent', 'auto'].indexOf(settings.directionSource);
+			proxyMaterial.uniforms.uWeightSource.value = ['constant', 'color-a-raw', 'color-a-signed'].indexOf(settings.weightSource);
+			proxyMaterial.uniforms.uVisualization.value = ['outline', 'normal', 'tangent', 'color-a', 'weight'].indexOf(settings.visualization);
+		}
+	}
+
+	private shouldSkip(sourceMesh: THREE.Mesh): boolean {
+		if (!this.settings.skipTransparent) return false;
+		const sourceMaterials = Array.isArray(sourceMesh.material) ? sourceMesh.material : [sourceMesh.material];
+		return sourceMaterials.some(item => item.transparent);
+	}
+
+	dispose(): void {
+		for (const sourceMesh of [...this.proxies.keys()]) this.detach(sourceMesh);
+	}
+}
+
+const currentOutlineSettings = (): OutlineSettings => ({
+	enabled: outlineEnabled.value,
+	width: Math.min(Math.max(outlineWidth.value || 0.001, OUTLINE_WIDTH_MIN), OUTLINE_WIDTH_MAX),
+	color: outlineColor.value || '#080a0f',
+	directionSource: outlineDirectionSource.value,
+	weightSource: outlineWeightSource.value,
+	visualization: outlineVisualization.value,
+	skipTransparent: outlineSkipTransparent.value,
+});
+const outlineController = new OutlineController(currentOutlineSettings());
 let resizeObserver: ResizeObserver | undefined;
 let zoomResizeObserver: ResizeObserver | undefined;
 let zoomBoundsObserver: ResizeObserver | undefined;
@@ -988,10 +1149,13 @@ const framePreview = () => {
 };
 
 const clearPreviewMesh = () => {
+	outlineController.dispose();
 	if (previewRoot && scene) {
 		scene.remove(previewRoot);
+		const disposedGeometries = new Set<THREE.BufferGeometry>();
 		previewRoot.traverse(object => {
-			if (object instanceof THREE.Mesh) {
+			if (object instanceof THREE.Mesh && !disposedGeometries.has(object.geometry)) {
+				disposedGeometries.add(object.geometry);
 				object.geometry.dispose();
 			}
 		});
@@ -1390,15 +1554,19 @@ const createPreviewGeometry = async (
 
 	const positionSource = getElementSources(dataType, 'POSITION')[0];
 	const normalSource = getElementSources(dataType, 'NORMAL')[0];
+	const tangentSource = getElementSources(dataType, 'TANGENT')[0];
+	const colorSource = getElementSources(dataType, 'COLOR')[0];
 	const indexBuffer = dataType.json.IndexBufferList?.[0];
 	if (!positionSource || !indexBuffer?.FileName) {
 		throw new Error(t('markTexture.preview.unsupportedGeometry'));
 	}
 
 	const sourceBufferCache = new Map<string, Uint8Array>();
-	const [positionData, normalData, uvData, indexData] = await Promise.all([
+	const [positionData, normalData, tangentData, colorData, uvData, indexData] = await Promise.all([
 		getBufferData(dataType, positionSource, sourceBufferCache),
 		normalSource ? getBufferData(dataType, normalSource, sourceBufferCache) : Promise.resolve(undefined),
+		tangentSource ? getBufferData(dataType, tangentSource, sourceBufferCache) : Promise.resolve(undefined),
+		colorSource ? getBufferData(dataType, colorSource, sourceBufferCache) : Promise.resolve(undefined),
 		getBufferData(dataType, uvLayer, sourceBufferCache),
 		readFile(await join(dataType.folderPath, indexBuffer.FileName)),
 	]);
@@ -1431,6 +1599,9 @@ const createPreviewGeometry = async (
 	const remappedIndices: number[] = [];
 	const positions: number[] = [];
 	const normals: number[] = [];
+	const rawTangents: number[] = [];
+	const rawColors: number[] = [];
+	const rawNormalW: number[] = [];
 	const uvs: number[] = [];
 	const remap = new Map<number, number>();
 	let useSourceNormals = !!normalSource;
@@ -1476,6 +1647,8 @@ const createPreviewGeometry = async (
 					hasImplausibleCoordinates = true;
 				}
 				const normalValues = readElementValues(normalData, normalSource, bufferIndex);
+				const tangentValues = readElementValues(tangentData, tangentSource, bufferIndex);
+				const colorValues = readElementValues(colorData, colorSource, bufferIndex);
 				const uv = triangleUvs[vertexOffset]!;
 				positions.push(...position);
 				if (normalValues && normalValues.length >= 3) {
@@ -1484,6 +1657,12 @@ const createPreviewGeometry = async (
 					useSourceNormals = false;
 					normals.push(0, 0, 0);
 				}
+				const tangent = tangentValues && tangentValues.length >= 3
+					? applyPluginCoordinateSystem(tangentValues)
+					: [0, 0, 0];
+				rawTangents.push(tangent[0], tangent[1], tangent[2], tangentValues?.[3] ?? 1);
+				rawColors.push(colorValues?.[0] ?? 1, colorValues?.[1] ?? 1, colorValues?.[2] ?? 1, colorValues?.[3] ?? 1);
+				rawNormalW.push(normalValues?.[3] ?? 0);
 				// Keep 3DMigoto's UVs unchanged. DDS rows and Direct3D UVs share a
 				// top-origin convention; uploading DDS data without flipY preserves it.
 				// Blender's importer uses 1 - v for Blender only and is not applicable here.
@@ -1500,6 +1679,9 @@ const createPreviewGeometry = async (
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+	geometry.setAttribute('ssmtRawTangent', new THREE.Float32BufferAttribute(rawTangents, 4));
+	geometry.setAttribute('ssmtRawColor', new THREE.Float32BufferAttribute(rawColors, 4));
+	geometry.setAttribute('ssmtRawNormalW', new THREE.Float32BufferAttribute(rawNormalW, 1));
 	geometry.setIndex(
 		new THREE.BufferAttribute(
 			remap.size > 65_535 ? new Uint32Array(remappedIndices) : new Uint16Array(remappedIndices),
@@ -1544,15 +1726,19 @@ const createPermissivePreviewGeometry = async (
 ): Promise<PreviewGeometryBuildResult | undefined> => {
 	const positionSource = getElementSources(dataType, 'POSITION')[0];
 	const normalSource = getElementSources(dataType, 'NORMAL')[0];
+	const tangentSource = getElementSources(dataType, 'TANGENT')[0];
+	const colorSource = getElementSources(dataType, 'COLOR')[0];
 	const indexBuffer = dataType.json.IndexBufferList?.[0];
 	if (!positionSource || !indexBuffer?.FileName) {
 		return undefined;
 	}
 
 	const sourceBufferCache = new Map<string, Uint8Array>();
-	const [positionData, normalData, indexData] = await Promise.all([
+	const [positionData, normalData, tangentData, colorData, indexData] = await Promise.all([
 		getBufferData(dataType, positionSource, sourceBufferCache),
 		normalSource ? getBufferData(dataType, normalSource, sourceBufferCache) : Promise.resolve(undefined),
+		tangentSource ? getBufferData(dataType, tangentSource, sourceBufferCache) : Promise.resolve(undefined),
+		colorSource ? getBufferData(dataType, colorSource, sourceBufferCache) : Promise.resolve(undefined),
 		readFile(await join(dataType.folderPath, indexBuffer.FileName)),
 	]);
 	if (buildToken !== previewBuildToken) {
@@ -1570,6 +1756,9 @@ const createPermissivePreviewGeometry = async (
 	);
 	const positions: number[] = [];
 	const normals: number[] = [];
+	const rawTangents: number[] = [];
+	const rawColors: number[] = [];
+	const rawNormalW: number[] = [];
 	const uvs: number[] = [];
 	const remappedIndices: number[] = [];
 	const remap = new Map<number, number>();
@@ -1601,12 +1790,20 @@ const createPermissivePreviewGeometry = async (
 				remap.set(bufferIndex, targetIndex);
 				positions.push(...applyPluginCoordinateSystem(positionValues));
 				const normalValues = readElementValues(normalData, normalSource, bufferIndex);
+				const tangentValues = readElementValues(tangentData, tangentSource, bufferIndex);
+				const colorValues = readElementValues(colorData, colorSource, bufferIndex);
 				if (normalValues && normalValues.length >= 3) {
 					normals.push(...applyPluginCoordinateSystem(normalValues));
 				} else {
 					useSourceNormals = false;
 					normals.push(0, 0, 0);
 				}
+				const tangent = tangentValues && tangentValues.length >= 3
+					? applyPluginCoordinateSystem(tangentValues)
+					: [0, 0, 0];
+				rawTangents.push(tangent[0], tangent[1], tangent[2], tangentValues?.[3] ?? 1);
+				rawColors.push(colorValues?.[0] ?? 1, colorValues?.[1] ?? 1, colorValues?.[2] ?? 1, colorValues?.[3] ?? 1);
+				rawNormalW.push(normalValues?.[3] ?? 0);
 				uvs.push(0, 0);
 			}
 			triangleRemappedIndices.push(targetIndex);
@@ -1622,6 +1819,9 @@ const createPermissivePreviewGeometry = async (
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+	geometry.setAttribute('ssmtRawTangent', new THREE.Float32BufferAttribute(rawTangents, 4));
+	geometry.setAttribute('ssmtRawColor', new THREE.Float32BufferAttribute(rawColors, 4));
+	geometry.setAttribute('ssmtRawNormalW', new THREE.Float32BufferAttribute(rawNormalW, 1));
 	geometry.setIndex(new THREE.BufferAttribute(
 		remap.size > 65_535 ? new Uint32Array(remappedIndices) : new Uint16Array(remappedIndices),
 		1
@@ -1732,6 +1932,7 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		material.uniforms.uNeedsReview.value = activeGeometry.needsReview ? 1 : 0;
 		mesh = new THREE.Mesh(activeGeometry.geometry, material);
 		previewRoot.add(mesh);
+		outlineController.attach(mesh);
 		meshes.push(mesh);
 		if (!activeGeometry.needsReview) healthyMeshes.push(mesh);
 		const activeTextureTarget = visibleSubMeshTargets.value.find(target => (
@@ -1760,6 +1961,7 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		});
 		const passiveMesh = new THREE.Mesh(source.geometry.geometry, passiveMaterial);
 		previewRoot.add(passiveMesh);
+		outlineController.attach(passiveMesh);
 		meshes.push(passiveMesh);
 		if (!source.geometry.needsReview) healthyMeshes.push(passiveMesh);
 	}
@@ -1999,6 +2201,18 @@ onBeforeUnmount(() => {
 	disposeRenderer();
 });
 
+watch([outlineEnabled, outlineWidth, outlineColor, outlineDirectionSource, outlineWeightSource, outlineVisualization, outlineSkipTransparent], ([enabled, width, color, direction, weight, visualization, skipTransparent]) => {
+	localStorage.setItem(PREVIEW_OUTLINE_STORAGE_KEY, String(enabled));
+	localStorage.setItem(PREVIEW_OUTLINE_WIDTH_STORAGE_KEY, String(width));
+	localStorage.setItem(PREVIEW_OUTLINE_COLOR_STORAGE_KEY, color);
+	localStorage.setItem(PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY, direction);
+	localStorage.setItem(PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY, weight);
+	localStorage.setItem(PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY, visualization);
+	localStorage.setItem(PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY, String(skipTransparent));
+	outlineController.updateSettings(currentOutlineSettings());
+	renderPreview();
+});
+
 // This view is route-cached. Explicitly close the teleported overlay whenever
 // the page is deactivated so it cannot survive a page switch.
 onDeactivated(() => {
@@ -2137,6 +2351,56 @@ onActivated(async () => {
 				<label class="displacement-control">
 					<span>{{ t('markTexture.preview.normalDisplacement') }}</span>
 					<el-slider v-model="normalStrength" :min="0" :max="1" :step="0.002" :disabled="!selectedNormal" />
+				</label>
+				<label class="outline-control">
+					<span>{{ t('markTexture.preview.outline') }}</span>
+					<el-switch v-model="outlineEnabled" />
+				</label>
+				<label class="displacement-control">
+					<span>{{ t('markTexture.preview.outlineWidth') }}</span>
+					<el-slider
+						v-model="outlineWidthSlider"
+						:min="0"
+						:max="1"
+						:step="0.001"
+						:marks="outlineWidthMarks"
+						:format-tooltip="() => outlineWidth.toPrecision(3)"
+					/>
+				</label>
+				<label class="outline-control">
+					<span>{{ t('markTexture.preview.outlineColor') }}</span>
+					<el-color-picker v-model="outlineColor" size="small" />
+				</label>
+				<label>
+					<span>{{ t('markTexture.preview.outlineDirection') }}</span>
+					<el-select v-model="outlineDirectionSource" size="small">
+						<el-option :label="t('markTexture.preview.outlineDirectionNormal')" value="normal" />
+						<el-option :label="t('markTexture.preview.outlineDirectionTangent')" value="tangent" />
+						<el-option :label="t('markTexture.preview.outlineDirectionNegativeTangent')" value="-tangent" />
+						<el-option :label="t('markTexture.preview.outlineDirectionAuto')" value="auto" />
+					</el-select>
+				</label>
+				<label>
+					<span>{{ t('markTexture.preview.outlineWeight') }}</span>
+					<el-select v-model="outlineWeightSource" size="small">
+						<el-option :label="t('markTexture.preview.outlineWeightConstant')" value="constant" />
+						<el-option :label="t('markTexture.preview.outlineWeightColorARaw')" value="color-a-raw" />
+						<el-option :label="t('markTexture.preview.outlineWeightColorASigned')" value="color-a-signed" />
+					</el-select>
+				</label>
+				<label>
+					<span>{{ t('markTexture.preview.outlineVisualization') }}</span>
+					<el-select v-model="outlineVisualization" size="small">
+						<el-option :label="t('markTexture.preview.outlineVisualizationOutline')" value="outline" />
+						<el-option :label="t('markTexture.preview.outlineVisualizationNormal')" value="normal" />
+						<el-option :label="t('markTexture.preview.outlineVisualizationTangent')" value="tangent" />
+						<el-option :label="t('markTexture.preview.outlineVisualizationColorA')" value="color-a" />
+						<el-option :label="t('markTexture.preview.outlineVisualizationWeight')" value="weight" />
+					</el-select>
+				</label>
+				<label class="outline-control">
+					<span>{{ t('markTexture.preview.outlineSkipTransparent') }}</span>
+					<el-switch v-model="outlineSkipTransparent" />
 				</label>
 				<div class="preview-settings-map-status">
 					<span>{{ selectedDiffuse ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
@@ -2323,6 +2587,13 @@ onActivated(async () => {
 	gap: 6px;
 	color: rgba(232, 236, 245, 0.72);
 	font-size: 11px;
+}
+
+.preview-settings-page > .outline-control {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 32px;
 }
 
 .preview-settings-page :deep(.el-select__wrapper) {
