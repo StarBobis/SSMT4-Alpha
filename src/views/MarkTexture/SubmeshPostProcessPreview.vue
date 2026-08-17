@@ -122,6 +122,10 @@ const PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY = 'ssmt4:post-processing-preview:out
 const PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-weight';
 const PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-visualization';
 const PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-skip-transparent';
+const PREVIEW_OUTLINE_PREFERENCE_VERSION_KEY = 'ssmt4:post-processing-preview:outline-preference-version';
+const PREVIEW_EMISSION_STORAGE_KEY = 'ssmt4:post-processing-preview:diffuse-alpha-emission';
+const PREVIEW_EMISSION_COLOR_STORAGE_KEY = 'ssmt4:post-processing-preview:emission-color';
+const PREVIEW_EMISSION_FACTOR_STORAGE_KEY = 'ssmt4:post-processing-preview:emission-factor';
 const OUTLINE_WIDTH_MIN = 0.0001;
 const OUTLINE_WIDTH_MAX = 0.01;
 // Preview-space coordinates are metres.  Values beyond this threshold usually
@@ -149,10 +153,20 @@ const normalStrength = ref(1);
 const outlineEnabled = ref(localStorage.getItem(PREVIEW_OUTLINE_STORAGE_KEY) === 'true');
 const outlineWidth = ref(Number.parseFloat(localStorage.getItem(PREVIEW_OUTLINE_WIDTH_STORAGE_KEY) || '0.001'));
 const outlineColor = ref(localStorage.getItem(PREVIEW_OUTLINE_COLOR_STORAGE_KEY) || '#080a0f');
-const outlineDirectionSource = ref<OutlineDirectionSource>((localStorage.getItem(PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY) as OutlineDirectionSource) || 'normal');
-const outlineWeightSource = ref<OutlineWeightSource>((localStorage.getItem(PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY) as OutlineWeightSource) || 'constant');
-const outlineVisualization = ref<OutlineVisualization>((localStorage.getItem(PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY) as OutlineVisualization) || 'outline');
+const hasPreferredOutlineDefaults = localStorage.getItem(PREVIEW_OUTLINE_PREFERENCE_VERSION_KEY) === '2';
+const outlineDirectionSource = ref<OutlineDirectionSource>(hasPreferredOutlineDefaults
+	? (localStorage.getItem(PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY) as OutlineDirectionSource) || 'normal'
+	: 'normal');
+const outlineWeightSource = ref<OutlineWeightSource>(hasPreferredOutlineDefaults
+	? (localStorage.getItem(PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY) as OutlineWeightSource) || 'color-a-raw'
+	: 'color-a-raw');
+const outlineVisualization = ref<OutlineVisualization>(hasPreferredOutlineDefaults
+	? (localStorage.getItem(PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY) as OutlineVisualization) || 'outline'
+	: 'outline');
 const outlineSkipTransparent = ref(localStorage.getItem(PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY) !== 'false');
+const diffuseAlphaEmissionEnabled = ref(localStorage.getItem(PREVIEW_EMISSION_STORAGE_KEY) === 'true');
+const emissionColor = ref(localStorage.getItem(PREVIEW_EMISSION_COLOR_STORAGE_KEY) || '#ffffff');
+const emissionFactor = ref(Number.parseFloat(localStorage.getItem(PREVIEW_EMISSION_FACTOR_STORAGE_KEY) || '1'));
 const outlineWidthSlider = computed({
 	get: () => Math.log(outlineWidth.value / OUTLINE_WIDTH_MIN) / Math.log(OUTLINE_WIDTH_MAX / OUTLINE_WIDTH_MIN),
 	set: (position: number) => {
@@ -265,6 +279,11 @@ class OutlineController {
 			side: THREE.BackSide,
 			depthTest: true,
 			depthWrite: false,
+			// Keep nearly coplanar inward/negative-semantic shells stable as camera
+			// distance reduces depth-buffer precision.
+			polygonOffset: true,
+			polygonOffsetFactor: 1,
+			polygonOffsetUnits: 1,
 		});
 		const proxy = new THREE.Mesh(geometry, outlineMaterial);
 		proxy.name = '__ssmt_outline_proxy__';
@@ -807,6 +826,9 @@ const createMaterial = (color = fallbackColor.value, needsReview = false) => {
 			uNormalStrength: { value: normalStrength.value },
 			uFallbackColor: { value: color.clone() },
 			uNeedsReview: { value: needsReview ? 1 : 0 },
+			uEmissionEnabled: { value: diffuseAlphaEmissionEnabled.value ? 1 : 0 },
+			uEmissionColor: { value: new THREE.Color(emissionColor.value) },
+			uEmissionFactor: { value: Math.max(0, emissionFactor.value || 0) },
 			// This direction is deliberately expressed in world coordinates.  Camera
 			// orbiting, or a future mesh transform, must not rotate the light.
 			uWorldLightDirection: { value: new THREE.Vector3(0.4, 0.8, 0.55).normalize() },
@@ -832,6 +854,9 @@ const createMaterial = (color = fallbackColor.value, needsReview = false) => {
 			uniform float uNormalStrength;
 			uniform vec3 uFallbackColor;
 			uniform float uNeedsReview;
+			uniform float uEmissionEnabled;
+			uniform vec3 uEmissionColor;
+			uniform float uEmissionFactor;
 			uniform vec3 uWorldLightDirection;
 			varying vec2 vUv;
 			varying vec3 vWorldPosition;
@@ -872,15 +897,17 @@ const createMaterial = (color = fallbackColor.value, needsReview = false) => {
 			}
 
 			void main() {
-				vec3 baseColor = uFallbackColor;
+				vec4 diffuseSample = vec4(uFallbackColor, 0.0);
 				if (uHasDiffuseMap > 0.5) {
-					baseColor = texture2D(uDiffuseMap, vUv).rgb;
+					diffuseSample = texture2D(uDiffuseMap, vUv);
 				}
+				vec3 baseColor = diffuseSample.rgb;
+				vec3 emission = uEmissionColor * (uEmissionFactor * diffuseSample.a * uEmissionEnabled);
 				if (uNeedsReview > 0.5) {
 					baseColor = mix(baseColor, vec3(1.0, 0.05, 0.05), 0.5);
 				}
 				#ifdef UNLIT
-					gl_FragColor = vec4(baseColor, 1.0);
+					gl_FragColor = vec4(baseColor + emission, 1.0);
 				#else
 					vec3 normal = normalize(vWorldNormal);
 					if (uHasNormalMap > 0.5) {
@@ -906,12 +933,12 @@ const createMaterial = (color = fallbackColor.value, needsReview = false) => {
 					vec3 fresnel = f0 + (1.0 - f0) * pow(1.0 - vDotH, 5.0);
 					vec3 specular = distribution * geometry * fresnel / max(4.0 * nDotV * nDotL, 0.0001);
 					vec3 diffuse = (1.0 - fresnel) * baseColor / 3.14159265;
-					gl_FragColor = vec4(baseColor * 0.12 + (diffuse + specular) * nDotL, 1.0);
+					gl_FragColor = vec4(baseColor * 0.12 + (diffuse + specular) * nDotL + emission, 1.0);
 				#else
 					float halfLambert = clamp(dot(normal, normalize(uWorldLightDirection)) * 0.5 + 0.5, 0.0, 1.0);
 					float toonBand = floor(halfLambert * 3.0 + 0.001) / 2.0;
 					vec3 color = baseColor * (0.18 + toonBand * 0.82);
-					gl_FragColor = vec4(color, 1.0);
+					gl_FragColor = vec4(color + emission, 1.0);
 					#endif
 				#endif
 				#include <colorspace_fragment>
@@ -1301,6 +1328,9 @@ const updateMaterialSettings = () => {
 	for (const previewMaterial of [material, ...passiveMaterials]) {
 		if (previewMaterial) {
 			previewMaterial.uniforms.uNormalStrength.value = normalStrength.value;
+			previewMaterial.uniforms.uEmissionEnabled.value = diffuseAlphaEmissionEnabled.value ? 1 : 0;
+			previewMaterial.uniforms.uEmissionColor.value.set(emissionColor.value);
+			previewMaterial.uniforms.uEmissionFactor.value = Math.max(0, emissionFactor.value || 0);
 		}
 	}
 	if (material) {
@@ -2182,7 +2212,10 @@ watch(lightingMode, mode => {
 	saveLightingModePreference(mode);
 });
 
-watch([normalStrength, fallbackColor], () => {
+watch([normalStrength, fallbackColor, diffuseAlphaEmissionEnabled, emissionColor, emissionFactor], () => {
+	localStorage.setItem(PREVIEW_EMISSION_STORAGE_KEY, String(diffuseAlphaEmissionEnabled.value));
+	localStorage.setItem(PREVIEW_EMISSION_COLOR_STORAGE_KEY, emissionColor.value);
+	localStorage.setItem(PREVIEW_EMISSION_FACTOR_STORAGE_KEY, String(emissionFactor.value));
 	updateMaterialSettings();
 });
 
@@ -2209,6 +2242,7 @@ watch([outlineEnabled, outlineWidth, outlineColor, outlineDirectionSource, outli
 	localStorage.setItem(PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY, weight);
 	localStorage.setItem(PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY, visualization);
 	localStorage.setItem(PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY, String(skipTransparent));
+	localStorage.setItem(PREVIEW_OUTLINE_PREFERENCE_VERSION_KEY, '2');
 	outlineController.updateSettings(currentOutlineSettings());
 	renderPreview();
 });
@@ -2353,6 +2387,26 @@ onActivated(async () => {
 					<el-slider v-model="normalStrength" :min="0" :max="1" :step="0.002" :disabled="!selectedNormal" />
 				</label>
 				<label class="outline-control">
+					<span>{{ t('markTexture.preview.diffuseAlphaEmission') }}</span>
+					<el-switch v-model="diffuseAlphaEmissionEnabled" />
+				</label>
+				<label class="outline-control">
+					<span>{{ t('markTexture.preview.emissionColor') }}</span>
+					<el-color-picker v-model="emissionColor" size="small" :disabled="!diffuseAlphaEmissionEnabled" />
+				</label>
+				<label class="displacement-control">
+					<span>{{ t('markTexture.preview.emissionFactor') }}</span>
+					<el-slider
+						v-model="emissionFactor"
+						:min="0"
+						:max="8"
+						:step="0.01"
+						:disabled="!diffuseAlphaEmissionEnabled"
+						show-input
+						:show-input-controls="false"
+					/>
+				</label>
+				<label class="outline-control">
 					<span>{{ t('markTexture.preview.outline') }}</span>
 					<el-switch v-model="outlineEnabled" />
 				</label>
@@ -2383,8 +2437,8 @@ onActivated(async () => {
 				<label>
 					<span>{{ t('markTexture.preview.outlineWeight') }}</span>
 					<el-select v-model="outlineWeightSource" size="small">
-						<el-option :label="t('markTexture.preview.outlineWeightConstant')" value="constant" />
 						<el-option :label="t('markTexture.preview.outlineWeightColorARaw')" value="color-a-raw" />
+						<el-option :label="t('markTexture.preview.outlineWeightConstant')" value="constant" />
 						<el-option :label="t('markTexture.preview.outlineWeightColorASigned')" value="color-a-signed" />
 					</el-select>
 				</label>
