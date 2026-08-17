@@ -443,7 +443,7 @@ type StartGameUpdateCheckResult = {
   packageUpdate: UpdateInfo | null;
 };
 
-type LaunchPrecheckConfig = Pick<GameConfig, 'packageVersion' | 'gamePreset' | 'd3d11Mode' | 'checkDllUpdateBeforeLaunch' | 'check3DmigotoPackageUpdateBeforeLaunch' | 'includePrereleaseUpdates'>;
+type LaunchPrecheckConfig = Pick<GameConfig, 'packageVersion' | 'gamePreset' | 'd3d11Mode' | 'allowDllUpdates' | 'checkDllUpdateBeforeLaunch' | 'check3DmigotoPackageUpdateBeforeLaunch' | 'includePrereleaseUpdates'>;
 
 const openSettingsTo3Dmigoto = () => {
   showSettings.value = true;
@@ -482,7 +482,7 @@ const precheckStartGameUpdates = async (config: LaunchPrecheckConfig): Promise<S
   const currentCoreVersion = getStoredDllVersion(d3d11Mode);
   const currentPackageVersion = (config.packageVersion || '').trim();
   const gamePreset = (config.gamePreset || '').trim();
-  const shouldCheckDllUpdate = config.checkDllUpdateBeforeLaunch !== false;
+  const shouldCheckDllUpdate = config.allowDllUpdates !== false && config.checkDllUpdateBeforeLaunch !== false;
   const shouldCheckPackageUpdate = config.check3DmigotoPackageUpdateBeforeLaunch !== false;
 
   const dllPromise = shouldCheckDllUpdate && currentCoreVersion

@@ -111,6 +111,7 @@ export type GameConfig = {
     backgroundType?: string;
     pureMode?: boolean;
     checkDllUpdateBeforeLaunch?: boolean;
+    allowDllUpdates?: boolean;
     check3DmigotoPackageUpdateBeforeLaunch?: boolean;
     includePrereleaseUpdates?: boolean;
     installDir?: string;
@@ -165,6 +166,7 @@ export const useGameConfigStore = defineStore('gameConfig', () => {
             ...config,
             huntingMode: normalizeHuntingMode(config.huntingMode),
             d3d11Mode: normalizeD3d11Mode(config.d3d11Mode, config.gamePreset),
+            allowDllUpdates: config.allowDllUpdates !== false,
             extraDll,
             extraDlls,
             useShell: extraDlls.length > 0 ? false : !!config.useShell,
@@ -197,6 +199,7 @@ export const useGameConfigStore = defineStore('gameConfig', () => {
             backgroundType: 'Image',
             pureMode: false,
             checkDllUpdateBeforeLaunch: true,
+            allowDllUpdates: true,
             check3DmigotoPackageUpdateBeforeLaunch: true,
             includePrereleaseUpdates: true,
             installDir: '',

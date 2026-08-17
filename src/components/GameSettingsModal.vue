@@ -492,6 +492,10 @@ const resetPackageReleaseListState = () => {
 };
 
 const checkD3D11DllUpdate = async (mode: D3d11Mode = currentDllMode.value): Promise<boolean> => {
+  if (config.allowDllUpdates === false) {
+    ElMessage.warning(t('gameSettingsModal.messages.dllUpdatesRejected'));
+    return false;
+  }
   const unlisten = setupBlurNotification(t('gameSettingsModal.messages.confirmCheckDllUpdate'));
   try {
     await ElMessageBox.confirm(
@@ -648,6 +652,10 @@ const installPackageUpdateFromInfo = async (info: UpdateInfo): Promise<boolean> 
 };
 
 const installDllUpdateFromInfo = async (info: UpdateInfo, mode: D3d11Mode = currentDllMode.value): Promise<boolean> => {
+  if (config.allowDllUpdates === false) {
+    ElMessage.warning(t('gameSettingsModal.messages.dllUpdatesRejected'));
+    return false;
+  }
   isLoading.value = false;
 
   const msg = t('gameSettingsModal.messages.newDllVersionFound', { version: info.version });
@@ -1453,6 +1461,16 @@ defineExpose({
             </div>
 
             <div v-if="activeTab === 'dllUpdate'" class="tab-pane">
+              <div class="settings-toggle-row-inline dll-update-permission">
+                <div class="settings-toggle-row-info">
+                  <span class="settings-toggle-row-title">{{ t('gameSettingsModal.fields.allowDllUpdates') }}</span>
+                  <span class="settings-toggle-row-hint">{{ t('gameSettingsModal.fields.allowDllUpdatesHint') }}</span>
+                </div>
+                <el-checkbox v-model="config.allowDllUpdates" @change="saveConfig">
+                  {{ t('gameSettingsModal.fields.allowDllUpdatesCheckbox') }}
+                </el-checkbox>
+              </div>
+
               <!-- Top info bar: source selector + current version -->
               <div class="dll-top-bar">
                 <div class="dll-source-group">
@@ -1563,7 +1581,7 @@ defineExpose({
                       <button
                         class="dll-install-btn"
                         @click="installSelectedDllVersion(item)"
-                        :disabled="isLoading || isDllReleaseLoading || installingDllVersion === item.version"
+                        :disabled="config.allowDllUpdates === false || isLoading || isDllReleaseLoading || installingDllVersion === item.version"
                       >
                         <svg v-if="installingDllVersion !== item.version" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
