@@ -93,6 +93,8 @@
       "pureModeHelpPure": "启动游戏时不注入任何渲染器，以纯净原版方式运行游戏",
       "image": "图片",
       "video": "视频",
+      "staticBackground": "静态",
+      "dynamicBackground": "动态",
       "migotoDirectory": "3Dmigoto 目录",
       "targetProcessPath": "目标进程路径（目标 Exe）",
       "launcherPath": "启动器路径（Launcher Exe）",
@@ -383,8 +385,15 @@
     "title": "欢迎使用 SSMT4",
     "progress": "首次启动配置进度",
     "steps": {
-      "0": { "description": "请选择最符合你的使用方式，我们会据此准备初始界面。" },
-      "1": { "description": "确认初始显示的页面。完成后即可开始使用。" }
+      "language": { "description": "选择 SSMT4 的界面语言。" },
+      "role": { "description": "请选择最符合你的使用方式，我们会据此准备初始界面。" },
+      "general": { "description": "配置缓存位置与窗口快捷唤起。所有项目都可以保留默认值。" },
+      "authorPreferences": { "description": "设置 Mod 制作相关的默认工作流。" },
+      "games": { "description": "选择首页显示的游戏。已选择的游戏会自动排在最前。" },
+      "d3d11": { "description": "批量设置所选游戏使用的 d3d11.dll 来源。" },
+      "migoto": { "description": "批量设置所选游戏的 3DMigoto 启动与检查选项。" },
+      "background": { "description": "批量设置所选游戏的背景显示偏好。" },
+      "nsfw": { "description": "设置 Mod 图片及获取页面的成人内容显示方式。" }
     },
     "roles": { "author": "作者", "player": "玩家", "both": "两者兼有" },
     "roleDescriptions": {
@@ -396,6 +405,41 @@
     "settingsHint": "这些页面可随时前往设置页的“页面显隐”中调整。",
     "back": "上一步",
     "next": "下一步",
+    "skip": "跳过",
+    "choose": "选择",
+    "fields": {
+      "cacheDir": "SSMT 缓存目录",
+      "altF": "启用 Alt+F 快捷唤起",
+      "textureMarkStyle": "贴图标记风格偏好",
+      "previewLighting": "3D 预览简易渲染模式",
+      "d3d11Source": "d3d11.dll 来源",
+      "migotoDir": "3DMigoto 目录",
+      "launchMode": "启动方式偏好",
+      "huntingMode": "Hunting 显示模式",
+      "showWarnings": "显示左上角警告",
+      "checkDllUpdate": "开始游戏前检查 d3d11.dll 更新",
+      "checkPackageUpdate": "开始游戏前检查 3DMigoto Package 更新",
+      "backgroundType": "背景类型",
+      "backgroundUpdate": "背景更新方式",
+      "modBlurMode": "NSFW Mod 图片模糊方案",
+      "revealOnHover": "悬停时取消图片模糊",
+      "showNsfwAcquisition": "Mod 获取页 NSFW Mod 显示状态"
+    },
+    "options": {
+      "halfLambert": "半 Lambert NPR",
+      "unlit": "自发光",
+      "normalLaunch": "普通启动",
+      "dynamic": "动态",
+      "static": "静态",
+      "manual": "手动",
+      "auto": "自动",
+      "blurAll": "全部",
+      "blurNsfw": "仅 NSFW",
+      "blurNone": "不模糊",
+      "show": "显示",
+      "hide": "隐藏"
+    },
+    "defaults": { "automaticCache": "留空时使用默认缓存路径" },
     "confirm": "完成配置"
   },
   "settings": {

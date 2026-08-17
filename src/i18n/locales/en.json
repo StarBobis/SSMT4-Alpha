@@ -93,6 +93,8 @@
       "pureModeHelpPure": "Launches the game without injecting any renderer for a clean vanilla experience.",
       "image": "Image",
       "video": "Video",
+      "staticBackground": "Static",
+      "dynamicBackground": "Dynamic",
       "migotoDirectory": "3Dmigoto Directory",
       "targetProcessPath": "Target Process Path (Target Exe)",
       "launcherPath": "Launcher Path (Launcher Exe)",
@@ -383,8 +385,15 @@
     "title": "Welcome to SSMT4",
     "progress": "First-run setup progress",
     "steps": {
-      "0": { "description": "Choose how you use SSMT4 and we will prepare the initial interface." },
-      "1": { "description": "Review the pages that will be visible, then finish setup." }
+      "language": { "description": "Choose the interface language for SSMT4." },
+      "role": { "description": "Choose how you use SSMT4 and we will prepare the initial interface." },
+      "general": { "description": "Configure cache storage and the window shortcut. Every option may keep its default." },
+      "authorPreferences": { "description": "Set defaults for the Mod authoring workflow." },
+      "games": { "description": "Choose games shown on Home. Selected games move to the front." },
+      "d3d11": { "description": "Batch configure the d3d11.dll source for selected games." },
+      "migoto": { "description": "Batch configure 3DMigoto launch and update options for selected games." },
+      "background": { "description": "Batch configure background preferences for selected games." },
+      "nsfw": { "description": "Configure adult-content visibility for Mod images and acquisition pages." }
     },
     "roles": { "author": "Author", "player": "Player", "both": "Both" },
     "roleDescriptions": {
@@ -396,6 +405,41 @@
     "settingsHint": "You can change these pages at any time under Page Visibility in Settings.",
     "back": "Back",
     "next": "Next",
+    "skip": "Skip",
+    "choose": "Choose",
+    "fields": {
+      "cacheDir": "SSMT Cache Folder",
+      "altF": "Enable Alt+F Window Shortcut",
+      "textureMarkStyle": "Texture Marking Style",
+      "previewLighting": "Simple 3D Preview Rendering",
+      "d3d11Source": "d3d11.dll Source",
+      "migotoDir": "3DMigoto Directory",
+      "launchMode": "Preferred Launch Method",
+      "huntingMode": "Hunting Display Mode",
+      "showWarnings": "Show Top-left Warnings",
+      "checkDllUpdate": "Check d3d11.dll Before Launch",
+      "checkPackageUpdate": "Check 3DMigoto Package Before Launch",
+      "backgroundType": "Background Type",
+      "backgroundUpdate": "Background Update Mode",
+      "modBlurMode": "NSFW Mod Image Blurring",
+      "revealOnHover": "Reveal Blurred Images on Hover",
+      "showNsfwAcquisition": "Show NSFW Mods on Acquisition Pages"
+    },
+    "options": {
+      "halfLambert": "Half-Lambert NPR",
+      "unlit": "Unlit",
+      "normalLaunch": "Normal Launch",
+      "dynamic": "Dynamic",
+      "static": "Static",
+      "manual": "Manual",
+      "auto": "Automatic",
+      "blurAll": "All",
+      "blurNsfw": "NSFW Only",
+      "blurNone": "No Blur",
+      "show": "Show",
+      "hide": "Hide"
+    },
+    "defaults": { "automaticCache": "Leave empty to use the default cache path" },
     "confirm": "Finish setup"
   },
   "settings": {

@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { moveDirectoryToRecycleBin } from '../../utils/RecycleBin';
+import { AppStateManager } from '../../store/AppStateManager';
 
 type PreviewTextureOption = {
 	id: string;
@@ -108,7 +109,7 @@ const previewHost = ref<HTMLDivElement>();
 const dataTypes = ref<DataTypeItem[]>([]);
 const selectedDataTypeId = ref('');
 const selectedUvLayerId = ref('');
-const lightingMode = ref<LightingMode>('half-lambert');
+const lightingMode = ref<LightingMode>(AppStateManager.appSettings.postProcessPreviewLightingMode);
 // This controls the tangent-space normal's tilt, not mesh vertex displacement.
 // Keeping 1.0 as the default applies a normal map without exaggerating it.
 const normalStrength = ref(1);
@@ -183,6 +184,11 @@ const currentLightingModeLabel = computed(() => {
 });
 
 const restoreLightingModePreference = () => {
+	const configuredMode = AppStateManager.appSettings.postProcessPreviewLightingMode;
+	if (configuredMode === 'half-lambert' || configuredMode === 'unlit' || configuredMode === 'pbr') {
+		lightingMode.value = configuredMode;
+		return;
+	}
 	try {
 		const stored = localStorage.getItem(PREVIEW_LIGHTING_MODE_STORAGE_KEY);
 		if (stored === 'half-lambert' || stored === 'unlit' || stored === 'pbr') {
@@ -195,6 +201,7 @@ const restoreLightingModePreference = () => {
 };
 
 const saveLightingModePreference = (mode: LightingMode) => {
+	AppStateManager.appSettings.postProcessPreviewLightingMode = mode;
 	try {
 		localStorage.setItem(PREVIEW_LIGHTING_MODE_STORAGE_KEY, mode);
 	} catch {

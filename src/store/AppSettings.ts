@@ -17,6 +17,7 @@ const normalizeLocale = (value: unknown): SSMTLocale => {
 }
 
 export type TextureMarkStylePreference = 'Hash' | 'Slot' | 'SharedSlot'
+export type PostProcessPreviewLightingMode = 'half-lambert' | 'unlit' | 'pbr'
 export type ImageBlurMode = 'all' | 'nsfw' | 'none'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 export type GameBananaTranslationFontStyle = 'regular' | 'italic' | 'bold' | 'bold-italic'
@@ -228,6 +229,7 @@ export class AppSettings {
 	DRMAclFolderPath: string = ''
 	DRMTargetFolderPath: string = ''
 	textureMarkStylePreference: TextureMarkStylePreference = 'Hash'
+	postProcessPreviewLightingMode: PostProcessPreviewLightingMode = 'half-lambert'
 	locale: SSMTLocale = SSMTLocale.en
 	windowWidth?: number = 1280
 	windowHeight?: number = 720
@@ -314,6 +316,9 @@ export class AppSettings {
 		this.textureMarkStylePreference = normalizeTextureMarkStylePreference(
 			init?.textureMarkStylePreference
 		)
+		this.postProcessPreviewLightingMode = ['half-lambert', 'unlit', 'pbr'].includes(init?.postProcessPreviewLightingMode || '')
+			? init!.postProcessPreviewLightingMode!
+			: 'half-lambert'
 		this.locale = normalizeLocale(init?.locale)
 		this.windowWidth = init?.windowWidth ?? this.windowWidth
 		this.windowHeight = init?.windowHeight ?? this.windowHeight
@@ -410,6 +415,7 @@ export class AppSettings {
 			DRMAclFolderPath: this.DRMAclFolderPath,
 			DRMTargetFolderPath: this.DRMTargetFolderPath,
 			textureMarkStylePreference: this.textureMarkStylePreference,
+			postProcessPreviewLightingMode: this.postProcessPreviewLightingMode,
 			locale: this.locale,
 			windowWidth: this.windowWidth,
 			windowHeight: this.windowHeight,
@@ -436,6 +442,7 @@ export class AppSettings {
 			gamebananaTranslationFontStyle: this.gamebananaTranslationFontStyle,
 			gamebananaTranslationFailureMode: this.gamebananaTranslationFailureMode,
 			showWindowShortcutEnabled: this.showWindowShortcutEnabled,
+			pageVisibility: { ...this.pageVisibility },
 			nexusModsApiKey: this.nexusModsApiKey,
 			nexusModsGameDomain: this.nexusModsGameDomain,
 			xianzunApiKey: this.xianzunApiKey,

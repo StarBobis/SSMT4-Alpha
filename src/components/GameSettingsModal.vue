@@ -1138,8 +1138,8 @@ defineExpose({
                     <div class="settings-toggle-row-title">{{ t('gameSettingsModal.fields.backgroundType') }}</div>
                   </div>
                   <el-select v-model="config.backgroundType" class="custom-select" @change="handleBgTypeChange" style="width:130px">
-                    <el-option value="Image" :label="t('gameSettingsModal.fields.image')" />
-                    <el-option value="Video" :label="t('gameSettingsModal.fields.video')" />
+                    <el-option value="Image" :label="t('gameSettingsModal.fields.staticBackground')" />
+                    <el-option value="Video" :label="t('gameSettingsModal.fields.dynamicBackground')" />
                   </el-select>
                 </div>
 
