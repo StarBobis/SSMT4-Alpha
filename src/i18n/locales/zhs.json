@@ -379,15 +379,42 @@
       "展示一张图片给我看看"
     ]
   },
+  "firstRun": {
+    "title": "欢迎使用 SSMT4",
+    "progress": "首次启动配置进度",
+    "steps": {
+      "0": { "description": "请选择最符合你的使用方式，我们会据此准备初始界面。" },
+      "1": { "description": "确认初始显示的页面。完成后即可开始使用。" }
+    },
+    "roles": { "author": "作者", "player": "玩家", "both": "两者兼有" },
+    "roleDescriptions": {
+      "author": "制作、提取并构造 Mod 内容",
+      "player": "管理、获取并使用 Mod",
+      "both": "同时使用制作与玩家功能"
+    },
+    "visiblePages": "当前方案将显示",
+    "settingsHint": "这些页面可随时前往设置页的“页面显隐”中调整。",
+    "back": "上一步",
+    "next": "下一步",
+    "confirm": "完成配置"
+  },
   "settings": {
     "sections": {
       "general": "通用",
       "generalDesc": "存储位置与连接偏好",
       "appearance": "外观与工作流",
       "appearanceDesc": "语言、标记方式与视觉舒适度",
+      "pageVisibility": "页面显隐",
+      "pageVisibilityDesc": "选择要在顶部导航栏中显示的功能页面",
       "about": "关于 SSMT4",
       "resources": "资源",
       "community": "社区与支持"
+    },
+    "pageVisibility": {
+      "modCreation": "Mod 制作",
+      "modManagement": "Mod 管理",
+      "modAcquisition": "Mod 获取",
+      "aiAssistant": "芝士猫 AI 助手"
     },
     "hints": {
       "cacheFolder": "用于保存工作区、生成文件和本地缓存数据。",

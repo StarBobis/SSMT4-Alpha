@@ -1,4 +1,4 @@
-import { copyFile, exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { dirname, join, localDataDir, resourceDir } from '@tauri-apps/api/path'
 import { SSMTFileUtils } from '../utils/SSMTFileUtils'
 import { AppSettings } from './AppSettings'
@@ -17,6 +17,15 @@ export class GlobalConfig {
 
   public static async AppSettingsFilePath(): Promise<string> {
     return join(await this.SSMT4GlobalConfigsFolder(), 'settings.json')
+  }
+
+  public static async EnsureFirstRunMarker(): Promise<boolean> {
+    const folder = await this.SSMT4GlobalConfigsFolder()
+    const marker = await join(folder, '.notfirst')
+    if (await exists(marker)) return false
+    await mkdir(folder, { recursive: true })
+    await writeTextFile(marker, '')
+    return true
   }
 
   public static async MarkTextureConfigFilePath(): Promise<string> {

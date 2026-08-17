@@ -21,6 +21,18 @@ export type ImageBlurMode = 'all' | 'nsfw' | 'none'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 export type GameBananaTranslationFontStyle = 'regular' | 'italic' | 'bold' | 'bold-italic'
 export type GameBananaTranslationFailureMode = 'retry' | 'message' | 'silent'
+export type OptionalPageId = 'work' | 'markTexture' | 'mods' | 'gameBanana' | 'nexusMods' | 'xianzun' | 'uiBuilder'
+export type PageVisibilitySettings = Record<OptionalPageId, boolean>
+
+export const DEFAULT_PAGE_VISIBILITY: PageVisibilitySettings = {
+	work: true,
+	markTexture: true,
+	mods: true,
+	gameBanana: true,
+	nexusMods: true,
+	xianzun: true,
+	uiBuilder: true,
+}
 
 export const APP_UI_SCALE_MIN = 0.7
 export const APP_UI_SCALE_MAX = 1.2
@@ -250,6 +262,7 @@ export class AppSettings {
 	gamebananaTranslationFontStyle: GameBananaTranslationFontStyle = 'regular'
 	gamebananaTranslationFailureMode: GameBananaTranslationFailureMode = 'message'
 	showWindowShortcutEnabled: boolean = true
+	pageVisibility: PageVisibilitySettings = { ...DEFAULT_PAGE_VISIBILITY }
 	// Nexus Mods uses a per-user API key and a game URL-domain (for example,
 	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
 	nexusModsApiKey: string = ''
@@ -334,6 +347,7 @@ export class AppSettings {
 			? 'Ctrl'
 			: savedTranslationShortcut
 		this.showWindowShortcutEnabled = init?.showWindowShortcutEnabled ?? this.showWindowShortcutEnabled
+		this.pageVisibility = { ...DEFAULT_PAGE_VISIBILITY, ...(init?.pageVisibility || {}) }
 		this.nexusModsApiKey = init?.nexusModsApiKey ?? this.nexusModsApiKey
 		this.nexusModsGameDomain = init?.nexusModsGameDomain?.trim().toLowerCase() ?? this.nexusModsGameDomain
 		this.xianzunApiKey = init?.xianzunApiKey ?? this.xianzunApiKey

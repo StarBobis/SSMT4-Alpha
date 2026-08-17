@@ -26,6 +26,7 @@ import {
   FullScreen,
   View,
 } from '@element-plus/icons-vue';
+import type { OptionalPageId } from '../../store/AppSettings';
 import {
   checkAndInstallAppUpdate,
   isCheckingAppUpdate,
@@ -74,6 +75,23 @@ const uiScalePercent = computed({
   },
 });
 const formatUiScale = (value: number) => `${value}%`;
+const pageVisibilityGroups = computed(() => [
+  { title: t('settings.pageVisibility.modCreation'), pages: [
+    { id: 'work' as OptionalPageId, label: t('titlebar.nav.work') },
+    { id: 'markTexture' as OptionalPageId, label: t('titlebar.nav.markTexture') },
+    { id: 'uiBuilder' as OptionalPageId, label: t('titlebar.nav.uiBuilder') },
+  ] },
+  { title: t('settings.pageVisibility.modManagement'), pages: [
+    { id: 'mods' as OptionalPageId, label: t('titlebar.nav.mods') },
+  ] },
+  { title: t('settings.pageVisibility.modAcquisition'), pages: [
+    { id: 'gameBanana' as OptionalPageId, label: t('titlebar.nav.gameBanana') },
+    { id: 'nexusMods' as OptionalPageId, label: t('titlebar.nav.nexusMods') },
+  ] },
+  { title: t('settings.pageVisibility.aiAssistant'), pages: [
+    { id: 'xianzun' as OptionalPageId, label: t('titlebar.nav.xianzun') },
+  ] },
+]);
 
 const selectCacheDir = async () => {
   const selected = await openDialog({
@@ -311,6 +329,24 @@ const openUsageDocs = async () => {
             </div>
           </section>
 
+          <section class="settings-section">
+            <div class="section-heading">
+              <h2>{{ t('settings.sections.pageVisibility') }}</h2>
+              <p>{{ t('settings.sections.pageVisibilityDesc') }}</p>
+            </div>
+            <div class="settings-group page-visibility-container">
+              <div v-for="group in pageVisibilityGroups" :key="group.title" class="page-visibility-group">
+                <div class="page-visibility-group-title">{{ group.title }}</div>
+                <div class="page-visibility-options">
+                  <label v-for="page in group.pages" :key="page.id" class="page-visibility-option">
+                    <span>{{ page.label }}</span>
+                    <el-switch v-model="appSettings.pageVisibility[page.id]" :aria-label="page.label" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
         </main>
 
         <aside class="settings-sidebar" :aria-label="t('settings.sections.about')">
@@ -519,6 +555,48 @@ const openUsageDocs = async () => {
 .compact-control {
   width: min(100%, 220px);
   justify-self: end;
+}
+
+.page-visibility-container {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.page-visibility-group {
+  min-width: 0;
+  padding: 16px 18px;
+}
+
+.page-visibility-group:nth-child(odd) {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.page-visibility-group:nth-child(n + 3) {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.page-visibility-group-title {
+  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.page-visibility-options {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.page-visibility-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 34px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .workspace-access-proxy-input--invalid :deep(.el-input__wrapper) {
@@ -764,6 +842,18 @@ const openUsageDocs = async () => {
 }
 
 @media (max-width: 760px) {
+  .page-visibility-container {
+    grid-template-columns: 1fr;
+  }
+
+  .page-visibility-group:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .page-visibility-group + .page-visibility-group {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
   .settings-page {
     padding: 20px 14px 28px;
   }

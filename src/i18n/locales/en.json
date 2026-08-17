@@ -379,15 +379,42 @@
       "Show me an image"
     ]
   },
+  "firstRun": {
+    "title": "Welcome to SSMT4",
+    "progress": "First-run setup progress",
+    "steps": {
+      "0": { "description": "Choose how you use SSMT4 and we will prepare the initial interface." },
+      "1": { "description": "Review the pages that will be visible, then finish setup." }
+    },
+    "roles": { "author": "Author", "player": "Player", "both": "Both" },
+    "roleDescriptions": {
+      "author": "Create, extract, and construct Mod content",
+      "player": "Manage, acquire, and use Mods",
+      "both": "Use both authoring and player features"
+    },
+    "visiblePages": "This setup will show",
+    "settingsHint": "You can change these pages at any time under Page Visibility in Settings.",
+    "back": "Back",
+    "next": "Next",
+    "confirm": "Finish setup"
+  },
   "settings": {
     "sections": {
       "general": "General",
       "generalDesc": "Storage and connection preferences",
       "appearance": "Appearance and workflow",
       "appearanceDesc": "Language, marking, and visual comfort",
+      "pageVisibility": "Page visibility",
+      "pageVisibilityDesc": "Choose which feature pages appear in the top navigation bar",
       "about": "About SSMT4",
       "resources": "Resources",
       "community": "Community and support"
+    },
+    "pageVisibility": {
+      "modCreation": "Mod Creation",
+      "modManagement": "Mod Management",
+      "modAcquisition": "Mod Acquisition",
+      "aiAssistant": "Cheese Cat AI Assistant"
     },
     "hints": {
       "cacheFolder": "Used for workspaces, generated files, and local cache data.",

@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { getAlwaysOnTop, setAlwaysOnTop } from '../store/WindowPinStore';
+import { AppStateManager } from '../store/AppStateManager';
 
 const appWindow = getCurrentWindow();
 const router = useRouter();
@@ -11,6 +12,7 @@ const route = useRoute();
 const { t } = useI18n();
 const isMaximized = ref(false);
 const isPinned = ref(false);
+const appSettings = AppStateManager.appSettings;
 
 const checkMaximized = async () => {
     isMaximized.value = await appWindow.isMaximized();
@@ -105,7 +107,19 @@ const displayItems = computed(() => {
         }
     });
     
-    return result;
+    const visibilityKeyByNavId: Partial<Record<string, keyof typeof appSettings.pageVisibility>> = {
+        work: 'work',
+        'mark-texture-full': 'markTexture',
+        mods: 'mods',
+        gamebanana: 'gameBanana',
+        nexusmods: 'nexusMods',
+        xianzun: 'xianzun',
+        'ui-builder': 'uiBuilder',
+    };
+    return result.filter(item => {
+        const key = visibilityKeyByNavId[item.id];
+        return !key || appSettings.pageVisibility[key];
+    });
 });
 
 // Manual drag state to bypass Tauri drag restrictions

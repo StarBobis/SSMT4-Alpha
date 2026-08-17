@@ -1,12 +1,46 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
-import { normalizeAppUiScale } from "./store/AppSettings";
+import { normalizeAppUiScale, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
+import { useI18n } from 'vue-i18n';
 
 const route = useRoute();
 const appSettings = AppStateManager.appSettings;
+const { t } = useI18n();
+const selectedFirstRunRole = ref<'author' | 'player' | 'both' | null>(null);
+const firstRunStep = ref(0);
+const firstRunStepCount = 2;
+const firstRunRoleVisibility: Record<'author' | 'player' | 'both', PageVisibilitySettings> = {
+  author: { work: true, markTexture: true, mods: false, gameBanana: false, nexusMods: false, xianzun: false, uiBuilder: true },
+  player: { work: false, markTexture: false, mods: true, gameBanana: true, nexusMods: true, xianzun: true, uiBuilder: false },
+  both: { work: true, markTexture: true, mods: true, gameBanana: true, nexusMods: true, xianzun: true, uiBuilder: true },
+};
+const firstRunPageLabels: Array<{ id: keyof PageVisibilitySettings; labelKey: string }> = [
+  { id: 'work', labelKey: 'titlebar.nav.work' },
+  { id: 'markTexture', labelKey: 'titlebar.nav.markTexture' },
+  { id: 'mods', labelKey: 'titlebar.nav.mods' },
+  { id: 'gameBanana', labelKey: 'titlebar.nav.gameBanana' },
+  { id: 'nexusMods', labelKey: 'titlebar.nav.nexusMods' },
+  { id: 'xianzun', labelKey: 'titlebar.nav.xianzun' },
+  { id: 'uiBuilder', labelKey: 'titlebar.nav.uiBuilder' },
+];
+const selectedFirstRunPages = computed(() => {
+  if (!selectedFirstRunRole.value) return [t('titlebar.nav.home')];
+  const visibility = firstRunRoleVisibility[selectedFirstRunRole.value];
+  return [t('titlebar.nav.home'), ...firstRunPageLabels.filter(page => visibility[page.id]).map(page => t(page.labelKey))];
+});
+const confirmFirstRunRole = async () => {
+  if (!selectedFirstRunRole.value) return;
+  await AppStateManager.completeFirstRunOnboarding(firstRunRoleVisibility[selectedFirstRunRole.value]);
+};
+const advanceFirstRun = () => {
+  if (firstRunStep.value === 0 && selectedFirstRunRole.value) firstRunStep.value = 1;
+};
+const retreatFirstRun = () => {
+  if (firstRunStep.value > 0) firstRunStep.value -= 1;
+};
 const isHomeRoute = computed(() => route.path === '/');
 const shouldShowGlobalDimLayer = computed(() => (
   route.path === '/games'
@@ -111,6 +145,45 @@ onUnmounted(() => {
 
   <el-config-provider>
     <TitleBar />
+
+    <div v-if="AppStateManager.isFirstRunOnboardingOpen.value" class="first-run-overlay">
+      <section class="first-run-dialog" role="dialog" aria-modal="true" :aria-label="t('firstRun.title')">
+        <header>
+          <span class="first-run-kicker">SSMT4</span>
+          <h2>{{ t('firstRun.title') }}</h2>
+          <p>{{ t(`firstRun.steps.${firstRunStep}.description`) }}</p>
+        </header>
+        <div class="first-run-progress" :aria-label="t('firstRun.progress')">
+          <span v-for="index in firstRunStepCount" :key="index" :class="{ 'is-active': index - 1 <= firstRunStep }"></span>
+        </div>
+        <div v-if="firstRunStep === 0" class="first-run-role-grid">
+            <button
+              v-for="role in (['author', 'player', 'both'] as const)"
+              :key="role"
+              type="button"
+              class="first-run-role"
+              :class="{ 'is-selected': selectedFirstRunRole === role }"
+              @click="selectedFirstRunRole = role"
+            >
+              <strong>{{ t(`firstRun.roles.${role}`) }}</strong>
+              <span>{{ t(`firstRun.roleDescriptions.${role}`) }}</span>
+            </button>
+        </div>
+        <template v-else>
+          <div class="first-run-preview">
+            <span>{{ t('firstRun.visiblePages') }}</span>
+            <div><em v-for="page in selectedFirstRunPages" :key="page">{{ page }}</em></div>
+          </div>
+          <p class="first-run-settings-hint">{{ t('firstRun.settingsHint') }}</p>
+        </template>
+        <footer class="first-run-actions">
+          <el-button v-if="firstRunStep > 0" @click="retreatFirstRun">{{ t('firstRun.back') }}</el-button>
+          <span></span>
+          <el-button v-if="firstRunStep < firstRunStepCount - 1" type="primary" :disabled="!selectedFirstRunRole" @click="advanceFirstRun">{{ t('firstRun.next') }}</el-button>
+          <el-button v-else type="primary" @click="confirmFirstRunRole">{{ t('firstRun.confirm') }}</el-button>
+        </footer>
+      </section>
+    </div>
 
     <div class="app-ui-scale" :style="{ '--app-ui-scale': appUiScale }">
       <!-- Use a Flex Layout Container -->
@@ -236,6 +309,46 @@ input, textarea {
 </style>
 
 <style scoped>
+.first-run-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 6, 12, 0.68);
+  backdrop-filter: blur(12px);
+}
+
+.first-run-dialog {
+  width: min(680px, calc(100vw - 48px));
+  padding: 26px;
+  border: var(--t-card-dark-border);
+  border-radius: 18px;
+  background: var(--t-card-dark-bg);
+  box-shadow: var(--t-card-dark-shadow);
+}
+
+.first-run-dialog header h2 { margin: 5px 0 8px; font-size: 22px; }
+.first-run-dialog header p, .first-run-settings-hint { color: rgba(255,255,255,.62); line-height: 1.55; }
+.first-run-kicker { color: rgba(117,214,187,.9); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.first-run-role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
+.first-run-role { min-height: 94px; padding: 14px; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: rgba(255,255,255,.035); color: white; text-align: left; cursor: pointer; }
+.first-run-role strong, .first-run-role span { display: block; }
+.first-run-role span { margin-top: 7px; color: rgba(255,255,255,.55); font-size: 12px; line-height: 1.45; }
+.first-run-role.is-selected { border-color: rgba(117,214,187,.65); background: rgba(117,214,187,.13); }
+.first-run-preview { padding: 14px; border-radius: 12px; background: rgba(255,255,255,.035); }
+.first-run-preview > span { color: rgba(255,255,255,.56); font-size: 12px; }
+.first-run-preview div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.first-run-preview em { padding: 5px 9px; border-radius: 999px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.9); font-size: 12px; font-style: normal; }
+.first-run-progress { display: flex; gap: 6px; margin-top: 18px; }
+.first-run-progress span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.1); }
+.first-run-progress span.is-active { background: rgba(117,214,187,.72); }
+.first-run-actions { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; margin-top: 18px; }
+
+@media (max-width: 620px) { .first-run-role-grid { grid-template-columns: 1fr; } }
+
 .app-layout {
   display: flex;
   flex-direction: column;

@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { currentMonitor, getCurrentWindow, LogicalSize, primaryMonitor } from '@tauri-apps/api/window'
 import { getVersion } from '@tauri-apps/api/app'
-import { AppSettings, BGType, SSMTLocale } from './AppSettings'
+import { AppSettings, BGType, DEFAULT_PAGE_VISIBILITY, SSMTLocale, type PageVisibilitySettings } from './AppSettings'
 import { applyAppThemeColors } from './AppTheme'
 import { GlobalConfig } from './GlobalConfig'
 import { AUTO_UPDATE_SUPPORTED_PRESET_SET } from './GamePreset'
@@ -35,6 +35,7 @@ const isDrawerOpen = ref(false)
 const appSettings = reactive(new AppSettings())
 const gamesList = reactive<GameInfo[]>([])
 const gamesDir = ref<string>('')
+const isFirstRunOnboardingOpen = ref(false)
 
 export const useAppStateStore = defineStore('appState', () => {
   const autoUpdateInFlight = new Set<string>()
@@ -367,10 +368,22 @@ export const useAppStateStore = defineStore('appState', () => {
 
   async function initAppState() {
     await loadSettings()
+    if (await GlobalConfig.EnsureFirstRunMarker()) {
+      appSettings.pageVisibility = Object.fromEntries(
+        Object.keys(DEFAULT_PAGE_VISIBILITY).map(key => [key, false]),
+      ) as PageVisibilitySettings
+      isFirstRunOnboardingOpen.value = true
+    }
     // 所有游戏配置均复制到全局配置，全部功能开放。
     gamesDir.value = await ResourceManager.CopyGamesToGlobalConfig(true)
     await loadGames()
     initialStateLoaded = true
+  }
+
+  async function completeFirstRunOnboarding(pageVisibility: PageVisibilitySettings) {
+    appSettings.pageVisibility = { ...pageVisibility }
+    isFirstRunOnboardingOpen.value = false
+    await GlobalConfig.SaveConfig(new AppSettings({ ...appSettings }))
   }
 
   // Static init — run once on store creation
@@ -398,6 +411,7 @@ export const useAppStateStore = defineStore('appState', () => {
     hasSelectedGame,
     hasLoadedInitialState,
     initAppState,
+    completeFirstRunOnboarding,
   }
 })
 
@@ -407,6 +421,7 @@ export const AppStateManager = {
   appSettings,
   gamesList,
   gamesDir,
+  isFirstRunOnboardingOpen,
   get setSidebarGameOrder() { return useAppStateStore().setSidebarGameOrder },
   get prepareWindowForDisplay() { return useAppStateStore().prepareWindowForDisplay },
   get restoreWindowBoundsFromSettings() { return useAppStateStore().restoreWindowBoundsFromSettings },
@@ -417,6 +432,7 @@ export const AppStateManager = {
   get hasSelectedGame() { return useAppStateStore().hasSelectedGame },
   get hasLoadedInitialState() { return useAppStateStore().hasLoadedInitialState },
   get initAppState() { return useAppStateStore().initAppState },
+  get completeFirstRunOnboarding() { return useAppStateStore().completeFirstRunOnboarding },
 }
 
 export { BGType }

@@ -55,7 +55,7 @@ app.mount("#app");
 
 
 AppStateManager.initAppState().then(() => {
-  if (router.currentRoute.value.name === 'Home' && !AppStateManager.hasSelectedGame()) {
+  if (router.currentRoute.value.name === 'Home' && !AppStateManager.hasSelectedGame() && !AppStateManager.isFirstRunOnboardingOpen.value) {
     void router.replace({ name: 'GameLibrary' })
   }
 
