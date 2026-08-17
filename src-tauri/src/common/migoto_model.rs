@@ -155,7 +155,7 @@ impl MigotoModel {
         }
 
         if !buf_dict_list.is_empty() {
-            println!("分割后的顶点数: {}", buf_dict_list[0].len());
+            crate::extract_log!("分割后的顶点数: {}", buf_dict_list[0].len());
         }
 
         let merged_vb0_dict = SSMTBinaryUtils::merge_byte_dicts(buf_dict_list)?;

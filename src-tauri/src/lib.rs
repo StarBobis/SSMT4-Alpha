@@ -59,18 +59,19 @@ fn handle_show_window_shortcut<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 fn register_show_window_shortcut<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(), tauri_plugin_global_shortcut::Error> {
-    app.global_shortcut().on_shortcut(show_window_shortcut(), |app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            handle_show_window_shortcut(app);
-        }
-    })
+    app.global_shortcut()
+        .on_shortcut(show_window_shortcut(), |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                handle_show_window_shortcut(app);
+            }
+        })
 }
 
 fn show_window_shortcut_enabled_on_launch(app: &tauri::App) -> bool {
-    let Ok(settings_path) = app
-        .path()
-        .resolve(APP_SETTINGS_RELATIVE_PATH, tauri::path::BaseDirectory::LocalData)
-    else {
+    let Ok(settings_path) = app.path().resolve(
+        APP_SETTINGS_RELATIVE_PATH,
+        tauri::path::BaseDirectory::LocalData,
+    ) else {
         return true;
     };
 

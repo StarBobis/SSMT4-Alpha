@@ -39,6 +39,7 @@ export type TextureMarkStylePreference = 'Hash' | 'Slot' | 'SharedSlot'
 export type PostProcessPreviewLightingMode = 'half-lambert' | 'unlit' | 'pbr'
 export type ImageBlurMode = 'all' | 'nsfw' | 'none'
 export type GameLaunchMode = 'always-pure' | 'ctrl-pure' | 'always-normal'
+export type ModelExtractionLogLanguage = 'zh-CN' | 'en'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 export type GameBananaTranslationFontStyle = 'regular' | 'italic' | 'bold' | 'bold-italic'
 export type GameBananaTranslationFailureMode = 'retry' | 'message' | 'silent'
@@ -285,6 +286,7 @@ export class AppSettings {
 	gamebananaTranslationFailureMode: GameBananaTranslationFailureMode = 'message'
 	showWindowShortcutEnabled: boolean = true
 	gameLaunchMode: GameLaunchMode = 'ctrl-pure'
+	modelExtractionLogLanguage: ModelExtractionLogLanguage = 'zh-CN'
 	pageVisibility: PageVisibilitySettings = { ...DEFAULT_PAGE_VISIBILITY }
 	// Nexus Mods uses a per-user API key and a game URL-domain (for example,
 	// "skyrimspecialedition"), rather than GameBanana's numeric game ID.
@@ -376,6 +378,7 @@ export class AppSettings {
 		this.gameLaunchMode = ['always-pure', 'ctrl-pure', 'always-normal'].includes(init?.gameLaunchMode || '')
 			? init!.gameLaunchMode!
 			: this.gameLaunchMode
+		this.modelExtractionLogLanguage = init?.modelExtractionLogLanguage === 'en' ? 'en' : 'zh-CN'
 		this.pageVisibility = { ...DEFAULT_PAGE_VISIBILITY, ...(init?.pageVisibility || {}) }
 		this.nexusModsApiKey = init?.nexusModsApiKey ?? this.nexusModsApiKey
 		this.nexusModsGameDomain = init?.nexusModsGameDomain?.trim().toLowerCase() ?? this.nexusModsGameDomain
@@ -467,6 +470,7 @@ export class AppSettings {
 			gamebananaTranslationFailureMode: this.gamebananaTranslationFailureMode,
 			showWindowShortcutEnabled: this.showWindowShortcutEnabled,
 			gameLaunchMode: this.gameLaunchMode,
+			modelExtractionLogLanguage: this.modelExtractionLogLanguage,
 			pageVisibility: { ...this.pageVisibility },
 			nexusModsApiKey: this.nexusModsApiKey,
 			nexusModsGameDomain: this.nexusModsGameDomain,

@@ -95,7 +95,7 @@ impl FrameAnalysisDX12Log {
             return Err(format!("DX12 log.jsonl not found: {}", log_path.display()));
         }
 
-        println!(
+        crate::extract_log!(
             "[ZZMIDX12][DX12Log] Reading DX12 FrameAnalysis log: {}",
             log_path.display()
         );
@@ -108,11 +108,11 @@ impl FrameAnalysisDX12Log {
                 .or_default()
                 .push(binding.clone());
         }
-        println!(
+        crate::extract_log!(
             "[ZZMIDX12][DX12Log] Parsed draw calls: {}",
             draw_calls.len()
         );
-        println!(
+        crate::extract_log!(
             "[ZZMIDX12][DX12Log] Parsed resource bindings: {}",
             resource_bindings.len()
         );
@@ -168,7 +168,7 @@ impl FrameAnalysisDX12Log {
                 Ok(obj) => obj,
                 Err(e) => {
                     if !Self::is_required_event_line(line) {
-                        println!(
+                        crate::extract_log!(
                             "[ZZMIDX12][DX12Log] Skipping non-JSON auxiliary line {} in {}: {}",
                             line_index + 1,
                             log_path.display(),

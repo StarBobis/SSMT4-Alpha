@@ -5,8 +5,8 @@ use crate::workspace_access::archive::{
     ArchiveValidationReport,
 };
 use crate::workspace_access::library::{
-    download_entry, fetch_index, fetch_metadata, record_download, LibraryDownloadResult, LibraryIndexV1,
-    PublicMetadataDocument,
+    download_entry, fetch_index, fetch_metadata, record_download, LibraryDownloadResult,
+    LibraryIndexV1, PublicMetadataDocument,
 };
 use crate::workspace_access::models::{
     WorkspaceAccessArchiveRequest, WorkspaceAccessPreflightRequest, WorkspaceAccessPublishRequest,
@@ -53,7 +53,13 @@ pub async fn workspace_access_download_archive(
     expected_sha256: String,
     proxy_port: Option<u16>,
 ) -> Result<DownloadResult, String> {
-    download_archive(&url, &PathBuf::from(destination), &expected_sha256, proxy_port).await
+    download_archive(
+        &url,
+        &PathBuf::from(destination),
+        &expected_sha256,
+        proxy_port,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -203,7 +209,14 @@ pub async fn workspace_access_download_and_import_entry(
 ) -> Result<ImportResult, String> {
     let archive_path = temporary_archive_path(&entry_id)?;
     let result = async {
-        download_entry(&worker_url, &entry_id, &archive_path, &expected_sha256, proxy_port).await?;
+        download_entry(
+            &worker_url,
+            &entry_id,
+            &archive_path,
+            &expected_sha256,
+            proxy_port,
+        )
+        .await?;
         import_archive(
             &archive_path,
             &PathBuf::from(workspace_base),

@@ -395,12 +395,7 @@ impl SRMINewExtractor {
                 aligned_byte_offset,
             ) {
                 if slot == input_slot {
-                    result.push((
-                        semantic_name,
-                        semantic_index,
-                        format,
-                        aligned_byte_offset,
-                    ));
+                    result.push((semantic_name, semantic_index, format, aligned_byte_offset));
                 }
             }
         }
@@ -423,8 +418,7 @@ impl SRMINewExtractor {
             return Ok(true);
         };
 
-        let actual_elements =
-            Self::read_migoto_input_layout_for_slot(txt_file_path, input_slot)?;
+        let actual_elements = Self::read_migoto_input_layout_for_slot(txt_file_path, input_slot)?;
         if actual_elements.is_empty() {
             return Ok(true);
         }
@@ -452,7 +446,7 @@ impl SRMINewExtractor {
             );
 
             if !found {
-                println!(
+                crate::extract_log!(
                     "InputLayout mismatch: GameType={}, category={}, slot={}, expected {}{} {} at byte offset {}",
                     d3d11_game_type.game_type_name,
                     category_name,
@@ -486,7 +480,7 @@ impl SRMINewExtractor {
         gpu_vertex_slice: Option<(usize, usize, usize)>,
         category_output_buf_file_path: &Path,
     ) -> Result<(), String> {
-        println!(
+        crate::extract_log!(
             "[export_category_buffer] start: category_name={}, category_buf_filename={}, category_output_buf_file_path={}",
             category_name,
             category_buf_filename,
@@ -494,13 +488,13 @@ impl SRMINewExtractor {
         );
 
         let category_buf_file_path = self.fa_log.get_deduped_filepath(category_buf_filename);
-        println!(
+        crate::extract_log!(
             "[export_category_buffer] resolved deduped buf path: category_name={}, category_buf_file_path={}",
             category_name,
             category_buf_file_path
         );
         if category_buf_file_path.is_empty() {
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] branch=error_empty_buf_path: category_name={}, category_buf_filename={}, category_buf_file_path_is_empty=true",
                 category_name,
                 category_buf_filename
@@ -531,24 +525,21 @@ impl SRMINewExtractor {
                         category_name, byte_offset, read_len
                     )
                 })?;
-                let sliced_bytes = SSMTBinaryUtils::get_range_bytes(
-                    &category_buf_bytes,
-                    byte_offset,
-                    end,
-                )
-                .map_err(|e| {
-                    format!(
-                        "Failed to slice GPU category buffer for category {}: {}",
-                        category_name, e
-                    )
-                })?;
+                let sliced_bytes =
+                    SSMTBinaryUtils::get_range_bytes(&category_buf_bytes, byte_offset, end)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to slice GPU category buffer for category {}: {}",
+                                category_name, e
+                            )
+                        })?;
                 fs::write(category_output_buf_file_path, sliced_bytes).map_err(|e| {
                     format!(
                         "Failed to write sliced GPU category buffer for category {}: {}",
                         category_name, e
                     )
                 })?;
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] branch=gpu_logical_slice: category_name={}, byte_offset={}, vertex_count={}, stride={}, output_size={}",
                     category_name,
                     byte_offset,
@@ -559,7 +550,7 @@ impl SRMINewExtractor {
                 return Ok(());
             }
 
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] branch=gpu_full_copy: category_name={}, gpu_pre_skinning=true, logical_slice_unavailable=true",
                 category_name
             );
@@ -575,7 +566,7 @@ impl SRMINewExtractor {
         let category_txt_filename =
             SSMTFileUtils::get_filename_with_new_extension(category_buf_filename, "txt")?;
         let category_txt_file_path = self.fa_log.get_deduped_filepath(&category_txt_filename);
-        println!(
+        crate::extract_log!(
             "[export_category_buffer] resolved txt path: category_name={}, category_txt_filename={}, category_txt_file_path={}",
             category_name,
             category_txt_filename,
@@ -583,12 +574,12 @@ impl SRMINewExtractor {
         );
 
         if !category_txt_file_path.is_empty() && Path::new(&category_txt_file_path).exists() {
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] branch=txt_metadata_slice: category_name={}, category_txt_file_exists=true",
                 category_name
             );
             let metadata = SSMTBinaryUtils::read_migoto_buffer_metadata(&category_txt_file_path)?;
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] metadata: category_name={}, stride={}, vertex_count={}, byte_offset={}",
                 category_name,
                 metadata.stride,
@@ -596,7 +587,7 @@ impl SRMINewExtractor {
                 metadata.byte_offset
             );
             if metadata.stride > 0 && metadata.vertex_count > 0 {
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] branch=metadata_valid_slice: category_name={}, stride_valid=true, vertex_count_valid=true",
                     category_name
                 );
@@ -606,7 +597,7 @@ impl SRMINewExtractor {
                         category_name, e
                     )
                 })?;
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] read buf bytes: category_name={}, category_buf_bytes_len={}",
                     category_name,
                     category_buf_bytes.len()
@@ -620,7 +611,7 @@ impl SRMINewExtractor {
                             category_name, metadata.vertex_count, metadata.stride
                         )
                     })?;
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] computed read_len: category_name={}, read_len={}",
                     category_name, read_len
                 );
@@ -630,7 +621,7 @@ impl SRMINewExtractor {
                         category_name, metadata.byte_offset, read_len
                     )
                 })?;
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] computed slice range: category_name={}, byte_offset={}, end={}",
                     category_name,
                     metadata.byte_offset,
@@ -647,7 +638,7 @@ impl SRMINewExtractor {
                         category_name, e
                     )
                 })?;
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] sliced bytes: category_name={}, sliced_bytes_len={}",
                     category_name,
                     sliced_bytes.len()
@@ -658,7 +649,7 @@ impl SRMINewExtractor {
                         category_name, e
                     )
                 })?;
-                println!(
+                crate::extract_log!(
                     "[export_category_buffer] branch=write_sliced_success: category_name={}, output_path={}",
                     category_name,
                     category_output_buf_file_path.display()
@@ -666,7 +657,7 @@ impl SRMINewExtractor {
                 return Ok(());
             }
 
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] branch=metadata_invalid_fallback_copy: category_name={}, stride={}, vertex_count={}",
                 category_name,
                 metadata.stride,
@@ -675,13 +666,13 @@ impl SRMINewExtractor {
         }
 
         if category_txt_file_path.is_empty() {
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] branch=txt_missing_fallback_copy: category_name={}, category_txt_filename={}, category_txt_file_path_is_empty=true",
                 category_name,
                 category_txt_filename
             );
         } else if !Path::new(&category_txt_file_path).exists() {
-            println!(
+            crate::extract_log!(
                 "[export_category_buffer] branch=txt_not_found_fallback_copy: category_name={}, category_txt_filename={}, category_txt_file_path={}",
                 category_name,
                 category_txt_filename,
@@ -695,7 +686,7 @@ impl SRMINewExtractor {
                 category_name, e
             )
         })?;
-        println!(
+        crate::extract_log!(
             "[export_category_buffer] branch=copy_success: category_name={}, source_path={}, output_path={}",
             category_name,
             category_buf_file_path,
@@ -746,7 +737,7 @@ impl SRMINewExtractor {
                         extract_index = d3d11_gametype_wrapper.blend_extract_index.clone();
                     }
                 }
-                println!("Final ExtractIndex: {}", extract_index);
+                crate::extract_log!("Final ExtractIndex: {}", extract_index);
 
                 let mut category_slot = d3d11_game_type
                     .category_slot_dict
@@ -758,11 +749,11 @@ impl SRMINewExtractor {
                 } else if category_name == "Blend" {
                     category_slot = d3d11_gametype_wrapper.blend_extract_slot.clone();
                 }
-                println!("Final CategorySlot: {}", category_slot);
+                crate::extract_log!("Final CategorySlot: {}", category_slot);
 
                 let search_key = format!("{}-{}=", extract_index, category_slot);
                 let category_buf_filename = self.fa_data.filter_first_file(&search_key, ".buf")?;
-                println!("CategoryBufFileName: {}", category_buf_filename);
+                crate::extract_log!("CategoryBufFileName: {}", category_buf_filename);
 
                 category_buf_filename_map
                     .insert(category_name.clone(), category_buf_filename.clone());
@@ -775,137 +766,126 @@ impl SRMINewExtractor {
             // categories (normally Texcoord and Blend), whose full buffers are
             // already exported unchanged, then trim the oversized Position backing
             // resource to exactly that same global vertex count.
-            let gpu_position_slice: Option<(usize, usize, usize)> =
-                if d3d11_game_type.gpu_pre_skinning {
-                    let mut logical_vertex_count: Option<u64> = None;
-                    let mut logical_domain_valid = true;
+            let gpu_position_slice: Option<(usize, usize, usize)> = if d3d11_game_type
+                .gpu_pre_skinning
+            {
+                let mut logical_vertex_count: Option<u64> = None;
+                let mut logical_domain_valid = true;
 
-                    for logical_category_name in
-                        d3d11_game_type.ordered_category_name_list.iter()
-                    {
-                        if logical_category_name == "Position" {
-                            continue;
-                        }
+                for logical_category_name in d3d11_game_type.ordered_category_name_list.iter() {
+                    if logical_category_name == "Position" {
+                        continue;
+                    }
 
-                        let logical_stride = d3d11_game_type
-                            .category_stride_dict
-                            .get(logical_category_name)
-                            .copied()
-                            .unwrap_or(0);
-                        if logical_stride == 0 {
-                            continue;
-                        }
+                    let logical_stride = d3d11_game_type
+                        .category_stride_dict
+                        .get(logical_category_name)
+                        .copied()
+                        .unwrap_or(0);
+                    if logical_stride == 0 {
+                        continue;
+                    }
 
-                        let logical_buf_filename = category_buf_filename_map
-                            .get(logical_category_name)
-                            .cloned()
-                            .unwrap_or_default();
-                        if logical_buf_filename.is_empty() {
-                            continue;
-                        }
+                    let logical_buf_filename = category_buf_filename_map
+                        .get(logical_category_name)
+                        .cloned()
+                        .unwrap_or_default();
+                    if logical_buf_filename.is_empty() {
+                        continue;
+                    }
 
-                        let logical_buf_path =
-                            self.fa_log.get_deduped_filepath(&logical_buf_filename);
-                        if logical_buf_path.is_empty()
-                            || !Path::new(&logical_buf_path).exists()
-                        {
-                            continue;
-                        }
+                    let logical_buf_path = self.fa_log.get_deduped_filepath(&logical_buf_filename);
+                    if logical_buf_path.is_empty() || !Path::new(&logical_buf_path).exists() {
+                        continue;
+                    }
 
-                        let logical_buf_size =
-                            SSMTFileUtils::get_file_size(&logical_buf_path)?;
-                        if logical_buf_size == 0
-                            || logical_buf_size % logical_stride != 0
-                        {
-                            println!(
+                    let logical_buf_size = SSMTFileUtils::get_file_size(&logical_buf_path)?;
+                    if logical_buf_size == 0 || logical_buf_size % logical_stride != 0 {
+                        crate::extract_log!(
                                 "GPU global vertex domain unavailable: category={}, filesize={}, stride={}",
                                 logical_category_name,
                                 logical_buf_size,
                                 logical_stride
                             );
-                            logical_domain_valid = false;
-                            break;
-                        }
+                        logical_domain_valid = false;
+                        break;
+                    }
 
-                        let category_vertex_count = logical_buf_size / logical_stride;
-                        if category_vertex_count == 0 {
-                            logical_domain_valid = false;
-                            break;
-                        }
+                    let category_vertex_count = logical_buf_size / logical_stride;
+                    if category_vertex_count == 0 {
+                        logical_domain_valid = false;
+                        break;
+                    }
 
-                        if let Some(previous_vertex_count) = logical_vertex_count {
-                            if previous_vertex_count != category_vertex_count {
-                                println!(
+                    if let Some(previous_vertex_count) = logical_vertex_count {
+                        if previous_vertex_count != category_vertex_count {
+                            crate::extract_log!(
                                     "GPU global vertex domain mismatch: category={} has {} vertices, previous categories have {}",
                                     logical_category_name,
                                     category_vertex_count,
                                     previous_vertex_count
                                 );
-                                logical_domain_valid = false;
-                                break;
-                            }
-                        } else {
-                            logical_vertex_count = Some(category_vertex_count);
+                            logical_domain_valid = false;
+                            break;
                         }
+                    } else {
+                        logical_vertex_count = Some(category_vertex_count);
                     }
+                }
 
-                    if logical_domain_valid {
-                        if let Some(vertex_count) = logical_vertex_count {
-                            let position_stride = d3d11_game_type
-                                .category_stride_dict
-                                .get("Position")
-                                .copied()
-                                .unwrap_or(0);
-                            let position_buf_filename = category_buf_filename_map
-                                .get("Position")
-                                .cloned()
-                                .unwrap_or_default();
-                            let position_buf_path =
-                                self.fa_log.get_deduped_filepath(&position_buf_filename);
+                if logical_domain_valid {
+                    if let Some(vertex_count) = logical_vertex_count {
+                        let position_stride = d3d11_game_type
+                            .category_stride_dict
+                            .get("Position")
+                            .copied()
+                            .unwrap_or(0);
+                        let position_buf_filename = category_buf_filename_map
+                            .get("Position")
+                            .cloned()
+                            .unwrap_or_default();
+                        let position_buf_path =
+                            self.fa_log.get_deduped_filepath(&position_buf_filename);
 
-                            if position_stride == 0
-                                || position_buf_path.is_empty()
-                                || !Path::new(&position_buf_path).exists()
-                            {
-                                None
-                            } else {
-                                let position_buf_size =
-                                    SSMTFileUtils::get_file_size(&position_buf_path)?;
-                                let position_capacity = position_buf_size / position_stride;
+                        if position_stride == 0
+                            || position_buf_path.is_empty()
+                            || !Path::new(&position_buf_path).exists()
+                        {
+                            None
+                        } else {
+                            let position_buf_size =
+                                SSMTFileUtils::get_file_size(&position_buf_path)?;
+                            let position_capacity = position_buf_size / position_stride;
 
-                                if position_capacity < vertex_count {
-                                    println!(
+                            if position_capacity < vertex_count {
+                                crate::extract_log!(
                                         "GPU Position global-domain slice unavailable: position_capacity={} < logical_vertex_count={}",
                                         position_capacity,
                                         vertex_count
                                     );
-                                    None
-                                } else {
-                                    println!(
+                                None
+                            } else {
+                                crate::extract_log!(
                                         "GPU Position global-domain slice: logical_vertex_count={}, position_capacity={}, position_stride={}",
                                         vertex_count,
                                         position_capacity,
                                         position_stride
                                     );
-                                    Some((
-                                        0,
-                                        vertex_count as usize,
-                                        position_stride as usize,
-                                    ))
-                                }
+                                Some((0, vertex_count as usize, position_stride as usize))
                             }
-                        } else {
-                            println!(
-                                "GPU Position global-domain slice unavailable: no non-Position category supplied a logical vertex count"
-                            );
-                            None
                         }
                     } else {
+                        crate::extract_log!(
+                                "GPU Position global-domain slice unavailable: no non-Position category supplied a logical vertex count"
+                            );
                         None
                     }
                 } else {
                     None
-                };
+                }
+            } else {
+                None
+            };
 
             let unique_str_folder_name = format!(
                 "{}-{}-{}",
@@ -932,25 +912,24 @@ impl SRMINewExtractor {
                     .cloned()
                     .unwrap_or_default();
 
-                println!(
+                crate::extract_log!(
                     "category_name: {}, category_buf_filename: {}",
                     category_name, category_buf_filename
                 );
                 let category_output_buf_file_path =
                     game_type_output_path.join(format!("{}-{}.buf", name_prefix, category_name));
 
-                println!(
+                crate::extract_log!(
                     "category_name: {}, category_output_buf_file_path: {}",
                     category_name,
                     category_output_buf_file_path.display()
                 );
-                let gpu_vertex_slice = if d3d11_game_type.gpu_pre_skinning
-                    && category_name == "Position"
-                {
-                    gpu_position_slice
-                } else {
-                    None
-                };
+                let gpu_vertex_slice =
+                    if d3d11_game_type.gpu_pre_skinning && category_name == "Position" {
+                        gpu_position_slice
+                    } else {
+                        None
+                    };
                 self.export_category_buffer(
                     category_name,
                     &category_buf_filename,
@@ -1120,7 +1099,7 @@ impl SRMINewExtractor {
             component_drawcall_index_list_dict.clone(),
         );
         if let Err(e) = component_json.save_to_file(&component_json_path) {
-            eprintln!(
+            crate::extract_error!(
                 "Failed to write {}: {}",
                 component_json_path.to_string_lossy(),
                 e
@@ -1189,7 +1168,7 @@ impl SRMINewExtractor {
             get_workspace_trianglelist_deduped_filename_json_path(&self.workspace_path)?;
         let trianglelist_json = TrianglelistDedupedFileNameJson::from_map(trianglelist_deduped_map);
         if let Err(e) = trianglelist_json.save_to_file(&trianglelist_json_path) {
-            eprintln!(
+            crate::extract_error!(
                 "Failed to write {}: {}",
                 trianglelist_json_path.to_string_lossy(),
                 e
@@ -1341,7 +1320,7 @@ impl SRMINewExtractor {
             return Ok(false);
         }
 
-        println!("Position Slot Matched : {}", position_slot);
+        crate::extract_log!("Position Slot Matched : {}", position_slot);
 
         self.is_blend_slot_match(pointlist_index, blend_stride, vertex_count, blend_slot)
     }
@@ -1516,7 +1495,7 @@ impl SRMINewExtractor {
                     wrapper.position_extract_index = pointlist_index.clone();
                     wrapper.blend_extract_index = pointlist_index.clone();
 
-                    println!(
+                    crate::extract_log!(
                         "extract_slot: position_slot={}, blend_slot={}",
                         position_slot, blend_slot
                     );
@@ -1657,7 +1636,7 @@ impl SRMINewExtractor {
             let mut d3d11_gametype_wrapper = D3D11GameTypeWrapper::new(d3d11_game_type.clone());
 
             if find_atleast_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!(
+                crate::extract_log!(
                     "Already found GPU-PreSkinning type, skipping CPU-PreSkinning GameType: {}",
                     d3d11_game_type.game_type_name
                 );
@@ -1673,7 +1652,7 @@ impl SRMINewExtractor {
                 );
 
             if first_trianglelist_index.is_empty() {
-                println!(
+                crate::extract_log!(
                     "GameType {} skipped: no matching TriangleListIndex found",
                     d3d11_game_type.game_type_name
                 );
@@ -1696,7 +1675,7 @@ impl SRMINewExtractor {
 
                 // 如果该分类需要 POINTLIST 但 pointlist_index 未知，跳过整个 GameType
                 if topology == "pointlist" && _pointlist_index.is_empty() {
-                    println!(
+                    crate::extract_log!(
                         "GameType {} skipped: topology=pointlist but pointlist_index is empty",
                         d3d11_game_type.game_type_name
                     );
@@ -1708,7 +1687,7 @@ impl SRMINewExtractor {
                 if topology == "pointlist" {
                     extract_index = &_pointlist_index;
                 }
-                println!("ExtractIndex: {}", extract_index);
+                crate::extract_log!("ExtractIndex: {}", extract_index);
 
                 let category_slot = d3d11_game_type
                     .category_slot_dict
@@ -1723,7 +1702,7 @@ impl SRMINewExtractor {
                     d3d11_gametype_wrapper.blend_extract_slot = category_slot.clone();
                 }
 
-                println!(
+                crate::extract_log!(
                     "CategoryName: {}, CategorySlot: {}",
                     category_name, category_slot
                 );
@@ -1734,14 +1713,14 @@ impl SRMINewExtractor {
                     .filter_first_file(&search_key, ".buf")
                     .unwrap_or_default();
 
-                println!("category_buf_filename: {}", category_buf_filename);
+                crate::extract_log!("category_buf_filename: {}", category_buf_filename);
 
                 category_buf_filename_map
                     .insert(category_name.clone(), category_buf_filename.clone());
 
                 let category_buf_filepath = self.resolve_fa_filepath(&category_buf_filename);
                 if !category_buf_filepath.exists() {
-                    println!(
+                    crate::extract_log!(
                         "Buffer file not found for category {}: {}",
                         category_name,
                         category_buf_filepath.display()
@@ -1771,7 +1750,7 @@ impl SRMINewExtractor {
                         &category_buf_txt_filepath,
                     )?
                 {
-                    println!(
+                    crate::extract_log!(
                         "GameType {} skipped: captured InputLayout does not match category {} in slot {}",
                         d3d11_game_type.game_type_name,
                         category_name,
@@ -1796,7 +1775,7 @@ impl SRMINewExtractor {
             }
 
             if !all_file_exists {
-                println!(
+                crate::extract_log!(
                     "GameType {} skipped: missing buffer files for one or more categories",
                     d3d11_game_type.game_type_name
                 );
@@ -1829,19 +1808,19 @@ impl SRMINewExtractor {
                 };
 
                 if tmp_vertex_number == 0 {
-                    println!(
+                    crate::extract_log!(
                         "GameType {} skipped: invalid stride or empty buffer for category {}",
                         d3d11_game_type.game_type_name, category_name
                     );
                     all_match = false;
                     break;
                 } else {
-                    println!("tmp_vertex_number: category_buf_filesize / category_stride = {} for category {}", tmp_vertex_number, category_name);
+                    crate::extract_log!("tmp_vertex_number: category_buf_filesize / category_stride = {} for category {}", tmp_vertex_number, category_name);
                 }
 
                 if d3d11_game_type.gpu_pre_skinning && category_name == "Position" {
                     gpu_position_vertex_capacity = Some(tmp_vertex_number);
-                    println!(
+                    crate::extract_log!(
                         "GPU Position resource capacity: {} vertices; defer logical vertex-count comparison until non-Position categories are matched",
                         tmp_vertex_number
                     );
@@ -1851,7 +1830,7 @@ impl SRMINewExtractor {
                 if !d3d11_game_type.gpu_pre_skinning {
                     let yushu = category_buf_filesize % category_stride;
                     if yushu != 0 {
-                        println!("GameType {} skipped: buffer filesize {} is not a multiple of stride {} for category {}", d3d11_game_type.game_type_name, category_buf_filesize, category_stride, category_name);
+                        crate::extract_log!("GameType {} skipped: buffer filesize {} is not a multiple of stride {} for category {}", d3d11_game_type.game_type_name, category_buf_filesize, category_stride, category_name);
                         all_match = false;
                         break;
                     }
@@ -1868,7 +1847,7 @@ impl SRMINewExtractor {
                     let category_txt_filename =
                         self.fa_data.filter_first_file(&search_str, ".txt")?;
                     if category_txt_filename.is_empty() {
-                        println!(
+                        crate::extract_log!(
                             "TXT file not found for category {}: search key {}",
                             category_name, search_str
                         );
@@ -1883,20 +1862,20 @@ impl SRMINewExtractor {
                         )?;
                         let vertex_count_in_txt_int =
                             vertex_count_in_txt.parse::<u64>().unwrap_or(0);
-                        println!(
+                        crate::extract_log!(
                             "vertex_count_in_txt: {}, vertex_number: {}",
                             vertex_count_in_txt_int, vertex_number
                         );
 
                         if tmp_vertex_number < vertex_count_in_txt_int {
-                            println!("GameType {} skipped: vertex number {} from buffer is less than vertex count {} in txt for category {}", d3d11_game_type.game_type_name, tmp_vertex_number, vertex_count_in_txt_int, category_name);
+                            crate::extract_log!("GameType {} skipped: vertex number {} from buffer is less than vertex count {} in txt for category {}", d3d11_game_type.game_type_name, tmp_vertex_number, vertex_count_in_txt_int, category_name);
                             all_match = false;
                             break;
                         }
 
                         if d3d11_game_type.category_slot_dict.len() > 1 {
                             if vertex_count_in_txt_int != tmp_vertex_number {
-                                println!("GameType {} skipped: vertex number {} from buffer does not match vertex count {} in txt for category {} in multi-slot GameType", d3d11_game_type.game_type_name, tmp_vertex_number, vertex_count_in_txt_int, category_name);
+                                crate::extract_log!("GameType {} skipped: vertex number {} from buffer does not match vertex count {} in txt for category {} in multi-slot GameType", d3d11_game_type.game_type_name, tmp_vertex_number, vertex_count_in_txt_int, category_name);
                                 all_match = false;
                                 break;
                             }
@@ -1904,8 +1883,8 @@ impl SRMINewExtractor {
                     }
                 }
 
-                println!("category: {}", category_name);
-                println!(
+                crate::extract_log!("category: {}", category_name);
+                crate::extract_log!(
                     "vertex_number: {}, tmp_vertex_number: {} for category {}",
                     vertex_number, tmp_vertex_number, category_name
                 );
@@ -1913,11 +1892,11 @@ impl SRMINewExtractor {
                 if vertex_number == 0 {
                     vertex_number = tmp_vertex_number;
                 } else if vertex_number != tmp_vertex_number {
-                    println!("GameType {} skipped: vertex number {} from category {} does not match vertex number {} from previous categories", d3d11_game_type.game_type_name, tmp_vertex_number, category_name, vertex_number);
+                    crate::extract_log!("GameType {} skipped: vertex number {} from category {} does not match vertex number {} from previous categories", d3d11_game_type.game_type_name, tmp_vertex_number, category_name, vertex_number);
                     all_match = false;
                     break;
                 } else {
-                    println!(
+                    crate::extract_log!(
                         "category match successful: vertex number {} from category {}",
                         vertex_number, category_name
                     );
@@ -1927,7 +1906,7 @@ impl SRMINewExtractor {
             if all_match && d3d11_game_type.gpu_pre_skinning {
                 if let Some(position_vertex_capacity) = gpu_position_vertex_capacity {
                     if vertex_number != 0 && position_vertex_capacity < vertex_number {
-                        println!(
+                        crate::extract_log!(
                             "GameType {} skipped: Position resource capacity {} is less than logical vertex number {} from non-Position categories",
                             d3d11_game_type.game_type_name,
                             position_vertex_capacity,
@@ -1935,7 +1914,7 @@ impl SRMINewExtractor {
                         );
                         all_match = false;
                     } else if vertex_number != 0 {
-                        println!(
+                        crate::extract_log!(
                             "GPU Position capacity match successful: resource capacity {} >= logical vertex number {}",
                             position_vertex_capacity,
                             vertex_number
@@ -1946,14 +1925,14 @@ impl SRMINewExtractor {
 
             if all_match {
                 possible_d3d11gametype_wrapper_list.push(d3d11_gametype_wrapper);
-                println!("Matched Gametype: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("Matched Gametype: {}", d3d11_game_type.game_type_name);
             }
 
             //如果找到了一个GPUPreSkinning就标记一下，这样后面就不会匹配CPU类型了�?
             if !find_atleast_one_gpu_type {
                 for d3d11_gametype_wrapper in possible_d3d11gametype_wrapper_list.iter() {
                     if d3d11_gametype_wrapper.d3d11_game_type.gpu_pre_skinning {
-                        println!("Found GPU-PreSkinning GameType: {}, will skip remaining CPU-PreSkinning types", d3d11_gametype_wrapper.d3d11_game_type.game_type_name);
+                        crate::extract_log!("Found GPU-PreSkinning GameType: {}, will skip remaining CPU-PreSkinning types", d3d11_gametype_wrapper.d3d11_game_type.game_type_name);
                         find_atleast_one_gpu_type = true;
                         break;
                     }
@@ -1991,18 +1970,18 @@ impl SRMINewExtractor {
                 continue;
             }
 
-            println!(
+            crate::extract_log!(
                 "Found IB txt file: {}, for TriangleListIndex: {}",
                 ib_txt_filename, trianglelist_index
             );
 
             let ib_txt_filepath = self.fa_log.get_deduped_filepath(&ib_txt_filename);
-            println!("IB txt filepath: {}", ib_txt_filepath);
+            crate::extract_log!("IB txt filepath: {}", ib_txt_filepath);
 
             let ib_txt_file = IndexBufferTxtFile::new(ib_txt_filepath, false)?;
             let first_index_u64: u64 = ib_txt_file.first_index.parse::<u64>().unwrap_or(0);
 
-            println!(
+            crate::extract_log!(
                 "FirstIndex: {}, IndexCount: {}",
                 ib_txt_file.first_index, ib_txt_file.index_count
             );
@@ -2010,33 +1989,33 @@ impl SRMINewExtractor {
             match_first_index_ib_txt_filename_map.insert(first_index_u64, ib_txt_filename.clone());
         }
 
-        println!("------------------------------------------------");
+        crate::extract_log!("------------------------------------------------");
 
         //输出查看一下
         for entry in match_first_index_ib_txt_filename_map.iter() {
-            println!("MatchFirstIndex: {}, IB txt filename: {}", entry.0, entry.1);
+            crate::extract_log!("MatchFirstIndex: {}, IB txt filename: {}", entry.0, entry.1);
         }
 
         for d3d11_gametype_wrapper in d3d11_gametype_wrapper_list.iter() {
             let d3d11_gametype_wrapper: &D3D11GameTypeWrapper = d3d11_gametype_wrapper; // 显式类型
-            println!(
+            crate::extract_log!(
                 "Extracting with GameType: {}",
                 d3d11_gametype_wrapper.d3d11_game_type.game_type_name
             );
 
-            println!(
+            crate::extract_log!(
                 "PositionSlot: {}",
                 d3d11_gametype_wrapper.position_extract_slot.clone()
             );
-            println!(
+            crate::extract_log!(
                 "PositionIndex: {}",
                 d3d11_gametype_wrapper.position_extract_index.clone()
             );
-            println!(
+            crate::extract_log!(
                 "BlendSlot: {}",
                 d3d11_gametype_wrapper.blend_extract_slot.clone()
             );
-            println!(
+            crate::extract_log!(
                 "BlendIndex: {}",
                 d3d11_gametype_wrapper.blend_extract_index.clone()
             );
@@ -2059,7 +2038,7 @@ impl SRMINewExtractor {
                 &trianglelist_index_list,
                 &d3d11_gametype.clone(),
             );
-            println!("Using TriangleListIndex: {}", trianglelist_index);
+            crate::extract_log!("Using TriangleListIndex: {}", trianglelist_index);
 
             let mut category_buf_filename_map: HashMap<String, String> = HashMap::new();
             for category_name in d3d11_gametype.ordered_category_name_list.iter() {
@@ -2079,7 +2058,7 @@ impl SRMINewExtractor {
                         extract_index = d3d11_gametype_wrapper.blend_extract_index.clone();
                     }
                 }
-                println!("Final ExtractIndex: {}", extract_index);
+                crate::extract_log!("Final ExtractIndex: {}", extract_index);
 
                 let mut category_slot = d3d11_gametype
                     .category_slot_dict
@@ -2091,12 +2070,12 @@ impl SRMINewExtractor {
                 } else if category_name == "Blend" {
                     category_slot = d3d11_gametype_wrapper.blend_extract_slot.clone();
                 }
-                println!("Final CategorySlot: {}", category_slot);
+                crate::extract_log!("Final CategorySlot: {}", category_slot);
 
                 //获取对应的文件名
                 let search_key = format!("{}-{}=", extract_index, category_slot);
                 let category_buf_filename = self.fa_data.filter_first_file(&search_key, ".buf")?;
-                println!("CategoryBufFileName: {}", category_buf_filename);
+                crate::extract_log!("CategoryBufFileName: {}", category_buf_filename);
 
                 category_buf_filename_map
                     .insert(category_name.clone(), category_buf_filename.clone());
@@ -2112,14 +2091,14 @@ impl SRMINewExtractor {
                 SSMTStringUtils::substring(&vb0_filename, 11, 8)?
             };
 
-            println!("VertexLimitVB: {}", vertex_limit_vb);
+            crate::extract_log!("VertexLimitVB: {}", vertex_limit_vb);
             let cs_output_vertex_limit_vb = Self::get_cs_output_vertex_limit_vb_from_lines(
                 &self.fa_log.lines,
                 &trianglelist_index,
                 &vertex_limit_vb,
             )
             .unwrap_or_default();
-            println!("CSOutputVertexLimitVB: {}", cs_output_vertex_limit_vb);
+            crate::extract_log!("CSOutputVertexLimitVB: {}", cs_output_vertex_limit_vb);
 
             self.export_precollected_submeshes(
                 "SRMI",
@@ -2164,11 +2143,11 @@ impl SRMINewExtractor {
         //对每个DrawIB依次提取模型
         for draw_ib in draw_ib_list.iter() {
             //打印当前处理的DrawIB和Alias
-            println!("DrawIB: {}", draw_ib);
+            crate::extract_log!("DrawIB: {}", draw_ib);
 
             //根据FrameAnalysis下面的log.txt，找到PointlistIndex
             let pointlist_index: String = self.get_copyresource_aware_pointlist_index(&draw_ib);
-            println!("PointlistIndex: {:?}", pointlist_index);
+            crate::extract_log!("PointlistIndex: {:?}", pointlist_index);
 
             if pointlist_index.is_empty() {
                 print!("未找到对应的PointlistIndex，该DrawIB对应数据类型可能为CPU-PreSkinning类型")
@@ -2179,7 +2158,7 @@ impl SRMINewExtractor {
                 self.fa_data.get_trianglelist_index_list(&draw_ib);
 
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TriangleListIndex: {}", trianglelist_index);
+                crate::extract_log!("TriangleListIndex: {}", trianglelist_index);
             }
             /*
                 * 接下来要判断是否是脸部和头发的特殊Shader
@@ -2191,14 +2170,14 @@ impl SRMINewExtractor {
             */
             //拿到cs-cb0的文件名，判断是否包含指定的Hash�?
             let cs_cb0_key: String = format!("{}-cs-cb0=", pointlist_index);
-            println!("cs-cb0 key: {}", cs_cb0_key);
+            crate::extract_log!("cs-cb0 key: {}", cs_cb0_key);
             let cs_cb0_filename: String = self.fa_data.filter_first_file(&cs_cb0_key, ".buf")?;
-            println!("cs-cb0 filename: {}", cs_cb0_filename);
-            println!();
+            crate::extract_log!("cs-cb0 filename: {}", cs_cb0_filename);
+            crate::extract_log!();
 
             if pointlist_index.is_empty() {
-                println!("PointlistIndex is empty, skipping special shader detection and using general extraction");
-                println!("执行提取:通用提取fee307b98a965c16");
+                crate::extract_log!("PointlistIndex is empty, skipping special shader detection and using general extraction");
+                crate::extract_log!("执行提取:通用提取fee307b98a965c16");
                 let mut possible_d3d11gametype_wrapper_list = self
                     .auto_gametype_detect_fee307b98a965c16(
                         pointlist_index.clone(),
@@ -2207,12 +2186,12 @@ impl SRMINewExtractor {
                 possible_d3d11gametype_wrapper_list.retain(|wrapper| {
                     data_type_filter.allows(wrapper.d3d11_game_type.gpu_pre_skinning)
                 });
-                println!(
+                crate::extract_log!(
                     "possible_d3d11gametype_wrapper_list count: {}",
                     possible_d3d11gametype_wrapper_list.len()
                 );
                 for d3d11gametype_wrapper in possible_d3d11gametype_wrapper_list.iter() {
-                    println!(
+                    crate::extract_log!(
                         "Matched GameType: {}",
                         d3d11gametype_wrapper.d3d11_game_type.game_type_name
                     );
@@ -2229,7 +2208,7 @@ impl SRMINewExtractor {
                     || cs_cb0_filename.contains("4d9c23fd387846c7")
                     || cs_cb0_filename.contains("ba3d8ab37ea2fd2d")
                 {
-                    println!("提取执行: 1c932707d4d8df41_4d9c23fd387846c7_ba3d8ab37ea2fd2d");
+                    crate::extract_log!("提取执行: 1c932707d4d8df41_4d9c23fd387846c7_ba3d8ab37ea2fd2d");
                     let mut possible_d3d11gametype_wrapper_list = self
                         .auto_gametype_detect_1c932707d4d8df41_4d9c23fd387846c7(
                             pointlist_index.clone(),
@@ -2238,7 +2217,7 @@ impl SRMINewExtractor {
                     possible_d3d11gametype_wrapper_list.retain(|wrapper| {
                         data_type_filter.allows(wrapper.d3d11_game_type.gpu_pre_skinning)
                     });
-                    println!(
+                    crate::extract_log!(
                         "possible_d3d11gametype_wrapper_list count: {}",
                         possible_d3d11gametype_wrapper_list.len()
                     );
@@ -2249,7 +2228,7 @@ impl SRMINewExtractor {
                         trianglelist_index_list.clone(),
                     )?;
                 } else if cs_cb0_filename.contains("d50694eedd2a8595") {
-                    println!("提取执行: d50694eedd2a8595");
+                    crate::extract_log!("提取执行: d50694eedd2a8595");
                     let mut possible_d3d11gametype_wrapper_list = self
                         .auto_gametype_detect_d50694eedd2a8595(
                             pointlist_index.clone(),
@@ -2258,7 +2237,7 @@ impl SRMINewExtractor {
                     possible_d3d11gametype_wrapper_list.retain(|wrapper| {
                         data_type_filter.allows(wrapper.d3d11_game_type.gpu_pre_skinning)
                     });
-                    println!(
+                    crate::extract_log!(
                         "possible_d3d11gametype_wrapper_list count: {}",
                         possible_d3d11gametype_wrapper_list.len()
                     );
@@ -2269,7 +2248,7 @@ impl SRMINewExtractor {
                         trianglelist_index_list.clone(),
                     )?;
                 } else if cs_cb0_filename.contains("c9f2b46571d22858") {
-                    println!("提取执行: c9f2b46571d22858");
+                    crate::extract_log!("提取执行: c9f2b46571d22858");
                     let mut possible_d3d11gametype_wrapper_list = self
                         .auto_gametype_detect_1c932707d4d8df41_4d9c23fd387846c7(
                             pointlist_index.clone(),
@@ -2278,7 +2257,7 @@ impl SRMINewExtractor {
                     possible_d3d11gametype_wrapper_list.retain(|wrapper| {
                         data_type_filter.allows(wrapper.d3d11_game_type.gpu_pre_skinning)
                     });
-                    println!(
+                    crate::extract_log!(
                         "possible_d3d11gametype_wrapper_list count: {}",
                         possible_d3d11gametype_wrapper_list.len()
                     );
@@ -2289,7 +2268,7 @@ impl SRMINewExtractor {
                         trianglelist_index_list.clone(),
                     )?;
                 } else {
-                    println!("执行提取:通用提取fee307b98a965c16");
+                    crate::extract_log!("执行提取:通用提取fee307b98a965c16");
                     let mut possible_d3d11gametype_wrapper_list = self
                         .auto_gametype_detect_fee307b98a965c16(
                             pointlist_index.clone(),
@@ -2298,12 +2277,12 @@ impl SRMINewExtractor {
                     possible_d3d11gametype_wrapper_list.retain(|wrapper| {
                         data_type_filter.allows(wrapper.d3d11_game_type.gpu_pre_skinning)
                     });
-                    println!(
+                    crate::extract_log!(
                         "possible_d3d11gametype_wrapper_list count: {}",
                         possible_d3d11gametype_wrapper_list.len()
                     );
                     for d3d11gametype_wrapper in possible_d3d11gametype_wrapper_list.iter() {
-                        println!(
+                        crate::extract_log!(
                             "Matched GameType: {}",
                             d3d11gametype_wrapper.d3d11_game_type.game_type_name
                         );

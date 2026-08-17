@@ -244,7 +244,7 @@ impl EFMI3FullNewExtractor {
                 }
             }
 
-            println!("ib txt filename: {}", ib_txt_filename);
+            crate::extract_log!("ib txt filename: {}", ib_txt_filename);
 
             let ib_txt_filepath = fa.log.get_deduped_filepath(&ib_txt_filename);
 
@@ -310,11 +310,11 @@ impl EFMI3FullNewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
-            println!("当前数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
 
             let trianglelist_index = ib_txt_file.index.clone();
 
@@ -328,7 +328,7 @@ impl EFMI3FullNewExtractor {
                     .cloned()
                     .unwrap_or_default();
 
-                println!(
+                crate::extract_log!(
                     "当前分类: {} 提取Index: {} 提取槽位: {}",
                     category_name, trianglelist_index, category_slot
                 );
@@ -340,7 +340,7 @@ impl EFMI3FullNewExtractor {
                     .filter_first_file(&search_key, ".buf")
                     .unwrap_or_default();
 
-                println!("CategoryBuf Buffer FileName: {}", category_buf_file_name);
+                crate::extract_log!("CategoryBuf Buffer FileName: {}", category_buf_file_name);
 
                 let category_buf_txt_file_name = self
                     .fa
@@ -348,7 +348,7 @@ impl EFMI3FullNewExtractor {
                     .filter_first_file(&search_key, ".txt")
                     .unwrap_or_default();
 
-                println!("CategoryBuf Txt FileName: {}", category_buf_txt_file_name);
+                crate::extract_log!("CategoryBuf Txt FileName: {}", category_buf_txt_file_name);
 
                 let category_buf_file_path =
                     self.fa.log.get_deduped_filepath(&category_buf_file_name);
@@ -357,14 +357,14 @@ impl EFMI3FullNewExtractor {
                     .log
                     .get_deduped_filepath(&category_buf_txt_file_name);
 
-                println!(
+                crate::extract_log!(
                     "Category: {} File: {}",
                     category_name, category_buf_file_path
                 );
 
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
                 {
-                    println!("对应Buffer文件未找到,此数据类型无效。");
+                    crate::extract_log!("对应Buffer文件未找到,此数据类型无效。");
                     all_file_exists = false;
                     break;
                 }
@@ -381,12 +381,12 @@ impl EFMI3FullNewExtractor {
                 } else {
                     SSMTBinaryUtils::get_file_size_from_migoto_txt(&category_buf_txt_file_path)?
                 };
-                println!("FileSize: {}", file_size);
+                crate::extract_log!("FileSize: {}", file_size);
                 category_buf_filesize_map.insert(category_name.clone(), file_size);
             }
 
             if !all_file_exists {
-                println!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
+                crate::extract_log!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
                 continue;
             }
 
@@ -411,7 +411,7 @@ impl EFMI3FullNewExtractor {
                 };
 
                 if tmp_number == 0 {
-                    //println!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
+                    //crate::extract_log!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
                     all_match = false;
                     break;
                 }
@@ -419,7 +419,7 @@ impl EFMI3FullNewExtractor {
                 if !d3d11_game_type.gpu_pre_skinning {
                     let yu_shu = file_size % category_stride;
                     if yu_shu != 0 {
-                        //println!("余数不为0: {}，槽位匹配失败", yu_shu);
+                        //crate::extract_log!("余数不为0: {}，槽位匹配失败", yu_shu);
                         all_match = false;
                         break;
                     }
@@ -440,7 +440,7 @@ impl EFMI3FullNewExtractor {
                         .unwrap_or_default();
 
                     if category_txt_file_name.is_empty() {
-                        println!("槽位的txt文件不存在，跳过此数据类型。");
+                        crate::extract_log!("槽位的txt文件不存在，跳过此数据类型。");
                         all_match = false;
                         break;
                     }
@@ -450,7 +450,7 @@ impl EFMI3FullNewExtractor {
                     if category_txt_file_path.is_empty()
                         || !Path::new(&category_txt_file_path).exists()
                     {
-                        println!("槽位的txt文件路径不存在，跳过此数据类型。");
+                        crate::extract_log!("槽位的txt文件路径不存在，跳过此数据类型。");
                         all_match = false;
                         break;
                     }
@@ -469,7 +469,7 @@ impl EFMI3FullNewExtractor {
                         if !show_stride.trim().is_empty() {
                             let show_stride_count = show_stride.parse::<u64>().unwrap_or(0);
                             if show_stride_count != category_stride {
-                                //println!("槽位的txt文件Stride与数据类型Stride不符，跳过此数据类型。");
+                                //crate::extract_log!("槽位的txt文件Stride与数据类型Stride不符，跳过此数据类型。");
                                 all_match = false;
                                 break;
                             }
@@ -480,20 +480,20 @@ impl EFMI3FullNewExtractor {
                 if vertex_number == 0 {
                     vertex_number = tmp_number;
                 } else if vertex_number != tmp_number {
-                    println!(
+                    crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
                         vertex_number, tmp_number
                     );
-                    println!("槽位匹配失败");
+                    crate::extract_log!("槽位匹配失败");
                     all_match = false;
                     break;
                 } else {
-                    println!("{} Match!", category_name);
+                    crate::extract_log!("{} Match!", category_name);
                 }
             }
 
             if all_match {
-                println!("MatchGameType: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("MatchGameType: {}", d3d11_game_type.game_type_name);
                 possible_gametype_list.push(d3d11_game_type.clone());
             }
 
@@ -508,9 +508,9 @@ impl EFMI3FullNewExtractor {
         }
 
         if !possible_gametype_list.is_empty() {
-            println!("All Matched GameType:");
+            crate::extract_log!("All Matched GameType:");
             for gt in possible_gametype_list.iter() {
-                println!("{}", gt.game_type_name);
+                crate::extract_log!("{}", gt.game_type_name);
             }
         }
 
@@ -682,8 +682,8 @@ impl EFMI3FullNewExtractor {
         SSMTTimerUtils::start("提取ib txt文件中的模型");
 
         for ib_txt_file in self.unique_ib_txt_file_list.iter() {
-            println!("Unique IB Txt File: {}", ib_txt_file.file_name);
-            println!(
+            crate::extract_log!("Unique IB Txt File: {}", ib_txt_file.file_name);
+            crate::extract_log!(
                 "First Index: {} Index Count: {} Byte Offset: {}",
                 ib_txt_file.first_index, ib_txt_file.index_count, ib_txt_file.byte_offset
             );
@@ -719,9 +719,9 @@ impl EFMI3FullNewExtractor {
         SSMTTimerUtils::end("提取ib txt文件中的模型");
 
         // for (unique_str, index_list) in self.unique_str_index_list_dict.iter() {
-        // 	println!("Unique Str: {} Index List: {:?}", unique_str, index_list);
+        // 	crate::extract_log!("Unique Str: {} Index List: {:?}", unique_str, index_list);
         // }
-        // println!("Total Suffix Count: {}", suffix_count);
+        // crate::extract_log!("Total Suffix Count: {}", suffix_count);
 
         // 根据 unique_str_index_list_dict 中的每个 index，生成工作空间下的总 DedupedTextures 文件夹
         {
@@ -743,10 +743,10 @@ impl EFMI3FullNewExtractor {
                     .copied()
                     .unwrap_or(false);
                 if !exteacted {
-                    //println!("Unique Str: {} has not been extracted, skipping copying deduped textures.", unique_str);
+                    //crate::extract_log!("Unique Str: {} has not been extracted, skipping copying deduped textures.", unique_str);
                     continue;
                 }
-                //println!("Unique Str: {} Index List: {:?}", unique_str, index_list);
+                //crate::extract_log!("Unique Str: {} Index List: {:?}", unique_str, index_list);
                 for trianglelist_index in index_list.iter() {
                     let content_str = format!("{}-ps-t", trianglelist_index);
                     let ps_texture_all_filename_list =
@@ -756,7 +756,7 @@ impl EFMI3FullNewExtractor {
                         let deduped_filepath =
                             self.fa.log.get_deduped_filepath(&ps_texture_filename);
                         if deduped_filepath.is_empty() {
-                            println!("No deduped file found for texture: {}", ps_texture_filename);
+                            crate::extract_log!("No deduped file found for texture: {}", ps_texture_filename);
                             continue;
                         }
 
@@ -804,7 +804,7 @@ impl EFMI3FullNewExtractor {
             let component_map = self.unique_str_index_list_dict.clone();
             let component_json = ComponentNameDrawCallIndexListJson::from_map(component_map);
             if let Err(e) = component_json.save_to_file(&component_json_path) {
-                eprintln!(
+                crate::extract_error!(
                     "Failed to write {}: {}",
                     component_json_path.to_string_lossy(),
                     e
@@ -881,7 +881,7 @@ impl EFMI3FullNewExtractor {
             let trianglelist_json =
                 TrianglelistDedupedFileNameJson::from_map(trianglelist_deduped_map);
             if let Err(e) = trianglelist_json.save_to_file(&trianglelist_json_path) {
-                eprintln!(
+                crate::extract_error!(
                     "Failed to write {}: {}",
                     trianglelist_json_path.to_string_lossy(),
                     e

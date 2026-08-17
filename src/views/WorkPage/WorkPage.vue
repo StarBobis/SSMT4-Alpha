@@ -185,6 +185,10 @@ const selectedFrameAnalysis = ref('');
 const frameAnalysisFolderPath = ref('');
 const isRefreshing = ref(false);
 const isExtracting = ref(false);
+const latestExtractionLogPaths = ref<Record<string, string>>({});
+const extractionLogWorkspaceKey = (gameName: string, workName: string) => `${gameName.trim()}\u0000${workName.trim()}`;
+const currentExtractionLogWorkspaceKey = computed(() => extractionLogWorkspaceKey(appSettings.CurrentGameName, workspaceName.value));
+const currentLatestExtractionLogPath = computed(() => latestExtractionLogPaths.value[currentExtractionLogWorkspaceKey.value] || '');
 const isSpecificIbDumpToggling = ref(false);
 const extractPanelTab = ref('drawib');
 const fullExtractDataTypeFilter = ref<FullExtractDataTypeFilter>('all');
@@ -1502,6 +1506,7 @@ const refreshFrameAnalysisFolders = async () => {
 };
 
 const handleExtractModels = async () => {
+  const logWorkspaceKey = extractionLogWorkspaceKey(appSettings.CurrentGameName, workspaceName.value);
   if (workspaceName.value) {
     await writeLegacyWorkspaceRuntimeFiles(workspaceName.value, buildCurrentWorkspaceTabConfig(), {
       tabId: activeWorkspaceTabId.value,
@@ -1525,11 +1530,16 @@ const handleExtractModels = async () => {
     (value) => {
       isExtracting.value = value;
     },
-    openPath
+    openPath,
+    openExtractionLog,
+    (path) => {
+      latestExtractionLogPaths.value = { ...latestExtractionLogPaths.value, [logWorkspaceKey]: path };
+    }
   );
 };
 
 const handleFullExtract = async () => {
+  const logWorkspaceKey = extractionLogWorkspaceKey(appSettings.CurrentGameName, workspaceName.value);
   if (workspaceName.value) {
     await writeLegacyWorkspaceRuntimeFiles(workspaceName.value, buildCurrentWorkspaceTabConfig(), {
       tabId: activeWorkspaceTabId.value,
@@ -1553,8 +1563,16 @@ const handleFullExtract = async () => {
     (value) => {
       isExtracting.value = value;
     },
-    openPath
+    openPath,
+    openExtractionLog,
+    (path) => {
+      latestExtractionLogPaths.value = { ...latestExtractionLogPaths.value, [logWorkspaceKey]: path };
+    }
   );
+};
+
+const handleOpenLatestExtractionLog = async () => {
+  if (currentLatestExtractionLogPath.value) await openExtractionLog(currentLatestExtractionLogPath.value);
 };
 
 const handleSelectLatestFrameAnalysis = async () => {
@@ -2493,6 +2511,15 @@ const openPath = async (path: string | undefined, emptyMsg: string) => {
   }
 };
 
+const openExtractionLog = async (path: string) => {
+  try {
+    await openExternal(path);
+  } catch (err) {
+    console.error('Failed to open extraction log', path, err);
+    ElMessage.error(t('workPage.messages.openExtractionLogFailed'));
+  }
+};
+
 const handleFolderMenu = async (cmd: string) => {
   if (cmd === 'migoto') {
     await open3DMigotoFolder();
@@ -3126,6 +3153,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
                 :isRefreshing="isRefreshing"
                 :isFrameAnalysisPathInvalid="isFrameAnalysisPathInvalid"
                 :isExtracting="isExtracting"
+                :hasLatestExtractionLog="!!currentLatestExtractionLogPath"
                 :fullExtractDataTypeFilterOptions="FULL_EXTRACT_DATA_TYPE_FILTER_OPTIONS"
                 @refresh="refreshFrameAnalysisFolders"
                 @selectLatest="handleSelectLatestFrameAnalysis"
@@ -3138,6 +3166,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
                 @removeModelRow="removeModelRow"
                 @extractModels="handleExtractModels"
                 @fullExtract="handleFullExtract"
+                @openLatestExtractionLog="handleOpenLatestExtractionLog"
               />
 
               <ConfigTables

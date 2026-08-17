@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderOpened, Download, ArrowUp, ArrowDown, Delete } from '@element-plus/icons-vue';
+import { FolderOpened, Download, ArrowUp, ArrowDown, Delete, Document } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { ModelRow } from './WorkPage.types';
@@ -18,6 +18,7 @@ defineProps<{
   isRefreshing: boolean;
   isFrameAnalysisPathInvalid: boolean;
   isExtracting: boolean;
+  hasLatestExtractionLog: boolean;
   fullExtractDataTypeFilterOptions: Array<{ value: FullExtractDataTypeFilter; labelKey: string }>;
 }>();
 
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   removeModelRow: [index: number];
   extractModels: [];
   fullExtract: [];
+  openLatestExtractionLog: [];
 }>();
 
 type ResizableColumn = { minWidth?: number | string; width?: number | string; realWidth?: number | null };
@@ -237,6 +239,10 @@ onBeforeUnmount(() => {
           <el-button type="primary" :loading="isExtracting" @click="emit('extractModels')">
             <el-icon><Download /></el-icon>
             <span>{{ t('workPage.actions.extractModels') }}</span>
+          </el-button>
+          <el-button v-if="hasLatestExtractionLog" plain @click="emit('openLatestExtractionLog')">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('workPage.actions.openLatestExtractionLog') }}</span>
           </el-button>
         </div>
       </el-tab-pane>

@@ -200,7 +200,7 @@ impl GF2NewExtractor {
         let match_first_index_ib_txt_file_name_dict =
             self.collect_match_first_index_ib_map(trianglelist_index_list)?;
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
-            println!(
+            crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
             );
@@ -372,24 +372,24 @@ impl GF2NewExtractor {
             .iter()
         {
             if d3d11_game_type.gpu_pre_skinning {
-                println!(
+                crate::extract_log!(
                     "UnityCPU逻辑仅用于CPU类型提取，所以移除当前GPU数据类型: {}",
                     d3d11_game_type.game_type_name
                 );
                 continue;
             }
 
-            println!("当前数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
 
             let trianglelist_index = self.d3d11_gametype_lv2.filter_trianglelist_index_unity_vs(
                 &self.fa.data,
                 trianglelist_index_list,
                 d3d11_game_type,
             );
-            println!("TrianglelistIndex: {}", trianglelist_index);
+            crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
 
             if trianglelist_index.is_empty() {
-                println!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
+                crate::extract_log!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
                 continue;
             }
 
@@ -403,7 +403,7 @@ impl GF2NewExtractor {
                     .cloned()
                     .unwrap_or_default();
 
-                println!(
+                crate::extract_log!(
                     "当前分类: {} 提取Index: {} 提取槽位: {}",
                     category_name, trianglelist_index, category_slot
                 );
@@ -434,7 +434,7 @@ impl GF2NewExtractor {
                     self.fa.log.get_deduped_filepath(&category_buf_filename);
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
                 {
-                    println!("对应Buffer文件未找到,此数据类型无效。");
+                    crate::extract_log!("对应Buffer文件未找到,此数据类型无效。");
                     all_file_exists = false;
                     break;
                 }
@@ -459,7 +459,7 @@ impl GF2NewExtractor {
             }
 
             if !all_file_exists {
-                println!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
+                crate::extract_log!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
                 continue;
             }
 
@@ -484,7 +484,7 @@ impl GF2NewExtractor {
                 };
 
                 if tmp_number == 0 {
-                    println!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
+                    crate::extract_log!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
                     all_match = false;
                     break;
                 }
@@ -492,30 +492,30 @@ impl GF2NewExtractor {
                 if vertex_number == 0 {
                     vertex_number = tmp_number;
                 } else if vertex_number != tmp_number {
-                    println!(
+                    crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
                         vertex_number, tmp_number
                     );
-                    println!("槽位匹配失败");
+                    crate::extract_log!("槽位匹配失败");
                     all_match = false;
                     break;
                 } else {
-                    println!("{} Match!", category_name);
+                    crate::extract_log!("{} Match!", category_name);
                 }
             }
 
             if all_match {
-                println!("MatchGameType: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("MatchGameType: {}", d3d11_game_type.game_type_name);
                 possible_gametype_list.push(d3d11_game_type.clone());
             }
         }
 
         if possible_gametype_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
         } else {
-            println!("All Matched GameType:");
+            crate::extract_log!("All Matched GameType:");
             for d3d11_game_type in possible_gametype_list.iter() {
-                println!("{}", d3d11_game_type.game_type_name);
+                crate::extract_log!("{}", d3d11_game_type.game_type_name);
             }
         }
 
@@ -556,11 +556,11 @@ impl GF2NewExtractor {
         };
 
         for draw_ib in draw_ib_list.iter() {
-            println!("DrawIB: {}", draw_ib);
+            crate::extract_log!("DrawIB: {}", draw_ib);
 
             let trianglelist_index_list = self.fa.data.get_trianglelist_index_list(&draw_ib);
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TriaglelistIndex: {}", trianglelist_index);
+                crate::extract_log!("TriaglelistIndex: {}", trianglelist_index);
             }
 
             let extract_success = self.extract_fee307b98a965c16(

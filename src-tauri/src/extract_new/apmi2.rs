@@ -224,7 +224,7 @@ impl APMI2NewExtractor {
         let match_first_index_ib_txt_file_name_dict =
             self.collect_match_first_index_ib_map(trianglelist_index_list)?;
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
-            println!(
+            crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
             );
@@ -410,21 +410,21 @@ impl APMI2NewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
-            println!("当前数据类型:{}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型:{}", d3d11_game_type.game_type_name);
 
             let trianglelist_index = self.d3d11_gametype_lv2.filter_trianglelist_index_unity_vs(
                 &self.fa.data,
                 trianglelist_index_list,
                 d3d11_game_type,
             );
-            println!("TrianglelistIndex: {}", trianglelist_index);
+            crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
 
             if trianglelist_index.is_empty() {
-                println!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
+                crate::extract_log!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
                 continue;
             }
 
@@ -447,7 +447,7 @@ impl APMI2NewExtractor {
                     .get(category_name)
                     .cloned()
                     .unwrap_or_default();
-                println!(
+                crate::extract_log!(
                     "当前分类:{} 提取Index: {} 提取槽位:{}",
                     category_name, extract_index, category_slot
                 );
@@ -467,7 +467,7 @@ impl APMI2NewExtractor {
                     self.fa.log.get_deduped_filepath(&category_buf_file_name);
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
                 {
-                    println!("对应Buffer文件未找到,此数据类型无效。");
+                    crate::extract_log!("对应Buffer文件未找到,此数据类型无效。");
                     all_file_exists = false;
                     break;
                 }
@@ -496,7 +496,7 @@ impl APMI2NewExtractor {
             }
 
             if !all_file_exists {
-                println!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
+                crate::extract_log!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
                 continue;
             }
 
@@ -522,7 +522,7 @@ impl APMI2NewExtractor {
                 let tmp_number = file_size / category_stride;
 
                 if tmp_number == 0 {
-                    println!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
+                    crate::extract_log!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
                     all_match = false;
                     break;
                 }
@@ -530,7 +530,7 @@ impl APMI2NewExtractor {
                 if !d3d11_game_type.gpu_pre_skinning {
                     let yu_shu = file_size % category_stride;
                     if yu_shu != 0 {
-                        println!("余数不为0: {}，文件步长除以类别步长不能含有余数", yu_shu);
+                        crate::extract_log!("余数不为0: {}，文件步长除以类别步长不能含有余数", yu_shu);
                         all_match = false;
                         break;
                     }
@@ -550,7 +550,7 @@ impl APMI2NewExtractor {
                         .unwrap_or_default();
 
                     if category_txt_file_name.is_empty() {
-                        println!("槽位的txt文件不存在，跳过此数据类型。");
+                        crate::extract_log!("槽位的txt文件不存在，跳过此数据类型。");
                         all_match = false;
                         break;
                     }
@@ -571,7 +571,7 @@ impl APMI2NewExtractor {
                     let txt_show_vertex_count = vertex_count_txt_show.parse::<u64>().unwrap_or(0);
 
                     if txt_show_vertex_count != tmp_number {
-                        println!("槽位的txt文件顶点数与Buffer统计顶点数不符，跳过此数据类型。");
+                        crate::extract_log!("槽位的txt文件顶点数与Buffer统计顶点数不符，跳过此数据类型。");
                         all_match = false;
                         break;
                     }
@@ -580,20 +580,20 @@ impl APMI2NewExtractor {
                 if vertex_number == 0 {
                     vertex_number = tmp_number;
                 } else if vertex_number != tmp_number {
-                    println!(
+                    crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
                         vertex_number, tmp_number
                     );
-                    println!("槽位匹配失败");
+                    crate::extract_log!("槽位匹配失败");
                     all_match = false;
                     break;
                 } else {
-                    println!("{} Match!", category_name);
+                    crate::extract_log!("{} Match!", category_name);
                 }
             }
 
             if all_match {
-                println!("MatchGameType: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("MatchGameType: {}", d3d11_game_type.game_type_name);
                 possible_game_type_list.push(d3d11_game_type.clone());
             }
 
@@ -608,11 +608,11 @@ impl APMI2NewExtractor {
         }
 
         if possible_game_type_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
         } else {
-            println!("All Matched GameType:");
+            crate::extract_log!("All Matched GameType:");
             for d3d11_game_type in possible_game_type_list.iter() {
-                println!("{}", d3d11_game_type.game_type_name);
+                crate::extract_log!("{}", d3d11_game_type.game_type_name);
             }
         }
 
@@ -663,7 +663,7 @@ impl APMI2NewExtractor {
         }
 
         for (match_first_index, ib_file_name) in match_first_index_ib_txt_file_name_dict.iter() {
-            println!(
+            crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
             );
@@ -687,19 +687,19 @@ impl APMI2NewExtractor {
                 let per_ib_trianglelist_index: String = ib_txt_file_name.chars().take(6).collect();
                 let ib_buf_file_name =
                     SSMTFileUtils::get_filename_with_new_extension(ib_txt_file_name, "buf")?;
-                println!("{}", ib_buf_file_name);
+                crate::extract_log!("{}", ib_buf_file_name);
 
                 let ib_txt_file_path = self.fa.log.get_deduped_filepath(ib_txt_file_name);
                 let ib_buf_file_path = self.fa.log.get_deduped_filepath(&ib_buf_file_name);
 
                 let ib_txt_file = IndexBufferTxtFile::new(&ib_txt_file_path, true)?;
-                println!("{}", ib_txt_file_path);
-                println!("FirstIndex: {}", ib_txt_file.first_index);
-                println!("IndexCount: {}", ib_txt_file.index_count);
+                crate::extract_log!("{}", ib_txt_file_path);
+                crate::extract_log!("FirstIndex: {}", ib_txt_file.first_index);
+                crate::extract_log!("IndexCount: {}", ib_txt_file.index_count);
 
                 let mut category_buf_filename_map: HashMap<String, String> = HashMap::new();
                 let mut category_txt_filename_map: HashMap<String, String> = HashMap::new();
-                println!("开始从各个Buffer文件中读取数据:");
+                crate::extract_log!("开始从各个Buffer文件中读取数据:");
                 let mut buf_dict_list: Vec<HashMap<usize, Vec<u8>>> = Vec::new();
                 for category_name in d3d11_game_type.ordered_category_name_list.iter() {
                     let topology = d3d11_game_type
@@ -832,7 +832,7 @@ impl APMI2NewExtractor {
                 let cs_t1_buf_file_path = self.fa.log.get_deduped_filepath(&cs_t1_buf_file_name);
 
                 if cs_t1_buf_file_path.is_empty() {
-                    println!("cs-t1 Buffer文件不存在，跳过复制cs-t1为-Blend的Buffer文件");
+                    crate::extract_log!("cs-t1 Buffer文件不存在，跳过复制cs-t1为-Blend的Buffer文件");
                 } else {
                     let blend_buf_file_path =
                         game_type_output_path.join(format!("{}-Blend.buf", name_prefix));
@@ -842,8 +842,8 @@ impl APMI2NewExtractor {
                             e
                         )
                     })?;
-                    println!("复制了cs-t1 Buffer文件为Blend Buffer文件");
-                    println!(
+                    crate::extract_log!("复制了cs-t1 Buffer文件为Blend Buffer文件");
+                    crate::extract_log!(
                         "原文件: {} 目标文件: {}",
                         cs_t1_buf_file_path,
                         blend_buf_file_path.display()
@@ -955,7 +955,7 @@ impl APMI2NewExtractor {
         &mut self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<(), String> {
-        println!("开始提取:");
+        crate::extract_log!("开始提取:");
         let draw_ib_list = if self.specify_drawib_extract {
             self.drawib_config
                 .entries
@@ -968,16 +968,16 @@ impl APMI2NewExtractor {
         };
 
         for draw_ib in draw_ib_list.iter() {
-            println!("当前DrawIB: {}", draw_ib);
+            crate::extract_log!("当前DrawIB: {}", draw_ib);
 
             let pointlist_index = self
                 .fa
                 .log
                 .get_last_pointlist_index_by_hash(&draw_ib)
                 .unwrap_or_default();
-            println!("当前识别到的PointlistIndex: {}", pointlist_index);
+            crate::extract_log!("当前识别到的PointlistIndex: {}", pointlist_index);
             if pointlist_index.is_empty() {
-                println!("当前识别到的PointlistIndex为空，此DrawIB可能为CPU-PreSkinning类型。");
+                crate::extract_log!("当前识别到的PointlistIndex为空，此DrawIB可能为CPU-PreSkinning类型。");
             }
 
             //根据DrawIB获取对应的TrianglelistIndex列表
@@ -985,17 +985,17 @@ impl APMI2NewExtractor {
 
             //输出展示一下
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TrianglelistIndex: {}", trianglelist_index);
+                crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
             }
 
             //这里APMI和异人之下差不多，都需要特殊的Blend处理，所以需要逐个识别ComputeShader的值进行处理
             //就像SRMI一样，需要先获取cs的值
             //拿到cs-cb0的文件名，判断是否包含指定的Hash
             let cs_cb0_key: String = format!("{}-cs-cb0=", pointlist_index);
-            println!("cs-cb0 key: {}", cs_cb0_key);
+            crate::extract_log!("cs-cb0 key: {}", cs_cb0_key);
             let cs_cb0_filename: String = self.fa.data.filter_first_file(&cs_cb0_key, ".buf")?;
-            println!("cs-cb0 filename: {}", cs_cb0_filename);
-            println!();
+            crate::extract_log!("cs-cb0 filename: {}", cs_cb0_filename);
+            crate::extract_log!();
 
             if cs_cb0_filename.contains("38cddb8c0126726a") {
                 let result = self.extract_38cddb8c0126726a(
@@ -1035,7 +1035,7 @@ impl APMI2NewExtractor {
             }
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if self.specify_drawib_extract {
             sync_workspace_deduped_textures_and_json(
                 &self.fa,

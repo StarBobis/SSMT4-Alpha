@@ -75,7 +75,11 @@ pub async fn prepare_dds_webgl_preview(
     source_path: String,
 ) -> Result<String, String> {
     let source = Path::new(source_path.trim());
-    if !source.is_file() || !source.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("dds")) {
+    if !source.is_file()
+        || !source
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("dds"))
+    {
         return Err("DDS preview source does not exist or is not a DDS file".to_string());
     }
 
@@ -94,7 +98,9 @@ pub async fn prepare_dds_webgl_preview(
         .join(cache_key);
     std::fs::create_dir_all(&cache_dir).map_err(|error| error.to_string())?;
     let output = cache_dir.join(
-        source.file_name().ok_or_else(|| "DDS source has no file name".to_string())?,
+        source
+            .file_name()
+            .ok_or_else(|| "DDS source has no file name".to_string())?,
     );
     if !output.is_file() {
         TextureConvertHelper::convert_texture_to_rgba_dds(

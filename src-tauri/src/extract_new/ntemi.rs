@@ -312,7 +312,7 @@ impl NTEMINewExtractor {
                 Ok(true) => return Ok(()),
                 Ok(false) => {}
                 Err(e) => {
-                    println!(
+                    crate::extract_log!(
                         "NTEMI category metadata fallback: category={} buf={} txt={} reason={}",
                         category_name, category_buf_filename, category_txt_file_path, e
                     );
@@ -357,7 +357,7 @@ impl NTEMINewExtractor {
             let (match_first_index, _has_indirect) = if ib_txt_file.first_index == "0"
                 && ib_txt_file.index_count == "0"
             {
-                println!(
+                crate::extract_log!(
                     "[collect] {} ib={}: first_index=0 index_count=0, trying indirect resolve",
                     trianglelist_index, ib_file_name
                 );
@@ -365,7 +365,7 @@ impl NTEMINewExtractor {
                 // Try to get the real params from the indirect args buffer.
                 self.fa.log.resolve_indirect_draw_params(trianglelist_index)
                     .map(|(si, ic)| {
-                        println!(
+                        crate::extract_log!(
                             "[collect] {} -> indirect resolved si={} ic={}, inserting indirect_params",
                             trianglelist_index, si, ic
                         );
@@ -373,7 +373,7 @@ impl NTEMINewExtractor {
                         (si, true)
                     })
                     .unwrap_or_else(|| {
-                        println!(
+                        crate::extract_log!(
                             "[collect] {} -> indirect resolve FAILED, falling back to key=0",
                             trianglelist_index
                         );
@@ -825,7 +825,7 @@ impl NTEMINewExtractor {
             .filter_first_file(&format!("{}-vb0", first_trianglelist_index), ".buf")
             .unwrap_or_default();
         if trianglelist_vb0_filename.is_empty() {
-            println!(
+            crate::extract_log!(
                 "NTEMI PointlistIndex 识别失败: DrawIB {} 在 TrianglelistIndex {} 上未找到 vb0 文件",
                 draw_ib, first_trianglelist_index
             );
@@ -834,7 +834,7 @@ impl NTEMINewExtractor {
 
         let vb0_hash = Self::get_hash_from_dump_filename(&trianglelist_vb0_filename, "vb0=");
         if vb0_hash.is_empty() {
-            println!(
+            crate::extract_log!(
                 "NTEMI PointlistIndex 识别失败: DrawIB {} 的 vb0 文件名无法解析 hash: {}",
                 draw_ib, trianglelist_vb0_filename
             );
@@ -879,14 +879,14 @@ impl NTEMINewExtractor {
 
         if let Some(first_index) = matched_index_list.first() {
             let pointlist_index = format!("{:06}", first_index);
-            println!(
+            crate::extract_log!(
                 "NTEMI PointlistIndex 识别成功: DrawIB {} -> PointlistIndex {} (TrianglelistIndex {} / vb0 hash {} / matched {:?})",
                 draw_ib, pointlist_index, first_trianglelist_index, vb0_hash, matched_index_list
             );
             return pointlist_index;
         }
 
-        println!(
+        crate::extract_log!(
             "NTEMI PointlistIndex 识别失败: DrawIB {} 未能通过 vb0 hash {} 在 TrianglelistIndex {} 之前找到 Dumping Buffer 索引",
             draw_ib, vb0_hash, first_trianglelist_index
         );
@@ -972,15 +972,15 @@ impl NTEMINewExtractor {
             .ordered_gpu_cpu_d3d11_gametype_list
             .iter()
         {
-            println!("当前数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
             let matched_trianglelist_index = self
                 .get_first_matching_trianglelist_index(d3d11_game_type, trianglelist_index_list);
-            println!(
+            crate::extract_log!(
                 "AllSlot Matched TrianglelistIndex: {}",
                 matched_trianglelist_index
             );
@@ -1004,7 +1004,7 @@ impl NTEMINewExtractor {
                     extract_index = matched_trianglelist_index.clone();
                 }
 
-                println!("CategorySlot: {}", category_slot);
+                crate::extract_log!("CategorySlot: {}", category_slot);
                 let search_str = format!("{}-{}=", extract_index, category_slot);
                 let category_buf_filename = self
                     .fa
@@ -1012,20 +1012,20 @@ impl NTEMINewExtractor {
                     .filter_first_file(&search_str, ".buf")
                     .unwrap_or_default();
                 if category_buf_filename.is_empty() {
-                    println!("未找到当前CategorySlot对应文件: {}", category_slot);
+                    crate::extract_log!("未找到当前CategorySlot对应文件: {}", category_slot);
                     all_category_slot_found = false;
                     break;
                 }
 
                 category_buf_filename_dict.insert(category.clone(), category_buf_filename.clone());
-                println!(
+                crate::extract_log!(
                     "CategorySlot: {} ExtractBufFileName: {}",
                     category_slot, category_buf_filename
                 );
             }
 
             if !all_category_slot_found {
-                println!("未找到全部CategorySlot对应文件，跳过此数据类型");
+                crate::extract_log!("未找到全部CategorySlot对应文件，跳过此数据类型");
                 continue;
             }
 
@@ -1033,8 +1033,8 @@ impl NTEMINewExtractor {
             let mut vertex_count: u64 = 0;
 
             for (category_name, category_slot) in d3d11_game_type.category_slot_dict.iter() {
-                println!("CategoryName: {}", category_name);
-                println!("CategorySlot: {}", category_slot);
+                crate::extract_log!("CategoryName: {}", category_name);
+                crate::extract_log!("CategorySlot: {}", category_slot);
 
                 let category_stride = d3d11_game_type
                     .category_stride_dict
@@ -1044,12 +1044,12 @@ impl NTEMINewExtractor {
 
                 if category_stride == 0 {
                     all_slot_match = false;
-                    println!("未在数据类型定义中找到当前Category的Stride，匹配失败");
+                    crate::extract_log!("未在数据类型定义中找到当前Category的Stride，匹配失败");
                     break;
                 }
 
                 if !category_buf_filename_dict.contains_key(category_name) {
-                    println!("未检测到当前CategorySlot文件，匹配失败");
+                    crate::extract_log!("未检测到当前CategorySlot文件，匹配失败");
                     all_slot_match = false;
                     break;
                 }
@@ -1058,7 +1058,7 @@ impl NTEMINewExtractor {
                     .get(category_name)
                     .cloned()
                     .unwrap_or_default();
-                println!(
+                crate::extract_log!(
                     "CategorySlot: {} CategoryBufFileName: {}",
                     category_slot, category_buf_filename
                 );
@@ -1066,7 +1066,7 @@ impl NTEMINewExtractor {
                 let category_buf_filepath =
                     self.fa.log.get_deduped_filepath(&category_buf_filename);
                 if category_buf_filepath.is_empty() {
-                    println!("未找到当前CategorySlot文件路径，匹配失败");
+                    crate::extract_log!("未找到当前CategorySlot文件路径，匹配失败");
                     all_slot_match = false;
                     break;
                 }
@@ -1087,7 +1087,7 @@ impl NTEMINewExtractor {
                     match SSMTBinaryUtils::get_file_size_from_migoto_txt(&category_txt_filepath) {
                         Ok(size) => size,
                         Err(e) => {
-                            println!(
+                            crate::extract_log!(
                                     "NTEMI metadata read failed, fallback to buf size. CategorySlot: {} CategoryBufFileName: {} TxtPath: {} Reason: {}",
                                     category_slot, category_buf_filename, category_txt_filepath, e
                                 );
@@ -1097,7 +1097,7 @@ impl NTEMINewExtractor {
                 };
 
                 if slot_file_size == 0 || slot_file_size % category_stride != 0 {
-                    println!(
+                    crate::extract_log!(
                         "当前槽位: {} 文件大小({})与步长({})不匹配，跳过此数据类型",
                         category_slot, slot_file_size, category_stride
                     );
@@ -1110,11 +1110,11 @@ impl NTEMINewExtractor {
                 if vertex_count == 0 {
                     vertex_count = slot_vertex_count;
                 } else if vertex_count != slot_vertex_count {
-                    println!(
+                    crate::extract_log!(
                         "VertexCount: {} SlotVertexCount: {}",
                         vertex_count, slot_vertex_count
                     );
-                    println!(
+                    crate::extract_log!(
                         "当前槽位: {} 文件数据不符合当前数据类型要求，跳过此数据类型",
                         category_slot
                     );
@@ -1126,7 +1126,7 @@ impl NTEMINewExtractor {
             }
 
             if all_slot_match {
-                println!("识别到数据类型: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("识别到数据类型: {}", d3d11_game_type.game_type_name);
                 possible_game_type_list.push(D3D11GameTypeWrapper::new(
                     d3d11_game_type.clone(),
                     pointlist_index,
@@ -1145,7 +1145,7 @@ impl NTEMINewExtractor {
         }
 
         if possible_game_type_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
             return Ok(possible_game_type_list);
         }
 
@@ -1169,9 +1169,9 @@ impl NTEMINewExtractor {
         //         .collect();
         // }
 
-        println!("All Matched GameType:");
+        crate::extract_log!("All Matched GameType:");
         for game_type_wrapper in possible_game_type_list.iter() {
-            println!(
+            crate::extract_log!(
                 "{} => PointlistIndex: {} MatchedTrianglelistIndex: {}",
                 game_type_wrapper.d3d11gametype.game_type_name,
                 game_type_wrapper.pointlist_index,
@@ -1313,7 +1313,7 @@ impl NTEMINewExtractor {
                     component_drawcall_index_list_dict.clone(),
                 );
             if let Err(e) = component_json.save_to_file(&component_json_path) {
-                eprintln!("Warning: {}", e);
+                crate::extract_error!("Warning: {}", e);
             }
         }
 
@@ -1362,7 +1362,7 @@ impl NTEMINewExtractor {
         if let Err(e) =
             trianglelist_deduped_json.save_to_file(&trianglelist_deduped_filename_json_path)
         {
-            eprintln!("Warning: {}", e);
+            crate::extract_error!("Warning: {}", e);
         }
 
         Ok(())
@@ -1372,16 +1372,16 @@ impl NTEMINewExtractor {
         &mut self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<(), String> {
-        println!("开始提取:");
+        crate::extract_log!("开始提取:");
 
         for draw_ib in self.draw_ib_list.iter() {
             //获取到当前DrawIB进行处理
-            println!("当前DrawIB: {}", draw_ib);
+            crate::extract_log!("当前DrawIB: {}", draw_ib);
 
             //获取TrianglelistIndex列表
             let trianglelist_index_list = self.fa.data.get_trianglelist_index_list(&draw_ib);
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TrianglelistIndex: {}", trianglelist_index);
+                crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
             }
 
             //根据FrameAnalysis下面的log.txt，找到PointlistIndex
@@ -1391,7 +1391,7 @@ impl NTEMINewExtractor {
             if pointlist_index.is_empty() {
                 print!("未找到对应的PointlistIndex，该DrawIB对应数据类型可能为CPU-PreSkinning类型")
             } else {
-                println!("PointlistIndex: {:?}", pointlist_index);
+                crate::extract_log!("PointlistIndex: {:?}", pointlist_index);
             }
 
             //根据DrawIB和TrianglelistIndex列表，获取可能的数据类型列表
@@ -1403,7 +1403,7 @@ impl NTEMINewExtractor {
 
             if possible_gametype_list.is_empty() {
                 for x in trianglelist_index_list.iter() {
-                    println!("Unrecognized TrianglelistIndex: {}", x);
+                    crate::extract_log!("Unrecognized TrianglelistIndex: {}", x);
                 }
 
                 crate::extract_new::log_skipped_drawib(
@@ -1423,7 +1423,7 @@ impl NTEMINewExtractor {
             )?;
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if self.specify_drawib_extract {
             self.sync_deduped_textures_and_json(&self.drawib_config)?;
         } else {

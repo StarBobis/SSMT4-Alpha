@@ -1,3 +1,4 @@
+pub mod extraction_log;
 pub mod ssmt_binary_utils;
 pub mod ssmt_command_utils;
 pub mod ssmt_compress_utils;

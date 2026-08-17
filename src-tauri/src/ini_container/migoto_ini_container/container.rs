@@ -3,7 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::section_parsers::SectionParsers;
-use crate::ini_container::migoto_data_types::domain::{CommandList, Key, Resource, TextureOverride};
+use crate::ini_container::migoto_data_types::domain::{
+    CommandList, Key, Resource, TextureOverride,
+};
 use crate::ini_container::migoto_data_types::ini_core::IniSection;
 use crate::ini_container::migoto_data_types::variable::Variable;
 

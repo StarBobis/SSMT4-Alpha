@@ -277,7 +277,7 @@ impl FrameAnalysisSingleLog {
         let mut find_cs_set_sr = false;
         let command_str = "CSSetShaderResources";
 
-        println!(
+        crate::extract_log!(
             "Get_ComputeShaderSlotHashMap_FromCSSetShaderResources_ByIndex:{}",
             index
         );
@@ -286,24 +286,24 @@ impl FrameAnalysisSingleLog {
             let call_line_trim = call_line.trim();
 
             if find_cs_set_sr {
-                println!("FindCSSetShaderResources");
+                crate::extract_log!("FindCSSetShaderResources");
                 if !call_line_trim.starts_with("00") {
-                    println!("Processing {}", call_line);
+                    crate::extract_log!("Processing {}", call_line);
                     let cs_resource = ShaderResource::new(&call_line);
                     if cs_resource.index.is_empty() || cs_resource.hash.is_empty() {
                         continue;
                     }
 
                     let slot = format!("cs-t{}", cs_resource.index);
-                    println!("Slot: {} Hash: {}", slot, cs_resource.hash);
+                    crate::extract_log!("Slot: {} Hash: {}", slot, cs_resource.hash);
                     out.insert(slot, cs_resource.hash);
                 } else if call_line.contains(command_str) {
                 } else {
-                    println!("Set FindCSSetShaderResources = False");
+                    crate::extract_log!("Set FindCSSetShaderResources = False");
                     find_cs_set_sr = false;
                 }
             } else if call_line.contains(command_str) {
-                println!("Processing: {}", call_line);
+                crate::extract_log!("Processing: {}", call_line);
                 find_cs_set_sr = true;
             }
         }

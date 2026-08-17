@@ -227,6 +227,22 @@ const openUsageDocs = async () => {
                   </el-select>
                 </div>
               </div>
+
+              <div class="setting-row">
+                <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><Document /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.general.modelExtractionLogLanguage') }}</div>
+                    <div class="setting-description">{{ t('settings.hints.modelExtractionLogLanguage') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control compact-control">
+                  <el-select v-model="appSettings.modelExtractionLogLanguage" :aria-label="t('settings.general.modelExtractionLogLanguage')">
+                    <el-option value="zh-CN" :label="t('settings.general.modelExtractionLogChinese')" />
+                    <el-option value="en" :label="t('settings.general.modelExtractionLogEnglish')" />
+                  </el-select>
+                </div>
+              </div>
             </div>
           </section>
 

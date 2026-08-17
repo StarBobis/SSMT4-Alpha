@@ -242,7 +242,10 @@ fn path_uses_directory_link(root: &Path, physical_group: &str) -> bool {
         return true;
     }
     let mut current = root.to_path_buf();
-    for segment in physical_group.split('/').filter(|segment| !segment.is_empty()) {
+    for segment in physical_group
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+    {
         current.push(segment);
         if is_directory_link(&current) {
             return true;
@@ -375,7 +378,10 @@ fn analyze_directory(path: &Path) -> DirAnalysis {
             let sub_path = entry.path();
             if sub_path.is_dir() {
                 let sub_name = sub_path.file_name().unwrap_or_default().to_string_lossy();
-                if !sub_name.starts_with('.') && !sub_name.starts_with('$') && !is_managed_backup_name(&sub_name) {
+                if !sub_name.starts_with('.')
+                    && !sub_name.starts_with('$')
+                    && !is_managed_backup_name(&sub_name)
+                {
                     has_subdirs = true;
                 }
                 continue;
@@ -462,7 +468,10 @@ fn count_leaf_mods(path: &Path) -> u64 {
                     let p = sub_entry.path();
                     if p.is_dir() {
                         let sn = p.file_name().unwrap_or_default().to_string_lossy();
-                        if !sn.starts_with('.') && !sn.starts_with('$') && !is_managed_backup_name(&sn) {
+                        if !sn.starts_with('.')
+                            && !sn.starts_with('$')
+                            && !is_managed_backup_name(&sn)
+                        {
                             has_subdirs = true;
                         }
                     } else if p.is_file() {
@@ -547,7 +556,10 @@ fn scan_group_from_disk(install_dir: &str, group_path: &str) -> Result<ScanResul
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        if dir_name.starts_with('.') || dir_name.starts_with('$') || is_managed_backup_name(&dir_name) {
+        if dir_name.starts_with('.')
+            || dir_name.starts_with('$')
+            || is_managed_backup_name(&dir_name)
+        {
             skipped_count += 1;
             continue;
         }
@@ -965,7 +977,10 @@ pub async fn mod_library_stream_scan(
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
-            if dir_name.starts_with('.') || dir_name.starts_with('$') || is_managed_backup_name(&dir_name) {
+            if dir_name.starts_with('.')
+                || dir_name.starts_with('$')
+                || is_managed_backup_name(&dir_name)
+            {
                 continue;
             }
 

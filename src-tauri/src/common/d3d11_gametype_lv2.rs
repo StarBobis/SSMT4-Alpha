@@ -32,15 +32,15 @@ impl D3D11GameTypeLv2 {
     }
 
     pub fn from_game_name(game_name: &str) -> Result<Self, String> {
-        println!("Loading D3D11GameType registry for game: {}", game_name);
+        crate::extract_log!("Loading D3D11GameType registry for game: {}", game_name);
         let d3d11_game_type_list = gametype::get_game_type_list(game_name)?;
         Self::from_game_type_list(d3d11_game_type_list)
     }
 
-        /// 兼容旧接口：从路径最后一级目录名推断游戏名，再从外部/内部注册表读取。
+    /// 兼容旧接口：从路径最后一级目录名推断游戏名，再从外部/内部注册表读取。
     pub fn new(game_type_folder: impl AsRef<Path>) -> Result<Self, String> {
         let folder: PathBuf = game_type_folder.as_ref().to_path_buf();
-        println!(
+        crate::extract_log!(
             "Loading D3D11GameType from folder alias: {}",
             folder.display()
         );
@@ -77,7 +77,7 @@ impl D3D11GameTypeLv2 {
             }
         }
 
-        println!(
+        crate::extract_log!(
             "Loaded {} D3D11GameType entries.",
             d3d11_game_type_list.len()
         );

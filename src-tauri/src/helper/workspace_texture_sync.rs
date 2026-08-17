@@ -373,7 +373,7 @@ pub fn sync_yysls_workspace_deduped_textures_and_json(
     let component_json =
         ComponentNameDrawCallIndexListJson::from_map(component_drawcall_index_list_dict);
     if let Err(e) = component_json.save_to_file(&component_json_path) {
-        eprintln!(
+        crate::extract_error!(
             "Failed to write {}: {}",
             component_json_path.to_string_lossy(),
             e
@@ -384,7 +384,7 @@ pub fn sync_yysls_workspace_deduped_textures_and_json(
         get_workspace_trianglelist_deduped_filename_json_path(workspace_path)?;
     let trianglelist_json = TrianglelistDedupedFileNameJson::from_map(trianglelist_deduped_map);
     if let Err(e) = trianglelist_json.save_to_file(&trianglelist_json_path) {
-        eprintln!(
+        crate::extract_error!(
             "Failed to write {}: {}",
             trianglelist_json_path.to_string_lossy(),
             e
@@ -509,7 +509,7 @@ pub fn sync_workspace_deduped_textures_and_json(
     let component_json =
         ComponentNameDrawCallIndexListJson::from_map(component_drawcall_index_list_dict.clone());
     if let Err(e) = component_json.save_to_file(&component_json_path) {
-        eprintln!(
+        crate::extract_error!(
             "Failed to write {}: {}",
             component_json_path.to_string_lossy(),
             e
@@ -575,7 +575,7 @@ pub fn sync_workspace_deduped_textures_and_json(
         get_workspace_trianglelist_deduped_filename_json_path(workspace_path)?;
     let trianglelist_json = TrianglelistDedupedFileNameJson::from_map(trianglelist_deduped_map);
     if let Err(e) = trianglelist_json.save_to_file(&trianglelist_json_path) {
-        eprintln!(
+        crate::extract_error!(
             "Failed to write {}: {}",
             trianglelist_json_path.to_string_lossy(),
             e

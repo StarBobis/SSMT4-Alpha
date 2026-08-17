@@ -97,7 +97,7 @@ impl MarkTextureHelper {
         let drawib_entries = match DrawIBConfig::read_drawib_list_from_workspace(workspace_path) {
             Ok(entries) => entries,
             Err(e) => {
-                eprintln!("Failed to read DrawIB list from workspace: {}", e);
+                crate::extract_error!("Failed to read DrawIB list from workspace: {}", e);
                 return;
             }
         };
@@ -114,7 +114,7 @@ impl MarkTextureHelper {
             let component_map = match fa.data.read_component_name_match_first_index_dict(&draw_ib) {
                 Ok(map) => map,
                 Err(e) => {
-                    eprintln!(
+                    crate::extract_error!(
                         "Failed to read component match-first-index map for DrawIB {}: {}",
                         draw_ib, e
                     );
@@ -130,7 +130,7 @@ impl MarkTextureHelper {
                         component_drawcall_map.insert(component_name.clone(), draw_call_index_list);
                     }
                     Err(e) => {
-                        eprintln!(
+                        crate::extract_error!(
                             "Failed to read draw call index list for DrawIB {} component {}: {}",
                             draw_ib, component_name, e
                         );
@@ -141,7 +141,7 @@ impl MarkTextureHelper {
             let save_json_file_path = drawib_folder.join("ComponentName_DrawCallIndexList.json");
             let json_model = ComponentNameDrawCallIndexListJson::from_map(component_drawcall_map);
             if let Err(e) = json_model.save_to_file(&save_json_file_path) {
-                eprintln!(
+                crate::extract_error!(
                     "Failed to write {}: {}",
                     save_json_file_path.to_string_lossy(),
                     e
@@ -163,7 +163,7 @@ impl MarkTextureHelper {
         let drawib_entries = match DrawIBConfig::read_drawib_list_from_workspace(workspace_path) {
             Ok(entries) => entries,
             Err(e) => {
-                eprintln!("Failed to read DrawIB list from workspace: {}", e);
+                crate::extract_error!("Failed to read DrawIB list from workspace: {}", e);
                 return;
             }
         };
@@ -236,7 +236,7 @@ impl MarkTextureHelper {
             let save_json_file_path = drawib_folder.join("TrianglelistDedupedFileName.json");
             let json_model = TrianglelistDedupedFileNameJson::from_map(trianglelist_deduped_map);
             if let Err(e) = json_model.save_to_file(&save_json_file_path) {
-                eprintln!(
+                crate::extract_error!(
                     "Failed to write {}: {}",
                     save_json_file_path.to_string_lossy(),
                     e
@@ -253,7 +253,7 @@ impl MarkTextureHelper {
     pub fn generate_draw_ib_component_json(lod_workspace_path: &str) {
         let lod_path = Path::new(lod_workspace_path);
         if !lod_path.exists() {
-            eprintln!("LOD workspace path does not exist: {}", lod_workspace_path);
+            crate::extract_error!("LOD workspace path does not exist: {}", lod_workspace_path);
             return;
         }
 
@@ -263,7 +263,7 @@ impl MarkTextureHelper {
         let entries = match fs::read_dir(lod_path) {
             Ok(entries) => entries,
             Err(e) => {
-                eprintln!(
+                crate::extract_error!(
                     "Failed to read LOD workspace directory {}: {}",
                     lod_workspace_path, e
                 );
@@ -307,7 +307,7 @@ impl MarkTextureHelper {
         }
 
         if draw_ib_submesh_map.is_empty() {
-            println!(
+            crate::extract_log!(
                 "No extracted submesh folders found in {}",
                 lod_workspace_path
             );
@@ -331,15 +331,15 @@ impl MarkTextureHelper {
         let content = match serde_json::to_string_pretty(&component_map) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("Failed to serialize DrawIB-Component.json: {}", e);
+                crate::extract_error!("Failed to serialize DrawIB-Component.json: {}", e);
                 return;
             }
         };
 
         if let Err(e) = fs::write(&json_path, &content) {
-            eprintln!("Failed to write {}: {}", json_path.to_string_lossy(), e);
+            crate::extract_error!("Failed to write {}: {}", json_path.to_string_lossy(), e);
         } else {
-            println!("Generated {}", json_path.to_string_lossy());
+            crate::extract_log!("Generated {}", json_path.to_string_lossy());
         }
     }
 
@@ -362,7 +362,11 @@ impl MarkTextureHelper {
 
         let mut repaired_count = 0usize;
         for submesh_entry in submesh_entries.flatten() {
-            if !submesh_entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            if !submesh_entry
+                .file_type()
+                .map(|kind| kind.is_dir())
+                .unwrap_or(false)
+            {
                 continue;
             }
 
@@ -371,7 +375,11 @@ impl MarkTextureHelper {
                 Err(_) => continue,
             };
             for data_type_entry in data_type_entries.flatten() {
-                if !data_type_entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                if !data_type_entry
+                    .file_type()
+                    .map(|kind| kind.is_dir())
+                    .unwrap_or(false)
+                {
                     continue;
                 }
                 if !data_type_entry
@@ -388,8 +396,14 @@ impl MarkTextureHelper {
                 };
                 for json_entry in json_entries.flatten() {
                     let json_path = json_entry.path();
-                    if !json_entry.file_type().map(|kind| kind.is_file()).unwrap_or(false)
-                        || json_path.extension().and_then(|extension| extension.to_str()) != Some("json")
+                    if !json_entry
+                        .file_type()
+                        .map(|kind| kind.is_file())
+                        .unwrap_or(false)
+                        || json_path
+                            .extension()
+                            .and_then(|extension| extension.to_str())
+                            != Some("json")
                     {
                         continue;
                     }
@@ -413,9 +427,16 @@ impl MarkTextureHelper {
                         continue;
                     }
 
-                    let has_nonzero_range = ["VertexOffset", "VertexCount", "IndexOffset", "IndexCount"]
-                        .iter()
-                        .any(|key| object.get(*key).and_then(|item| item.as_i64()).unwrap_or_default() != 0);
+                    let has_nonzero_range =
+                        ["VertexOffset", "VertexCount", "IndexOffset", "IndexCount"]
+                            .iter()
+                            .any(|key| {
+                                object
+                                    .get(*key)
+                                    .and_then(|item| item.as_i64())
+                                    .unwrap_or_default()
+                                    != 0
+                            });
                     if !has_nonzero_range {
                         continue;
                     }
@@ -424,7 +445,11 @@ impl MarkTextureHelper {
                         object.insert(key.to_string(), serde_json::Value::from(0));
                     }
                     let content = serde_json::to_string_pretty(&value).map_err(|error| {
-                        format!("Failed to serialize {}: {}", json_path.to_string_lossy(), error)
+                        format!(
+                            "Failed to serialize {}: {}",
+                            json_path.to_string_lossy(),
+                            error
+                        )
                     })?;
                     fs::write(&json_path, content).map_err(|error| {
                         format!("Failed to write {}: {}", json_path.to_string_lossy(), error)

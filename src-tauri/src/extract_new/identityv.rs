@@ -415,9 +415,9 @@ impl IdentityVNewExtractor {
         &self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<Vec<String>, String> {
-        println!("开始提取:");
-        println!("数据类型筛选: {}", data_type_filter.description());
-        println!("使用工作空间 DrawIB 列表: {}", self.specify_drawib_extract);
+        crate::extract_log!("开始提取:");
+        crate::extract_log!("数据类型筛选: {}", data_type_filter.description());
+        crate::extract_log!("使用工作空间 DrawIB 列表: {}", self.specify_drawib_extract);
 
         let mut extracted_draw_ib_list: Vec<String> = Vec::new();
         let target_draw_ib_list = self.get_target_draw_ib_list()?;
@@ -427,7 +427,7 @@ impl IdentityVNewExtractor {
                 continue;
             }
 
-            println!("当前DrawIB: {}", draw_ib);
+            crate::extract_log!("当前DrawIB: {}", draw_ib);
 
             let trianglelist_ib_file_list = self
                 .fa
@@ -435,7 +435,7 @@ impl IdentityVNewExtractor {
                 .filter_filelist(&format!("-ib={}", draw_ib), ".txt");
 
             let mut trianglelist_index_list: Vec<String> = Vec::new();
-            println!("TrianglelistIndexList:");
+            crate::extract_log!("TrianglelistIndexList:");
             for trianglelist_ib_file_name in trianglelist_ib_file_list.iter() {
                 let index = trianglelist_ib_file_name
                     .get(0..6)
@@ -443,12 +443,12 @@ impl IdentityVNewExtractor {
                     .to_string();
                 if !index.is_empty() {
                     trianglelist_index_list.push(index.clone());
-                    println!("Index: {}", index);
+                    crate::extract_log!("Index: {}", index);
                 }
             }
 
             if trianglelist_index_list.is_empty() {
-                println!("当前CTX文件夹中未找到任何DrawIB相关文件，跳过提取");
+                crate::extract_log!("当前CTX文件夹中未找到任何DrawIB相关文件，跳过提取");
                 continue;
             }
 
@@ -461,13 +461,13 @@ impl IdentityVNewExtractor {
                 .filter_first_file(&format!("{}-ib=", tmp_trianglelist_index), ".buf")
                 .unwrap_or_default();
             if tmp_ib_buf_file_name.is_empty() {
-                println!("未找到临时IB Buf文件，跳过当前DrawIB");
+                crate::extract_log!("未找到临时IB Buf文件，跳过当前DrawIB");
                 continue;
             }
 
             let tmp_ib_buf_file_path = self.fa.log.get_deduped_filepath(&tmp_ib_buf_file_name);
             if tmp_ib_buf_file_path.is_empty() {
-                println!("临时IB Buf deduped路径为空，跳过当前DrawIB");
+                crate::extract_log!("临时IB Buf deduped路径为空，跳过当前DrawIB");
                 continue;
             }
 
@@ -480,7 +480,7 @@ impl IdentityVNewExtractor {
                 .ordered_gpu_cpu_d3d11_gametype_list
                 .iter()
             {
-                println!("尝试匹配数据类型: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("尝试匹配数据类型: {}", d3d11_game_type.game_type_name);
 
                 let mut category_name_buf_file_path_dict: HashMap<String, String> = HashMap::new();
                 let mut all_slot_buf_file_exists = true;
@@ -512,7 +512,7 @@ impl IdentityVNewExtractor {
                 }
 
                 if !all_slot_buf_file_exists {
-                    println!("当前数据类型并非所有的槽位Buffer文件都存在，不满足，跳过。");
+                    crate::extract_log!("当前数据类型并非所有的槽位Buffer文件都存在，不满足，跳过。");
                     continue;
                 }
 
@@ -531,7 +531,7 @@ impl IdentityVNewExtractor {
                         .copied()
                         .unwrap_or(0);
 
-                    println!(
+                    crate::extract_log!(
                         "当前匹配槽位: {} Stride: {}",
                         category_name, category_stride
                     );
@@ -580,7 +580,7 @@ impl IdentityVNewExtractor {
 
                     let yu_shu = buf_file_size % category_stride;
                     if yu_shu != 0 {
-                        println!("余数不为0: {}，文件步长除以类别步长不能含余数", yu_shu);
+                        crate::extract_log!("余数不为0: {}，文件步长除以类别步长不能含余数", yu_shu);
                         all_match = false;
                         break;
                     }
@@ -590,17 +590,17 @@ impl IdentityVNewExtractor {
                     }
 
                     if tmp_number == 0 {
-                        println!("当前匹配的槽位文件大小为0: {}", buf_file_path);
+                        crate::extract_log!("当前匹配的槽位文件大小为0: {}", buf_file_path);
                         all_match = false;
                         break;
                     }
 
                     if vertex_number != tmp_number {
-                        println!(
+                        crate::extract_log!(
                             "VertexNumber: {} 当前槽位数量: {}",
                             vertex_number, tmp_number
                         );
-                        println!("槽位匹配失败");
+                        crate::extract_log!("槽位匹配失败");
                         all_match = false;
                         break;
                     }
@@ -616,7 +616,7 @@ impl IdentityVNewExtractor {
                             .unwrap_or_default();
 
                         if category_txt_file_name.is_empty() {
-                            println!("槽位的txt文件不存在，无法校验顶点数，匹配失败");
+                            crate::extract_log!("槽位的txt文件不存在，无法校验顶点数，匹配失败");
                             all_match = false;
                             break;
                         }
@@ -637,9 +637,9 @@ impl IdentityVNewExtractor {
                         let stride_show = stride_show_str.parse::<u64>().unwrap_or(0);
 
                         if stride_show != d3d11_game_type.get_self_stride() {
-                            println!("显示步长: {}", stride_show_str);
-                            println!("数据类型步长: {}", d3d11_game_type.get_self_stride());
-                            println!("当前文件中显示步长与数据类型步长不符，匹配失败");
+                            crate::extract_log!("显示步长: {}", stride_show_str);
+                            crate::extract_log!("数据类型步长: {}", d3d11_game_type.get_self_stride());
+                            crate::extract_log!("当前文件中显示步长与数据类型步长不符，匹配失败");
                             all_match = false;
                             break;
                         }
@@ -652,23 +652,23 @@ impl IdentityVNewExtractor {
             }
 
             if possible_game_type_list.is_empty() {
-                println!(
+                crate::extract_log!(
                     "未找到任何匹配的数据类型，跳过当前 DrawIB。DrawIB: {} TrianglelistIndex: {:?}",
                     draw_ib, trianglelist_index_list
                 );
                 continue;
             }
 
-            println!("当前匹配到的数据类型列表:");
+            crate::extract_log!("当前匹配到的数据类型列表:");
             for d3d11_game_type in possible_game_type_list.iter() {
-                println!("{}", d3d11_game_type.game_type_name);
+                crate::extract_log!("{}", d3d11_game_type.game_type_name);
             }
 
             possible_game_type_list.retain(|d3d11_game_type| {
                 data_type_filter.allows(d3d11_game_type.gpu_pre_skinning)
             });
             if possible_game_type_list.is_empty() {
-                println!(
+                crate::extract_log!(
                     "当前 DrawIB 在当前数据类型筛选下没有可提取的数据类型，跳过: {}",
                     draw_ib
                 );
@@ -719,7 +719,7 @@ impl IdentityVNewExtractor {
             }
 
             for d3d11_game_type in possible_game_type_list.iter() {
-                println!("当前提取数据类型: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("当前提取数据类型: {}", d3d11_game_type.game_type_name);
                 let exported = self.export_precollected_submeshes(
                     "IdentityV",
                     &draw_ib,
@@ -734,7 +734,7 @@ impl IdentityVNewExtractor {
             }
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if extracted_draw_ib_list.is_empty() {
             return Err("IdentityV 提取失败，未导出任何模型。".to_string());
         }

@@ -104,7 +104,7 @@ impl ExprUtils {
         }
 
         if let Ok(n) = token_trim.parse::<i64>() {
-            println!(
+            crate::extract_log!(
                 "[Expr][ResolveToken] token='{}' source=literal value={}",
                 token_trim, n
             );
@@ -122,7 +122,7 @@ impl ExprUtils {
                     token_trim, active_value
                 )
             })?;
-            println!(
+            crate::extract_log!(
                 "[Expr][ResolveToken] token='{}' source=active value={}",
                 token_trim, parsed
             );
@@ -140,7 +140,7 @@ impl ExprUtils {
                         token_trim, expr_result
                     )
                 })?;
-                println!(
+                crate::extract_log!(
                     "[Expr][ResolveToken] token='{}' source=global-expression value={}",
                     token_trim, parsed
                 );
@@ -157,7 +157,7 @@ impl ExprUtils {
                         token_trim, global_var.initialize_value
                     )
                 })?;
-            println!(
+            crate::extract_log!(
                 "[Expr][ResolveToken] token='{}' source=global-init value={}",
                 token_trim, parsed
             );

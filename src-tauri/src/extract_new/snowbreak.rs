@@ -241,17 +241,17 @@ impl SnowBreakNewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
-            println!("当前数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
 
             let mut category_slot_file_name_dict: HashMap<String, String> = HashMap::new();
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TrianglelistIndex: {}", trianglelist_index);
+                crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
                 for category_slot in d3d11_game_type.category_slot_dict.values() {
-                    println!("CategorySlot: {}", category_slot);
+                    crate::extract_log!("CategorySlot: {}", category_slot);
 
                     let category_file_name = self
                         .fa
@@ -263,13 +263,13 @@ impl SnowBreakNewExtractor {
                         .unwrap_or_default();
 
                     if category_file_name.is_empty() {
-                        println!("未找到当前CategorySlot对应文件: {}", category_slot);
+                        crate::extract_log!("未找到当前CategorySlot对应文件: {}", category_slot);
                         continue;
                     }
 
                     category_slot_file_name_dict
                         .insert(category_slot.clone(), category_file_name.clone());
-                    println!(
+                    crate::extract_log!(
                         "CategorySlot: {} ExtractFileName: {}",
                         category_slot, category_file_name
                     );
@@ -280,8 +280,8 @@ impl SnowBreakNewExtractor {
             let mut vertex_count: u64 = 0;
 
             for (category_name, category_slot) in d3d11_game_type.category_slot_dict.iter() {
-                println!("CategoryName: {}", category_name);
-                println!("CategorySlot: {}", category_slot);
+                crate::extract_log!("CategoryName: {}", category_name);
+                crate::extract_log!("CategorySlot: {}", category_slot);
 
                 let category_stride = d3d11_game_type
                     .category_stride_dict
@@ -294,7 +294,7 @@ impl SnowBreakNewExtractor {
                 }
 
                 if !category_slot_file_name_dict.contains_key(category_slot) {
-                    println!("未检测到当前CategorySlot文件，匹配失败");
+                    crate::extract_log!("未检测到当前CategorySlot文件，匹配失败");
                     all_slot_match = false;
                     break;
                 }
@@ -350,11 +350,11 @@ impl SnowBreakNewExtractor {
                 if vertex_count == 0 {
                     vertex_count = slot_vertex_count;
                 } else if vertex_count != slot_vertex_count {
-                    println!(
+                    crate::extract_log!(
                         "VertexCount: {} SlotVertexCount: {}",
                         vertex_count, slot_vertex_count
                     );
-                    println!(
+                    crate::extract_log!(
                         "当前槽位: {} 文件数据不符合当前数据类型要求，跳过此数据类型",
                         category_slot
                     );
@@ -366,7 +366,7 @@ impl SnowBreakNewExtractor {
             }
 
             if all_slot_match {
-                println!("识别到数据类型: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("识别到数据类型: {}", d3d11_game_type.game_type_name);
                 possible_game_type_list.push(d3d11_game_type.clone());
             }
 
@@ -381,7 +381,7 @@ impl SnowBreakNewExtractor {
         }
 
         if possible_game_type_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
             return Ok(possible_game_type_list);
         }
 
@@ -402,9 +402,9 @@ impl SnowBreakNewExtractor {
                 .collect();
         }
 
-        println!("All Matched GameType:");
+        crate::extract_log!("All Matched GameType:");
         for d3d11_game_type in possible_game_type_list.iter() {
-            println!("{}", d3d11_game_type.game_type_name);
+            crate::extract_log!("{}", d3d11_game_type.game_type_name);
         }
 
         Ok(possible_game_type_list)
@@ -425,7 +425,7 @@ impl SnowBreakNewExtractor {
         let match_first_index_ib_txt_file_name_dict =
             self.get_match_first_index_ibtxt_filename_dict(draw_ib)?;
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
-            println!(
+            crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
             );
@@ -478,7 +478,7 @@ impl SnowBreakNewExtractor {
                 .filter_first_file(&format!("{}-ib", max_slot_trianglelist_index), ".txt")
                 .unwrap_or_default();
             if ib_txt_file_name.is_empty() {
-                println!(
+                crate::extract_log!(
                     "无法找到 Index {} 的IB txt文件，跳过此数据类型",
                     max_slot_trianglelist_index
                 );
@@ -614,7 +614,7 @@ impl SnowBreakNewExtractor {
         &mut self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<(), String> {
-        println!("开始提取:");
+        crate::extract_log!("开始提取:");
         let draw_ib_list = if self.specify_drawib_extract {
             self.drawib_config
                 .entries
@@ -631,7 +631,7 @@ impl SnowBreakNewExtractor {
                 crate::extract_new::log_skipped_drawib(draw_ib, "known fake DrawIB");
                 continue;
             } else {
-                println!("当前DrawIB: {}", draw_ib);
+                crate::extract_log!("当前DrawIB: {}", draw_ib);
             }
 
             let trianglelist_index_list = self.fa.data.get_trianglelist_index_list(&draw_ib);
@@ -643,9 +643,9 @@ impl SnowBreakNewExtractor {
             let mut max_slot_number: usize = 0;
             let mut max_slot_trianglelist_index = String::new();
 
-            println!("初始化 CategorySlot Hash Dict:");
+            crate::extract_log!("初始化 CategorySlot Hash Dict:");
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("{}", trianglelist_index);
+                crate::extract_log!("{}", trianglelist_index);
                 let category_slot_hash_dict = self
                     .fa
                     .log
@@ -659,7 +659,7 @@ impl SnowBreakNewExtractor {
                 }
             }
 
-            println!("TrianglelistIndex: {}", max_slot_trianglelist_index);
+            crate::extract_log!("TrianglelistIndex: {}", max_slot_trianglelist_index);
 
             let mut possible_d3d11_game_type_list =
                 self.get_possible_gametype_list_unreal_vs(&draw_ib, &trianglelist_index_list)?;
@@ -695,7 +695,7 @@ impl SnowBreakNewExtractor {
             }
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if self.specify_drawib_extract {
             sync_workspace_deduped_textures_and_json(
                 &self.fa,

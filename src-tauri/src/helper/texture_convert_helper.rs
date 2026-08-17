@@ -73,15 +73,14 @@ impl TextureConvertHelper {
 
             if extension == "dds" {
                 if file_name_lower.ends_with("typeless.dds") {
-                    println!("Skip TYPELESS DDS: {}", file_path_str);
+                    crate::extract_log!("Skip TYPELESS DDS: {}", file_path_str);
                     continue;
                 }
 
-                if let Err(err) =
-                    Self::convert_texture_to_png(&file_path_str, &target_folder_path)
+                if let Err(err) = Self::convert_texture_to_png(&file_path_str, &target_folder_path)
                 {
                     // Texconv failure should not break overall extraction progress.
-                    println!(
+                    crate::extract_log!(
                         "[TextureConvert] texconv failed, skip file: {}\nreason: {}",
                         file_path_str, err
                     );

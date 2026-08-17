@@ -208,7 +208,7 @@ impl ZZMINewExtractor {
         let match_first_index_ib_txt_file_name_dict =
             self.collect_match_first_index_ib_map(trianglelist_index_list)?;
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
-            println!(
+            crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
             );
@@ -394,21 +394,21 @@ impl ZZMINewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
-            println!("当前数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
 
             let trianglelist_index = self.d3d11_gametype_lv2.filter_trianglelist_index_unity_vs(
                 &self.fa.data,
                 trianglelist_index_list,
                 d3d11_game_type,
             );
-            println!("TrianglelistIndex: {}", trianglelist_index);
+            crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
 
             if trianglelist_index.is_empty() {
-                println!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
+                crate::extract_log!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
                 continue;
             }
 
@@ -432,7 +432,7 @@ impl ZZMINewExtractor {
                     .cloned()
                     .unwrap_or_default();
 
-                println!(
+                crate::extract_log!(
                     "当前分类: {} 提取Index: {} 提取槽位: {}",
                     category_name, extract_index, category_slot
                 );
@@ -448,18 +448,18 @@ impl ZZMINewExtractor {
                     .data
                     .filter_first_file(&search_key, ".txt")
                     .unwrap_or_default();
-                println!("CategoryBufFileName: {}", category_buf_file_name);
+                crate::extract_log!("CategoryBufFileName: {}", category_buf_file_name);
 
                 let category_buf_file_path =
                     self.fa.log.get_deduped_filepath(&category_buf_file_name);
-                println!(
+                crate::extract_log!(
                     "Category: {} File: {}",
                     category_name, category_buf_file_path
                 );
 
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
                 {
-                    println!("对应Buffer文件未找到,此数据类型无效。");
+                    crate::extract_log!("对应Buffer文件未找到,此数据类型无效。");
                     all_file_exists = false;
                     break;
                 }
@@ -489,7 +489,7 @@ impl ZZMINewExtractor {
             }
 
             if !all_file_exists {
-                println!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
+                crate::extract_log!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
                 continue;
             }
 
@@ -514,7 +514,7 @@ impl ZZMINewExtractor {
                 };
 
                 if tmp_number == 0 {
-                    println!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
+                    crate::extract_log!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
                     all_match = false;
                     break;
                 }
@@ -522,7 +522,7 @@ impl ZZMINewExtractor {
                 if !d3d11_game_type.gpu_pre_skinning {
                     let yu_shu = file_size % category_stride;
                     if yu_shu != 0 {
-                        println!("余数不为0: {}，槽位匹配失败", yu_shu);
+                        crate::extract_log!("余数不为0: {}，槽位匹配失败", yu_shu);
                         all_match = false;
                         break;
                     }
@@ -531,15 +531,15 @@ impl ZZMINewExtractor {
                 if vertex_number == 0 {
                     vertex_number = tmp_number;
                 } else if vertex_number != tmp_number {
-                    println!(
+                    crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
                         vertex_number, tmp_number
                     );
-                    println!("槽位匹配失败");
+                    crate::extract_log!("槽位匹配失败");
                     all_match = false;
                     break;
                 } else {
-                    println!("{} Match!", category_name);
+                    crate::extract_log!("{} Match!", category_name);
 
                     if d3d11_game_type.gpu_pre_skinning
                         && category_name == "Texcoord"
@@ -558,7 +558,7 @@ impl ZZMINewExtractor {
                             .unwrap_or_default();
 
                         if category_txt_file_name.is_empty() {
-                            println!("GPU Texcoord 校验失败：txt 文件不存在");
+                            crate::extract_log!("GPU Texcoord 校验失败：txt 文件不存在");
                             all_match = false;
                             break;
                         }
@@ -568,7 +568,7 @@ impl ZZMINewExtractor {
                         if category_txt_file_path.is_empty()
                             || !Path::new(&category_txt_file_path).exists()
                         {
-                            println!("GPU Texcoord 校验失败：txt 路径不存在");
+                            crate::extract_log!("GPU Texcoord 校验失败：txt 路径不存在");
                             all_match = false;
                             break;
                         }
@@ -625,7 +625,7 @@ impl ZZMINewExtractor {
                             if vbtxt_data_element_length != game_type_element_length
                                 || vbtxt_element_number != game_type_element_number
                             {
-                                println!(
+                                crate::extract_log!(
                                     "GPU Texcoord 校验失败：元素ByteWidth和总长度校验均未通过"
                                 );
                                 all_match = false;
@@ -656,7 +656,7 @@ impl ZZMINewExtractor {
                     .unwrap_or_default();
 
                 if category_txt_file_name.is_empty() {
-                    println!("单分类CPU校验失败：txt 文件不存在");
+                    crate::extract_log!("单分类CPU校验失败：txt 文件不存在");
                     all_match = false;
                 } else {
                     let category_txt_file_path =
@@ -674,7 +674,7 @@ impl ZZMINewExtractor {
                             let show_stride_count = show_stride.parse::<u64>().unwrap_or(0);
                             let game_type_stride = d3d11_game_type.get_self_stride();
                             if show_stride_count != game_type_stride {
-                                println!("单分类CPU校验失败：txt stride 与 GameType stride 不一致");
+                                crate::extract_log!("单分类CPU校验失败：txt stride 与 GameType stride 不一致");
                                 all_match = false;
                             }
                         }
@@ -683,7 +683,7 @@ impl ZZMINewExtractor {
             }
 
             if all_match {
-                println!("MatchGameType: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("MatchGameType: {}", d3d11_game_type.game_type_name);
                 possible_gametype_list.push(d3d11_game_type.clone());
             }
 
@@ -712,11 +712,11 @@ impl ZZMINewExtractor {
         }
 
         if possible_gametype_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
         } else {
-            println!("All Matched GameType:");
+            crate::extract_log!("All Matched GameType:");
             for gt in possible_gametype_list.iter() {
-                println!("{}", gt.game_type_name);
+                crate::extract_log!("{}", gt.game_type_name);
             }
         }
 
@@ -762,22 +762,22 @@ impl ZZMINewExtractor {
         };
 
         for draw_ib in draw_ib_list.iter() {
-            println!("DrawIB: {}", draw_ib);
+            crate::extract_log!("DrawIB: {}", draw_ib);
 
             let pointlist_index = self
                 .fa
                 .log
                 .get_last_pointlist_index_by_hash(&draw_ib)
                 .unwrap_or_default();
-            println!("PointlistIndex: {:?}", pointlist_index);
+            crate::extract_log!("PointlistIndex: {:?}", pointlist_index);
 
             if pointlist_index.is_empty() {
-                println!("未找到对应PointlistIndex，该DrawIB可能为CPU-PreSkinning类型");
+                crate::extract_log!("未找到对应PointlistIndex，该DrawIB可能为CPU-PreSkinning类型");
             }
 
             let trianglelist_index_list = self.fa.data.get_trianglelist_index_list(&draw_ib);
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TriangleListIndex: {}", trianglelist_index);
+                crate::extract_log!("TriangleListIndex: {}", trianglelist_index);
             }
 
             let extract_success = self.extract_fee307b98a965c16(
@@ -957,7 +957,7 @@ impl ZZMINewExtractor {
             component_drawcall_index_list_dict.clone(),
         );
         if let Err(e) = component_json.save_to_file(&component_json_path) {
-            eprintln!(
+            crate::extract_error!(
                 "Failed to write {}: {}",
                 component_json_path.to_string_lossy(),
                 e
@@ -1029,7 +1029,7 @@ impl ZZMINewExtractor {
             get_workspace_trianglelist_deduped_filename_json_path(&self.workspace_path)?;
         let trianglelist_json = TrianglelistDedupedFileNameJson::from_map(trianglelist_deduped_map);
         if let Err(e) = trianglelist_json.save_to_file(&trianglelist_json_path) {
-            eprintln!(
+            crate::extract_error!(
                 "Failed to write {}: {}",
                 trianglelist_json_path.to_string_lossy(),
                 e

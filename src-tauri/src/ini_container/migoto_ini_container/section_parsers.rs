@@ -4,7 +4,9 @@ use crate::ini_container::migoto_data_types::condition::Condition;
 use crate::ini_container::migoto_data_types::domain::{
     CommandList, DrawIndexed, Key, Resource, ResourceReplace, TextureOverride,
 };
-use crate::ini_container::migoto_data_types::ini_core::{ExpressionValue, IniLineObject, IniSection};
+use crate::ini_container::migoto_data_types::ini_core::{
+    ExpressionValue, IniLineObject, IniSection,
+};
 use crate::ini_container::migoto_data_types::variable::Variable;
 
 pub struct SectionParsers;

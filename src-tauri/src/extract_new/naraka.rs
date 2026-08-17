@@ -201,7 +201,7 @@ impl NarakaNewExtractor {
         let match_first_index_ib_txt_file_name_dict =
             self.collect_match_first_index_ib_map(trianglelist_index_list)?;
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
-            println!(
+            crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
                 match_first_index, ib_file_name
             );
@@ -387,21 +387,21 @@ impl NarakaNewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
-            println!("当前数据类型:{}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型:{}", d3d11_game_type.game_type_name);
 
             let trianglelist_index = self.d3d11_gametype_lv2.filter_trianglelist_index_unity_vs(
                 &self.fa.data,
                 trianglelist_index_list,
                 d3d11_game_type,
             );
-            println!("TrianglelistIndex: {}", trianglelist_index);
+            crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
 
             if trianglelist_index.is_empty() {
-                println!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
+                crate::extract_log!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
                 continue;
             }
 
@@ -424,7 +424,7 @@ impl NarakaNewExtractor {
                     .get(category_name)
                     .cloned()
                     .unwrap_or_default();
-                println!(
+                crate::extract_log!(
                     "当前分类:{} 提取Index: {} 提取槽位:{}",
                     category_name, extract_index, category_slot
                 );
@@ -444,7 +444,7 @@ impl NarakaNewExtractor {
                     self.fa.log.get_deduped_filepath(&category_buf_file_name);
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
                 {
-                    println!("对应Buffer文件未找到,此数据类型无效。");
+                    crate::extract_log!("对应Buffer文件未找到,此数据类型无效。");
                     all_file_exists = false;
                     break;
                 }
@@ -471,7 +471,7 @@ impl NarakaNewExtractor {
             }
 
             if !all_file_exists {
-                println!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
+                crate::extract_log!("当前数据类型的部分槽位文件无法找到，跳过此数据类型识别。");
                 continue;
             }
 
@@ -497,7 +497,7 @@ impl NarakaNewExtractor {
                 let tmp_number = file_size / category_stride;
 
                 if tmp_number == 0 {
-                    println!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
+                    crate::extract_log!("槽位的文件大小不能为0，槽位匹配失败，跳过此数据类型");
                     all_match = false;
                     break;
                 }
@@ -505,7 +505,7 @@ impl NarakaNewExtractor {
                 if !d3d11_game_type.gpu_pre_skinning {
                     let yu_shu = file_size % category_stride;
                     if yu_shu != 0 {
-                        println!("余数不为0: {}，文件步长除以类别步长不能含有余数", yu_shu);
+                        crate::extract_log!("余数不为0: {}，文件步长除以类别步长不能含有余数", yu_shu);
                         all_match = false;
                         break;
                     }
@@ -525,7 +525,7 @@ impl NarakaNewExtractor {
                         .unwrap_or_default();
 
                     if category_txt_file_name.is_empty() {
-                        println!("槽位的txt文件不存在，跳过此数据类型。");
+                        crate::extract_log!("槽位的txt文件不存在，跳过此数据类型。");
                         all_match = false;
                         break;
                     }
@@ -546,7 +546,7 @@ impl NarakaNewExtractor {
                     let txt_show_vertex_count = vertex_count_txt_show.parse::<u64>().unwrap_or(0);
 
                     if txt_show_vertex_count != tmp_number {
-                        println!("槽位的txt文件顶点数与Buffer统计顶点数不符，跳过此数据类型。");
+                        crate::extract_log!("槽位的txt文件顶点数与Buffer统计顶点数不符，跳过此数据类型。");
                         all_match = false;
                         break;
                     }
@@ -555,20 +555,20 @@ impl NarakaNewExtractor {
                 if vertex_number == 0 {
                     vertex_number = tmp_number;
                 } else if vertex_number != tmp_number {
-                    println!(
+                    crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
                         vertex_number, tmp_number
                     );
-                    println!("槽位匹配失败");
+                    crate::extract_log!("槽位匹配失败");
                     all_match = false;
                     break;
                 } else {
-                    println!("{} Match!", category_name);
+                    crate::extract_log!("{} Match!", category_name);
                 }
             }
 
             if all_match {
-                println!("MatchGameType: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("MatchGameType: {}", d3d11_game_type.game_type_name);
                 possible_game_type_list.push(d3d11_game_type.clone());
             }
 
@@ -583,11 +583,11 @@ impl NarakaNewExtractor {
         }
 
         if possible_game_type_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
         } else {
-            println!("All Matched GameType:");
+            crate::extract_log!("All Matched GameType:");
             for d3d11_game_type in possible_game_type_list.iter() {
-                println!("{}", d3d11_game_type.game_type_name);
+                crate::extract_log!("{}", d3d11_game_type.game_type_name);
             }
         }
 
@@ -622,7 +622,7 @@ impl NarakaNewExtractor {
         &mut self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<(), String> {
-        println!("开始提取:");
+        crate::extract_log!("开始提取:");
         let draw_ib_list = if self.specify_drawib_extract {
             self.drawib_config
                 .entries
@@ -635,21 +635,21 @@ impl NarakaNewExtractor {
         };
 
         for draw_ib in draw_ib_list.iter() {
-            println!("当前DrawIB: {}", draw_ib);
+            crate::extract_log!("当前DrawIB: {}", draw_ib);
 
             let pointlist_index = self
                 .fa
                 .log
                 .get_last_pointlist_index_by_hash(&draw_ib)
                 .unwrap_or_default();
-            println!("当前识别到的PointlistIndex: {}", pointlist_index);
+            crate::extract_log!("当前识别到的PointlistIndex: {}", pointlist_index);
             if pointlist_index.is_empty() {
-                println!("当前识别到的PointlistIndex为空，此DrawIB可能为CPU-PreSkinning类型。");
+                crate::extract_log!("当前识别到的PointlistIndex为空，此DrawIB可能为CPU-PreSkinning类型。");
             }
 
             let trianglelist_index_list = self.fa.data.get_trianglelist_index_list(&draw_ib);
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TrianglelistIndex: {}", trianglelist_index);
+                crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
             }
 
             let result = self.extract_fee307b98a965c16(
@@ -670,7 +670,7 @@ impl NarakaNewExtractor {
             }
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if self.specify_drawib_extract {
             sync_workspace_deduped_textures_and_json(
                 &self.fa,

@@ -215,9 +215,9 @@ pub async fn fetch_metadata(
         metadata_path,
         false,
     )
-        .send()
-        .await
-        .map_err(|_| "LIBRARY_REQUEST_FAILED")?;
+    .send()
+    .await
+    .map_err(|_| "LIBRARY_REQUEST_FAILED")?;
     if !response.status().is_success() {
         return Err("LIBRARY_METADATA_NOT_FOUND".to_string());
     }

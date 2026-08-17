@@ -68,18 +68,18 @@ impl ExtractNewService {
         data_type_filter: FullExtractDataTypeFilter,
         is_full_extract: bool,
     ) -> Result<(), String> {
-        println!("[ZZMIDX12][Service] Start DX12 extract flow");
-        println!(
+        crate::extract_log!("[ZZMIDX12][Service] Start DX12 extract flow");
+        crate::extract_log!(
             "[ZZMIDX12][Service] FrameAnalysis folder: {}",
             frame_analysis_folder
         );
-        println!(
+        crate::extract_log!(
             "[ZZMIDX12][Service] LOD workspace path: {}",
             lod_workspace_path
         );
-        println!("[ZZMIDX12][Service] Full extract: {}", is_full_extract);
+        crate::extract_log!("[ZZMIDX12][Service] Full extract: {}", is_full_extract);
         if is_full_extract {
-            println!(
+            crate::extract_log!(
                 "[ZZMIDX12][Service] Data type filter: {}",
                 data_type_filter.description()
             );
@@ -110,16 +110,16 @@ impl ExtractNewService {
         _workspace_root_path: &str,
         lod_workspace_path: &str,
     ) -> Result<(), String> {
-        println!("开始提取去重纹理:");
-        println!("FrameAnalysis 文件夹路径: {}", fa.folder_path);
-        println!("当前游戏预设: {}", game_preset);
-        println!("当前LOD工作空间路径: {}", lod_workspace_path);
+        crate::extract_log!("开始提取去重纹理:");
+        crate::extract_log!("FrameAnalysis 文件夹路径: {}", fa.folder_path);
+        crate::extract_log!("当前游戏预设: {}", game_preset);
+        crate::extract_log!("当前LOD工作空间路径: {}", lod_workspace_path);
 
         let drawib_entries = DrawIBConfig::read_drawib_list_from_workspace(lod_workspace_path)
             .map_err(|e| format!("Failed to read DrawIB list: {}", e))?;
 
         for drawib_entry in drawib_entries {
-            println!(
+            crate::extract_log!(
                 "DrawIB: {}, Alias: {}",
                 drawib_entry.draw_ib, drawib_entry.alias
             );
@@ -144,7 +144,7 @@ impl ExtractNewService {
             for ps_texture_filename in trianglelist_texture_file_list {
                 let deduped_filepath = fa.log.get_deduped_filepath(&ps_texture_filename);
                 if deduped_filepath.is_empty() {
-                    println!("No deduped file found for texture: {}", ps_texture_filename);
+                    crate::extract_log!("No deduped file found for texture: {}", ps_texture_filename);
                     continue;
                 }
 
@@ -172,15 +172,15 @@ impl ExtractNewService {
         _workspace_root_path: &str,
         lod_workspace_path: &str,
     ) -> Result<(), String> {
-        println!("开始提取 TrianglelistTextures:");
-        println!("当前游戏预设: {}", game_preset);
-        println!("当前LOD工作空间路径: {}", lod_workspace_path);
+        crate::extract_log!("开始提取 TrianglelistTextures:");
+        crate::extract_log!("当前游戏预设: {}", game_preset);
+        crate::extract_log!("当前LOD工作空间路径: {}", lod_workspace_path);
 
         let drawib_entries = DrawIBConfig::read_drawib_list_from_workspace(lod_workspace_path)
             .map_err(|e| format!("Failed to read DrawIB list: {}", e))?;
 
         for drawib_entry in drawib_entries {
-            println!(
+            crate::extract_log!(
                 "DrawIB: {}, Alias: {}",
                 drawib_entry.draw_ib, drawib_entry.alias
             );
@@ -194,7 +194,7 @@ impl ExtractNewService {
             let _ = SSMTFileUtils::create_folder_if_not_exists(&trianglelist_textures_folder_path);
 
             let trianglelist_index_list = fa.data.get_trianglelist_index_list(&draw_ib);
-            println!(
+            crate::extract_log!(
                 "Found {} drawcalls for DrawIB {}",
                 trianglelist_index_list.len(),
                 draw_ib
@@ -208,7 +208,7 @@ impl ExtractNewService {
                 trianglelist_texture_file_list.extend(ps_texture_all_filename_list);
             }
 
-            println!(
+            crate::extract_log!(
                 "Found {} textures for DrawIB {}",
                 trianglelist_texture_file_list.len(),
                 draw_ib
@@ -239,13 +239,13 @@ impl ExtractNewService {
         data_type_filter: FullExtractDataTypeFilter,
         is_full_extract: bool,
     ) -> Result<(), String> {
-        println!("开始新提取流程:");
-        println!("FrameAnalysis 文件夹路径: {}", fa.folder_path);
-        println!("当前游戏预设: {}", game_preset);
-        println!("当前LOD工作空间路径: {}", lod_workspace_path);
-        println!("是否全量提取: {}", is_full_extract);
+        crate::extract_log!("开始新提取流程:");
+        crate::extract_log!("FrameAnalysis 文件夹路径: {}", fa.folder_path);
+        crate::extract_log!("当前游戏预设: {}", game_preset);
+        crate::extract_log!("当前LOD工作空间路径: {}", lod_workspace_path);
+        crate::extract_log!("是否全量提取: {}", is_full_extract);
         if is_full_extract {
-            println!("数据类型筛选: {}", data_type_filter.description());
+            crate::extract_log!("数据类型筛选: {}", data_type_filter.description());
         }
 
         let workspace_path_string = lod_workspace_path.to_string();

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use super::ini_core::MigotoAttribute;
 use super::expr_utils::ExprUtils;
+use super::ini_core::MigotoAttribute;
 use super::variable::Variable;
 
 #[derive(Debug, Clone, Default)]
@@ -92,25 +92,25 @@ impl Condition {
     }
 
     pub fn show(&self) {
-        println!("Condition Show:");
-        println!("NameSpace: {}", self.attr.namespace);
+        crate::extract_log!("Condition Show:");
+        crate::extract_log!("NameSpace: {}", self.attr.namespace);
 
         if self.condition_expression_list.is_empty() {
-            println!("  <No ConditionExpression>");
+            crate::extract_log!("  <No ConditionExpression>");
         } else {
             for (idx, expr) in self.condition_expression_list.iter().enumerate() {
-                println!("  Expression[{}].VarName: {}", idx, expr.var_name);
-                println!("  Expression[{}].Operator: {}", idx, expr.operator);
-                println!("  Expression[{}].VarValue: {}", idx, expr.var_value);
+                crate::extract_log!("  Expression[{}].VarName: {}", idx, expr.var_name);
+                crate::extract_log!("  Expression[{}].Operator: {}", idx, expr.operator);
+                crate::extract_log!("  Expression[{}].VarValue: {}", idx, expr.var_value);
             }
         }
 
         if self.logic_list.is_empty() {
-            println!("LogicList: <empty>");
+            crate::extract_log!("LogicList: <empty>");
         } else {
-            println!("LogicList:");
+            crate::extract_log!("LogicList:");
             for (idx, logic) in self.logic_list.iter().enumerate() {
-                println!("  [{}]: {}", idx, logic);
+                crate::extract_log!("  [{}]: {}", idx, logic);
             }
         }
     }

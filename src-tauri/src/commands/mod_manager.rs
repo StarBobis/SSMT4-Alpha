@@ -146,7 +146,10 @@ fn is_leaf_mod_dir(path: &Path) -> bool {
             let sub_path = sub.path();
             if sub_path.is_dir() {
                 let sub_name = sub_path.file_name().unwrap_or_default().to_string_lossy();
-                if !sub_name.starts_with('.') && !sub_name.starts_with('$') && !is_ssmt_backup_name(&sub_name) {
+                if !sub_name.starts_with('.')
+                    && !sub_name.starts_with('$')
+                    && !is_ssmt_backup_name(&sub_name)
+                {
                     has_subdirs = true;
                 }
             } else if sub_path.is_file() {
@@ -176,7 +179,10 @@ fn count_direct_leaf_mod_dirs(path: &Path) -> u64 {
             }
 
             let sub_name = sub_path.file_name().unwrap_or_default().to_string_lossy();
-            if sub_name.starts_with('.') || sub_name.starts_with('$') || is_ssmt_backup_name(&sub_name) {
+            if sub_name.starts_with('.')
+                || sub_name.starts_with('$')
+                || is_ssmt_backup_name(&sub_name)
+            {
                 continue;
             }
 
@@ -200,7 +206,10 @@ fn analyze_directory(path: &Path) -> (Vec<String>, bool, bool, bool, Option<Stri
             let sub_path = entry.path();
             if sub_path.is_dir() {
                 let sub_name = sub_path.file_name().unwrap_or_default().to_string_lossy();
-                if !sub_name.starts_with('.') && !sub_name.starts_with('$') && !is_ssmt_backup_name(&sub_name) {
+                if !sub_name.starts_with('.')
+                    && !sub_name.starts_with('$')
+                    && !is_ssmt_backup_name(&sub_name)
+                {
                     has_subdirs = true;
                 }
                 continue;
@@ -311,9 +320,16 @@ fn resolve_physical_install_group_path(mods_dir: &Path, logical_group_path: &Pat
     current
 }
 
-fn install_target_exists(mods_dir: &Path, target_group_path: &Path, target_name_path: &Path) -> bool {
+fn install_target_exists(
+    mods_dir: &Path,
+    target_group_path: &Path,
+    target_name_path: &Path,
+) -> bool {
     let target_parent = resolve_physical_install_group_path(mods_dir, target_group_path);
-    let Some(target_name) = target_name_path.file_name().and_then(|value| value.to_str()) else {
+    let Some(target_name) = target_name_path
+        .file_name()
+        .and_then(|value| value.to_str())
+    else {
         return false;
     };
     mod_path_segment_candidates(target_name)
@@ -520,7 +536,8 @@ pub async fn scan_directory(
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        if dir_name.starts_with('.') || dir_name.starts_with('$') || is_ssmt_backup_name(&dir_name) {
+        if dir_name.starts_with('.') || dir_name.starts_with('$') || is_ssmt_backup_name(&dir_name)
+        {
             continue;
         }
 
@@ -721,12 +738,21 @@ enum ModArchiveFormat {
 }
 
 fn detect_mod_archive_format(path: &Path) -> Result<ModArchiveFormat, String> {
-    let mut file = fs::File::open(path)
-        .map_err(|error| format!("Failed to open archive {}: {}", path.to_string_lossy(), error))?;
+    let mut file = fs::File::open(path).map_err(|error| {
+        format!(
+            "Failed to open archive {}: {}",
+            path.to_string_lossy(),
+            error
+        )
+    })?;
     let mut header = [0u8; 8];
-    let read = file
-        .read(&mut header)
-        .map_err(|error| format!("Failed to read archive header {}: {}", path.to_string_lossy(), error))?;
+    let read = file.read(&mut header).map_err(|error| {
+        format!(
+            "Failed to read archive header {}: {}",
+            path.to_string_lossy(),
+            error
+        )
+    })?;
     let header = &header[..read];
 
     if header.starts_with(b"PK\x03\x04")
@@ -754,8 +780,13 @@ fn detect_mod_archive_format(path: &Path) -> Result<ModArchiveFormat, String> {
         "rar" => Ok(ModArchiveFormat::Rar),
         // tar.exe is available on supported Windows releases and covers the
         // less common tar-based uploads that GameBanana authors sometimes use.
-        "tar" | "gz" | "bz2" | "xz" | "tgz" | "tbz" | "tbz2" | "txz" => Ok(ModArchiveFormat::SystemTar),
-        _ => Err("Unsupported archive format. Expected ZIP, 7z, RAR, or a tar-compatible archive.".to_string()),
+        "tar" | "gz" | "bz2" | "xz" | "tgz" | "tbz" | "tbz2" | "txz" => {
+            Ok(ModArchiveFormat::SystemTar)
+        }
+        _ => Err(
+            "Unsupported archive format. Expected ZIP, 7z, RAR, or a tar-compatible archive."
+                .to_string(),
+        ),
     }
 }
 
@@ -766,7 +797,13 @@ fn extract_with_system_tar(path: &Path, staging_dir: &Path) -> Result<ExtractRes
         .arg("-C")
         .arg(staging_dir)
         .output()
-        .map_err(|error| format!("Failed to start tar fallback for {}: {}", path.to_string_lossy(), error))?;
+        .map_err(|error| {
+            format!(
+                "Failed to start tar fallback for {}: {}",
+                path.to_string_lossy(),
+                error
+            )
+        })?;
     if !output.status.success() {
         return Err(format!(
             "tar fallback failed for {}: {}",
@@ -775,7 +812,10 @@ fn extract_with_system_tar(path: &Path, staging_dir: &Path) -> Result<ExtractRes
         ));
     }
     let total = count_files_recursive(staging_dir)?;
-    Ok(ExtractResult { processed: total, total })
+    Ok(ExtractResult {
+        processed: total,
+        total,
+    })
 }
 
 fn count_files_recursive(dir: &Path) -> Result<u64, String> {
@@ -1054,7 +1094,9 @@ fn remove_install_staging_dir(staging_dir: &Path) {
 }
 
 fn backup_existing_install_dir(dest_dir: &Path) -> Result<PathBuf, String> {
-    let parent = dest_dir.parent().ok_or_else(|| "Install destination has no parent directory".to_string())?;
+    let parent = dest_dir
+        .parent()
+        .ok_or_else(|| "Install destination has no parent directory".to_string())?;
     let original_name = dest_dir
         .file_name()
         .and_then(|value| value.to_str())
@@ -1068,8 +1110,15 @@ fn backup_existing_install_dir(dest_dir: &Path) -> Result<PathBuf, String> {
         // `_bak` identifies an SSMT-managed, recoverable backup; `DISABLED_`
         // is the separate 3Dmigoto-facing marker that keeps its INI files from
         // being loaded without modifying d3dx.ini.
-        let suffix = if attempt == 0 { String::new() } else { format!("-{}", attempt) };
-        let backup = parent.join(format!("DISABLED_{}-{}{}_bak", original_name, millis, suffix));
+        let suffix = if attempt == 0 {
+            String::new()
+        } else {
+            format!("-{}", attempt)
+        };
+        let backup = parent.join(format!(
+            "DISABLED_{}-{}{}_bak",
+            original_name, millis, suffix
+        ));
         if backup.exists() {
             continue;
         }
@@ -1107,7 +1156,10 @@ fn remote_preview_extension(path: &str, content_type: Option<&str>) -> String {
         .and_then(OsStr::to_str)
         .map(|extension| extension.to_ascii_lowercase());
     if let Some(extension) = by_path.as_deref() {
-        if matches!(extension, "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "avif") {
+        if matches!(
+            extension,
+            "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "avif"
+        ) {
             return if extension == "jpeg" {
                 "jpg".to_string()
             } else {
@@ -1135,7 +1187,12 @@ fn remote_preview_extension(path: &str, content_type: Option<&str>) -> String {
     "jpg".to_string()
 }
 
-fn next_remote_preview_path(mod_dir: &Path, source: &str, ordinal: usize, extension: &str) -> PathBuf {
+fn next_remote_preview_path(
+    mod_dir: &Path,
+    source: &str,
+    ordinal: usize,
+    extension: &str,
+) -> PathBuf {
     let stem = format!("00_preview_{source}_{ordinal:03}");
     let initial = mod_dir.join(format!("{stem}.{extension}"));
     if !initial.exists() {
@@ -1149,10 +1206,21 @@ fn next_remote_preview_path(mod_dir: &Path, source: &str, ordinal: usize, extens
         }
     }
 
-    mod_dir.join(format!("{stem}-{}.{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_millis()).unwrap_or(0), extension))
+    mod_dir.join(format!(
+        "{stem}-{}.{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0),
+        extension
+    ))
 }
 
-async fn save_remote_previews(mod_dir: PathBuf, preview_urls: Vec<String>, source: &str) -> Result<(usize, Vec<String>), String> {
+async fn save_remote_previews(
+    mod_dir: PathBuf,
+    preview_urls: Vec<String>,
+    source: &str,
+) -> Result<(usize, Vec<String>), String> {
     if preview_urls.is_empty() {
         return Ok((0, Vec::new()));
     }
@@ -1187,7 +1255,10 @@ async fn save_remote_previews(mod_dir: PathBuf, preview_urls: Vec<String>, sourc
         let response = match client.get(parsed_url.clone()).send().await {
             Ok(response) if response.status().is_success() => response,
             Ok(response) => {
-                warnings.push(format!("Preview download returned HTTP {}", response.status()));
+                warnings.push(format!(
+                    "Preview download returned HTTP {}",
+                    response.status()
+                ));
                 continue;
             }
             Err(error) => {
@@ -1216,7 +1287,11 @@ async fn save_remote_previews(mod_dir: PathBuf, preview_urls: Vec<String>, sourc
         let extension = remote_preview_extension(parsed_url.path(), content_type.as_deref());
         let target = next_remote_preview_path(&mod_dir, source, saved_count + 1, &extension);
         if let Err(error) = tokio::fs::write(&target, bytes).await {
-            warnings.push(format!("Failed to save preview {}: {}", target.display(), error));
+            warnings.push(format!(
+                "Failed to save preview {}: {}",
+                target.display(),
+                error
+            ));
             continue;
         }
         saved_count += 1;
@@ -1277,13 +1352,26 @@ fn spawn_nexusmods_preview_fetch(mod_dir: PathBuf, preview_urls: Vec<String>) {
     tauri::async_runtime::spawn(async move {
         match save_remote_previews(mod_dir.clone(), preview_urls, "nexusmods").await {
             Ok((saved_count, warnings)) if warnings.is_empty() => {
-                println!("[NexusMods] Saved {} preview image(s) for {}", saved_count, mod_dir.display());
+                println!(
+                    "[NexusMods] Saved {} preview image(s) for {}",
+                    saved_count,
+                    mod_dir.display()
+                );
             }
             Ok((saved_count, warnings)) => {
-                eprintln!("[NexusMods] Saved {} preview image(s) for {} with warnings: {}", saved_count, mod_dir.display(), warnings.join(" | "));
+                eprintln!(
+                    "[NexusMods] Saved {} preview image(s) for {} with warnings: {}",
+                    saved_count,
+                    mod_dir.display(),
+                    warnings.join(" | ")
+                );
             }
             Err(error) => {
-                eprintln!("[NexusMods] Failed to save preview images for {}: {}", mod_dir.display(), error);
+                eprintln!(
+                    "[NexusMods] Failed to save preview images for {}: {}",
+                    mod_dir.display(),
+                    error
+                );
             }
         }
     });
@@ -1328,11 +1416,12 @@ pub async fn mod_install_target_exists(
     target_group: String,
 ) -> Result<bool, String> {
     let target_name_path = normalize_install_relative_path(&target_name, "Mod name", false, false)?;
-    let target_group_path = if target_group.trim().eq_ignore_ascii_case("Root") || target_group.trim().is_empty() {
-        PathBuf::new()
-    } else {
-        normalize_install_relative_path(target_group.trim(), "Target group", true, false)?
-    };
+    let target_group_path =
+        if target_group.trim().eq_ignore_ascii_case("Root") || target_group.trim().is_empty() {
+            PathBuf::new()
+        } else {
+            normalize_install_relative_path(target_group.trim(), "Target group", true, false)?
+        };
     Ok(install_target_exists(
         &mods_root(&install_dir),
         &target_group_path,
@@ -1585,14 +1674,20 @@ pub async fn gamebanana_download_and_install_mod(
     let extension = Path::new(archive_name.trim())
         .extension()
         .and_then(|value| value.to_str())
-        .filter(|value| value.len() <= 12 && value.chars().all(|value| value.is_ascii_alphanumeric()))
+        .filter(|value| {
+            value.len() <= 12 && value.chars().all(|value| value.is_ascii_alphanumeric())
+        })
         .map(|value| format!(".{}", value))
         .unwrap_or_else(|| ".download".to_string());
     let archive_path = download_dir.join(format!(
         "gamebanana-{}-{}-{}{}",
         std::process::id(),
         stamp,
-        target_name.chars().filter(|value| value.is_ascii_alphanumeric()).take(20).collect::<String>(),
+        target_name
+            .chars()
+            .filter(|value| value.is_ascii_alphanumeric())
+            .take(20)
+            .collect::<String>(),
         extension,
     ));
 
@@ -1624,7 +1719,10 @@ pub async fn gamebanana_download_and_install_mod(
             .await
             .map_err(|error| format!("GameBanana download request failed: {}", error))?;
         if !response.status().is_success() {
-            return Err(format!("GameBanana download returned HTTP {}", response.status()));
+            return Err(format!(
+                "GameBanana download returned HTTP {}",
+                response.status()
+            ));
         }
         let content_type = response
             .headers()
@@ -1691,8 +1789,7 @@ pub async fn gamebanana_download_and_install_mod(
             if downloaded < minimum_expected_size {
                 return Err(format!(
                     "Downloaded archive is unexpectedly small ({} bytes; expected about {} bytes)",
-                    downloaded,
-                    expected_size,
+                    downloaded, expected_size,
                 ));
             }
         }
@@ -1721,12 +1818,14 @@ pub async fn gamebanana_download_and_install_mod(
 
     let preview_target = {
         let mods_dir = mods_root(&install_dir);
-        let target_name_path = normalize_install_relative_path(&target_name, "Mod name", false, false)?;
-        let target_group_path = if target_group.trim().eq_ignore_ascii_case("Root") || target_group.trim().is_empty() {
-            PathBuf::new()
-        } else {
-            normalize_install_relative_path(target_group.trim(), "Target group", true, false)?
-        };
+        let target_name_path =
+            normalize_install_relative_path(&target_name, "Mod name", false, false)?;
+        let target_group_path =
+            if target_group.trim().eq_ignore_ascii_case("Root") || target_group.trim().is_empty() {
+                PathBuf::new()
+            } else {
+                normalize_install_relative_path(target_group.trim(), "Target group", true, false)?
+            };
         let physical_group = resolve_physical_install_group_path(&mods_dir, &target_group_path);
         let target = physical_group.join(&target_name_path);
         println!(
@@ -1795,8 +1894,10 @@ pub async fn nexusmods_download_and_install_mod(
 
     let preview_target = {
         let mods_dir = mods_root(&install_dir);
-        let target_name_path = normalize_install_relative_path(&target_name, "Mod name", false, false)?;
-        resolve_physical_install_group_path(&mods_dir, Path::new("NexusMods")).join(target_name_path)
+        let target_name_path =
+            normalize_install_relative_path(&target_name, "Mod name", false, false)?;
+        resolve_physical_install_group_path(&mods_dir, Path::new("NexusMods"))
+            .join(target_name_path)
     };
 
     match gamebanana_download_and_install_mod(
@@ -1817,7 +1918,9 @@ pub async fn nexusmods_download_and_install_mod(
             spawn_nexusmods_preview_fetch(preview_target, preview_urls.unwrap_or_default());
             Ok(())
         }
-        Err(error) if error == GAMEBANANA_DOWNLOAD_CANCELLED => Err("Nexus Mods download cancelled".to_string()),
+        Err(error) if error == GAMEBANANA_DOWNLOAD_CANCELLED => {
+            Err("Nexus Mods download cancelled".to_string())
+        }
         Err(error) => Err(error),
     }
 }

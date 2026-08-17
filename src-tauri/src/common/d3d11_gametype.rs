@@ -64,7 +64,7 @@ impl D3D11GameType {
 
     /// 从 JSON 文件加载并初始化。
     pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        println!(
+        crate::extract_log!(
             "Loading D3D11GameType from file: {}",
             path.as_ref().display()
         );
@@ -88,7 +88,7 @@ impl D3D11GameType {
             #[serde(rename = "D3D11ElementList")]
             d3d11_element_list: Vec<D3D11Element>,
         }
-        println!(
+        crate::extract_log!(
             "Parsing D3D11GameType JSON content for: {}",
             fallback_game_type_name
         );
@@ -97,7 +97,7 @@ impl D3D11GameType {
             .game_type_name
             .filter(|name| !name.trim().is_empty())
             .unwrap_or(fallback_game_type_name);
-        println!(
+        crate::extract_log!(
             "Parsed {} D3D11Element entries for GameType: {}",
             wrapper.d3d11_element_list.len(),
             game_type_name
@@ -117,7 +117,7 @@ impl D3D11GameType {
         };
 
         game_type.initialize();
-        println!("Initialized D3D11GameType: {}", game_type.game_type_name);
+        crate::extract_log!("Initialized D3D11GameType: {}", game_type.game_type_name);
         Ok(game_type)
     }
 

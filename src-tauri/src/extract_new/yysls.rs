@@ -632,7 +632,7 @@ impl YYSLSNewExtractor {
                 .lines()
                 .any(|line| line.contains(&format!("hash={}", draw_ib)))
             {
-                println!(
+                crate::extract_log!(
                     "当前DrawIB在【{}】中存在",
                     log_txt_file_path.to_string_lossy()
                 );
@@ -653,14 +653,14 @@ impl YYSLSNewExtractor {
                 .unwrap_or_default()
                 .to_string();
 
-            println!("CTXCode: {}", ctx_code);
+            crate::extract_log!("CTXCode: {}", ctx_code);
 
             let ctx_folder_name = format!("ctx-{}", ctx_code);
             let ctx_folder_path = frame_analysis_folder.join(&ctx_folder_name);
-            println!("CTXFolderPath: {}", ctx_folder_path.to_string_lossy());
+            crate::extract_log!("CTXFolderPath: {}", ctx_folder_path.to_string_lossy());
 
             if !ctx_folder_path.exists() || !ctx_folder_path.is_dir() {
-                println!(
+                crate::extract_log!(
                     "当前CTX文件夹不存在，跳过: {}",
                     ctx_folder_path.to_string_lossy()
                 );
@@ -673,7 +673,7 @@ impl YYSLSNewExtractor {
                 ctx_data.filter_filelist(&format!("-ib={}", draw_ib), ".txt");
 
             let mut trianglelist_index_list: Vec<String> = Vec::new();
-            println!("TrianglelistIndexList:");
+            crate::extract_log!("TrianglelistIndexList:");
             for trianglelist_ib_file_name in &trianglelist_ib_file_list {
                 let index = trianglelist_ib_file_name
                     .get(0..6)
@@ -681,12 +681,12 @@ impl YYSLSNewExtractor {
                     .to_string();
                 if !index.is_empty() {
                     trianglelist_index_list.push(index.clone());
-                    println!("Index: {}", index);
+                    crate::extract_log!("Index: {}", index);
                 }
             }
 
             if trianglelist_index_list.is_empty() {
-                println!("当前CTX文件夹中未找到任何DrawIB相关文件，跳过提取");
+                crate::extract_log!("当前CTX文件夹中未找到任何DrawIB相关文件，跳过提取");
                 continue;
             }
 
@@ -716,11 +716,11 @@ impl YYSLSNewExtractor {
         request: &YyslsCtxExtractRequest,
     ) -> Result<Vec<D3D11GameType>, String> {
         let frame_analysis_folder = PathBuf::from(&self.fa.folder_path);
-        println!("tmpTrianglelistIndex: {}", request.tmp_trianglelist_index);
+        crate::extract_log!("tmpTrianglelistIndex: {}", request.tmp_trianglelist_index);
 
         let mut possible_game_type_list: Vec<D3D11GameType> = Vec::new();
         for d3d11_game_type in &self.d3d11_gametype_lv2.ordered_gpu_cpu_d3d11_gametype_list {
-            println!("尝试匹配数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("尝试匹配数据类型: {}", d3d11_game_type.game_type_name);
 
             let mut category_name_buf_file_path_dict: HashMap<String, String> = HashMap::new();
             let mut all_slot_buf_file_exists = true;
@@ -753,7 +753,7 @@ impl YYSLSNewExtractor {
             }
 
             if !all_slot_buf_file_exists {
-                println!("当前数据类型并非所有的槽位Buffer文件都存在，不满足，跳过。");
+                crate::extract_log!("当前数据类型并非所有的槽位Buffer文件都存在，不满足，跳过。");
                 continue;
             }
 
@@ -772,7 +772,7 @@ impl YYSLSNewExtractor {
                     .copied()
                     .unwrap_or(0);
 
-                println!(
+                crate::extract_log!(
                     "当前匹配槽位: {} Stride: {}",
                     category_name, category_stride
                 );
@@ -829,7 +829,7 @@ impl YYSLSNewExtractor {
                 let tmp_number = buf_file_size / category_stride;
                 let yu_shu = buf_file_size % category_stride;
                 if yu_shu != 0 {
-                    println!("余数不为0: {}，文件步长除以类别步长不能含余数", yu_shu);
+                    crate::extract_log!("余数不为0: {}，文件步长除以类别步长不能含余数", yu_shu);
                     all_match = false;
                     break;
                 }
@@ -837,16 +837,16 @@ impl YYSLSNewExtractor {
                     vertex_number = tmp_number;
                 }
                 if tmp_number == 0 {
-                    println!("当前匹配的槽位文件大小为0: {}", buf_file_path);
+                    crate::extract_log!("当前匹配的槽位文件大小为0: {}", buf_file_path);
                     all_match = false;
                     break;
                 }
                 if vertex_number != tmp_number {
-                    println!(
+                    crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
                         vertex_number, tmp_number
                     );
-                    println!("槽位匹配失败");
+                    crate::extract_log!("槽位匹配失败");
                     all_match = false;
                     break;
                 }
@@ -868,9 +868,9 @@ impl YYSLSNewExtractor {
             return Ok(Vec::new());
         }
 
-        println!("当前匹配到的数据类型列表:");
+        crate::extract_log!("当前匹配到的数据类型列表:");
         for d3d11_game_type in &possible_game_type_list {
-            println!("{}", d3d11_game_type.game_type_name);
+            crate::extract_log!("{}", d3d11_game_type.game_type_name);
         }
 
         Ok(possible_game_type_list)
@@ -926,7 +926,7 @@ impl YYSLSNewExtractor {
             self.build_match_first_index_ib_file_name_dict(request)?;
 
         for d3d11_game_type in &possible_game_type_list {
-            println!("当前提取数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前提取数据类型: {}", d3d11_game_type.game_type_name);
 
             for ib_txt_file_name in match_first_index_ib_file_name_dict.values() {
                 let output_vb_index = ib_txt_file_name.get(0..6).unwrap_or_default().to_string();
@@ -951,11 +951,11 @@ impl YYSLSNewExtractor {
                 }
 
                 let ib_txt_file = IndexBufferTxtFile::new(&ib_txt_file_path, true)?;
-                println!("{}", ib_txt_file_path);
-                println!("FirstIndex: {}", ib_txt_file.first_index);
-                println!("IndexCount: {}", ib_txt_file.index_count);
+                crate::extract_log!("{}", ib_txt_file_path);
+                crate::extract_log!("FirstIndex: {}", ib_txt_file.first_index);
+                crate::extract_log!("IndexCount: {}", ib_txt_file.index_count);
 
-                println!("开始从各个Buffer文件中读取数据:");
+                crate::extract_log!("开始从各个Buffer文件中读取数据:");
                 let mut category_name_buf_file_name_dict: HashMap<String, String> = HashMap::new();
                 for category_name in &d3d11_game_type.ordered_category_name_list {
                     let category_stride = d3d11_game_type
@@ -1035,7 +1035,7 @@ impl YYSLSNewExtractor {
         &mut self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<(), String> {
-        println!("开始提取:");
+        crate::extract_log!("开始提取:");
 
         let draw_ib_list = if self.specify_drawib_extract {
             self.drawib_config
@@ -1049,7 +1049,7 @@ impl YYSLSNewExtractor {
         };
 
         for draw_ib in draw_ib_list.iter() {
-            println!("当前DrawIB: {}", draw_ib);
+            crate::extract_log!("当前DrawIB: {}", draw_ib);
 
             let request_list = self.build_ctx_extract_requests_for_draw_ib(draw_ib)?;
             if request_list.is_empty() {
@@ -1059,10 +1059,10 @@ impl YYSLSNewExtractor {
 
             SSMTLogUtils::seperator();
             for request in request_list.iter() {
-                println!("当前CTX对应的VSHash: {}", request.vs_hash);
+                crate::extract_log!("当前CTX对应的VSHash: {}", request.vs_hash);
 
                 let result = if request.vs_hash == SPECIAL_VS_HASH_8299998BC5A81A12 {
-                    println!("执行提取流程: extract_8299998bc5a81a12");
+                    crate::extract_log!("执行提取流程: extract_8299998bc5a81a12");
                     let field_offsets = Self::load_8299998bc5a81a12_field_offsets()?;
                     self.extract_ctx_request(
                         draw_ib,
@@ -1071,7 +1071,7 @@ impl YYSLSNewExtractor {
                         data_type_filter,
                     )?
                 } else {
-                    println!("执行提取流程: extract_default_ctx_request");
+                    crate::extract_log!("执行提取流程: extract_default_ctx_request");
                     self.extract_ctx_request(draw_ib, request, None, data_type_filter)?
                 };
 
@@ -1085,7 +1085,7 @@ impl YYSLSNewExtractor {
             }
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if self.specify_drawib_extract {
             sync_yysls_workspace_deduped_textures_and_json(
                 &self.fa,

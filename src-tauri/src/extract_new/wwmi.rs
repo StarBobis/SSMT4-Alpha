@@ -124,7 +124,7 @@ impl WWMINewExtractor {
 
         let blend_buf_path = self.base.fa.log.get_deduped_filepath(&blend_buf_file_name);
         if blend_buf_path.is_empty() {
-            println!("Blend buf deduped path is empty: {}", blend_buf_file_name);
+            crate::extract_log!("Blend buf deduped path is empty: {}", blend_buf_file_name);
             return Ok(Vec::new());
         }
 
@@ -144,7 +144,7 @@ impl WWMINewExtractor {
         }
 
         let vg_indices: Vec<i32> = unique_indices.into_iter().collect();
-        println!("VGCount: {}", vg_indices.len());
+        crate::extract_log!("VGCount: {}", vg_indices.len());
         Ok(vg_indices)
     }
 
@@ -198,17 +198,17 @@ impl WWMINewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                println!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
             }
 
-            println!("当前数据类型: {}", d3d11_game_type.game_type_name);
+            crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
 
             let mut category_slot_file_name_dict: HashMap<String, String> = HashMap::new();
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("TrianglelistIndex: {}", trianglelist_index);
+                crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
                 for category_slot in d3d11_game_type.category_slot_dict.values() {
-                    println!("CategorySlot: {}", category_slot);
+                    crate::extract_log!("CategorySlot: {}", category_slot);
 
                     let category_file_name = self
                         .base
@@ -221,13 +221,13 @@ impl WWMINewExtractor {
                         .unwrap_or_default();
 
                     if category_file_name.is_empty() {
-                        println!("未找到当前CategorySlot对应文件: {}", category_slot);
+                        crate::extract_log!("未找到当前CategorySlot对应文件: {}", category_slot);
                         continue;
                     }
 
                     category_slot_file_name_dict
                         .insert(category_slot.clone(), category_file_name.clone());
-                    println!(
+                    crate::extract_log!(
                         "CategorySlot: {} ExtractFileName: {}",
                         category_slot, category_file_name
                     );
@@ -238,8 +238,8 @@ impl WWMINewExtractor {
             let mut vertex_count: u64 = 0;
 
             for (category_name, category_slot) in d3d11_game_type.category_slot_dict.iter() {
-                println!("CategoryName: {}", category_name);
-                println!("CategorySlot: {}", category_slot);
+                crate::extract_log!("CategoryName: {}", category_name);
+                crate::extract_log!("CategorySlot: {}", category_slot);
 
                 let category_stride = d3d11_game_type
                     .category_stride_dict
@@ -252,7 +252,7 @@ impl WWMINewExtractor {
                 }
 
                 if !category_slot_file_name_dict.contains_key(category_slot) {
-                    println!("未检测到当前CategorySlot文件，匹配失败");
+                    crate::extract_log!("未检测到当前CategorySlot文件，匹配失败");
                     all_slot_match = false;
                     break;
                 }
@@ -307,11 +307,11 @@ impl WWMINewExtractor {
                 if vertex_count == 0 {
                     vertex_count = slot_vertex_count;
                 } else if vertex_count != slot_vertex_count {
-                    println!(
+                    crate::extract_log!(
                         "VertexCount: {} SlotVertexCount: {}",
                         vertex_count, slot_vertex_count
                     );
-                    println!(
+                    crate::extract_log!(
                         "当前槽位: {} 文件数据不符合当前数据类型要求，跳过此数据类型",
                         category_slot
                     );
@@ -323,7 +323,7 @@ impl WWMINewExtractor {
             }
 
             if all_slot_match {
-                println!("识别到数据类型: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("识别到数据类型: {}", d3d11_game_type.game_type_name);
                 possible_game_type_list.push(d3d11_game_type.clone());
             }
 
@@ -338,7 +338,7 @@ impl WWMINewExtractor {
         }
 
         if possible_game_type_list.is_empty() {
-            println!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
+            crate::extract_log!("无法识别 DrawIB {} 对应的数据类型", draw_ib);
             return Ok(possible_game_type_list);
         }
 
@@ -359,9 +359,9 @@ impl WWMINewExtractor {
                 .collect();
         }
 
-        println!("All Matched GameType:");
+        crate::extract_log!("All Matched GameType:");
         for d3d11_game_type in possible_game_type_list.iter() {
-            println!("{}", d3d11_game_type.game_type_name);
+            crate::extract_log!("{}", d3d11_game_type.game_type_name);
         }
 
         Ok(possible_game_type_list)
@@ -371,14 +371,14 @@ impl WWMINewExtractor {
         &mut self,
         data_type_filter: FullExtractDataTypeFilter,
     ) -> Result<(), String> {
-        println!("开始提取:");
+        crate::extract_log!("开始提取:");
 
         for draw_ib in self.base.draw_ib_list.iter() {
             if draw_ib == "8d45cfee" {
                 crate::extract_new::log_skipped_drawib(draw_ib, "known fake DrawIB");
                 continue;
             } else {
-                println!("当前DrawIB: {}", draw_ib);
+                crate::extract_log!("当前DrawIB: {}", draw_ib);
             }
 
             let trianglelist_index_list = self.base.fa.data.get_trianglelist_index_list(&draw_ib);
@@ -391,9 +391,9 @@ impl WWMINewExtractor {
             let mut max_slot_number: usize = 0;
             let mut max_slot_trianglelist_index = String::new();
 
-            println!("初始化 Total_CategorySlot_Hash_Dict:");
+            crate::extract_log!("初始化 Total_CategorySlot_Hash_Dict:");
             for trianglelist_index in trianglelist_index_list.iter() {
-                println!("{}", trianglelist_index);
+                crate::extract_log!("{}", trianglelist_index);
                 let category_slot_hash_dict = self
                     .base
                     .fa
@@ -412,10 +412,10 @@ impl WWMINewExtractor {
                 }
             }
 
-            println!("TrianglelistIndex: {}", max_slot_trianglelist_index);
-            println!("MaxSlotNumber: {}", max_slot_number);
+            crate::extract_log!("TrianglelistIndex: {}", max_slot_trianglelist_index);
+            crate::extract_log!("MaxSlotNumber: {}", max_slot_number);
             for (slot, hash) in total_category_slot_hash_dict.iter() {
-                println!("CategorySlot: {} Hash: {}", slot, hash);
+                crate::extract_log!("CategorySlot: {} Hash: {}", slot, hash);
             }
 
             let mut possible_d3d11_game_type_list =
@@ -437,7 +437,7 @@ impl WWMINewExtractor {
 
             //输出每一种数据类型
             for d3d11_game_type in possible_d3d11_game_type_list.iter() {
-                println!("输出数据类型: {}", d3d11_game_type.game_type_name);
+                crate::extract_log!("输出数据类型: {}", d3d11_game_type.game_type_name);
                 let mut merged_vg_offset = 0i32;
                 let mut merged_bone_matrix_map: HashMap<String, i32> = HashMap::new();
 
@@ -458,9 +458,9 @@ impl WWMINewExtractor {
                 }
 
                 if let Some(vb0_hash) = total_category_slot_hash_dict.get("vb0") {
-                    println!("Metadata.json vb0_hash: {}", vb0_hash);
+                    crate::extract_log!("Metadata.json vb0_hash: {}", vb0_hash);
                 } else {
-                    println!("Can't get vb0_hash for Metadata.json");
+                    crate::extract_log!("Can't get vb0_hash for Metadata.json");
                 }
 
                 let cb4_file_name = self
@@ -472,9 +472,9 @@ impl WWMINewExtractor {
                 let mut cb4_hash = String::new();
                 if !cb4_file_name.is_empty() {
                     cb4_hash = cb4_file_name.chars().skip(14).take(8).collect();
-                    println!("Metadata.json cb4_hash: {}", cb4_hash);
+                    crate::extract_log!("Metadata.json cb4_hash: {}", cb4_hash);
                 } else {
-                    println!("Can't get cb4_hash for Metadata.json");
+                    crate::extract_log!("Can't get cb4_hash for Metadata.json");
                 }
 
                 let mut shapekey_extract_index = String::new();
@@ -551,13 +551,13 @@ impl WWMINewExtractor {
                                     shapekeys.vertex_count = sk_vertex_count;
                                     shapekeys.checksum = sk_checksum;
                                     shapekeys.dispatch_y = sk_dispatch_y;
-                                    println!(
+                                    crate::extract_log!(
                                         "ShapeKeys: vertex_count={} dispatch_y={} checksum={}",
                                         sk_vertex_count, sk_dispatch_y, sk_checksum
                                     );
                                 }
-                                Ok(_) => println!("cs-cb0 buffer 太短，无法读取 128 个 u32"),
-                                Err(e) => println!("读取 cs-cb0 buffer 失败: {}", e),
+                                Ok(_) => crate::extract_log!("cs-cb0 buffer 太短，无法读取 128 个 u32"),
+                                Err(e) => crate::extract_log!("读取 cs-cb0 buffer 失败: {}", e),
                             }
                         }
                     }
@@ -592,7 +592,7 @@ impl WWMINewExtractor {
                             .collect();
                     }
                 } else {
-                    println!("存在VB6槽位，但无法找到ShapeKey提取Index，跳过形态键提取。");
+                    crate::extract_log!("存在VB6槽位，但无法找到ShapeKey提取Index，跳过形态键提取。");
                 }
 
                 //逐个Submesh输出内容
@@ -603,7 +603,7 @@ impl WWMINewExtractor {
                 for (match_first_index, (ib_txt_filename, trianglelist_index)) in
                     unique_ib_txt_filename_dict.iter()
                 {
-                    println!(
+                    crate::extract_log!(
                         "MatchFirstIndex: {} IBTxtFileName: {} TrianglelistIndex: {}",
                         match_first_index, ib_txt_filename, trianglelist_index
                     );
@@ -624,7 +624,7 @@ impl WWMINewExtractor {
                         SSMTFileUtils::get_filename_with_new_extension(ib_txt_filename, "buf")?;
                     let ib_buf_file_path = self.base.fa.log.get_deduped_filepath(&ib_buf_file_name);
                     if ib_buf_file_path.is_empty() {
-                        println!("IB buf deduped path is empty: {}", ib_buf_file_name);
+                        crate::extract_log!("IB buf deduped path is empty: {}", ib_buf_file_name);
                         continue;
                     }
                     let unique_str_folder_name = format!(
@@ -680,7 +680,7 @@ impl WWMINewExtractor {
                             .log
                             .get_deduped_filepath(&shape_key_offset_buf_file_name);
                         if source_file_path.is_empty() {
-                            println!(
+                            crate::extract_log!(
                                 "ShapeKeyOffset deduped path is empty: {}",
                                 shape_key_offset_buf_file_name
                             );
@@ -703,7 +703,7 @@ impl WWMINewExtractor {
                             .log
                             .get_deduped_filepath(&shape_key_vertex_id_buf_file_name);
                         if source_file_path.is_empty() {
-                            println!(
+                            crate::extract_log!(
                                 "ShapeKeyVertexId deduped path is empty: {}",
                                 shape_key_vertex_id_buf_file_name
                             );
@@ -728,7 +728,7 @@ impl WWMINewExtractor {
                             .log
                             .get_deduped_filepath(&shape_key_vertex_offset_buf_file_name);
                         if source_file_path.is_empty() {
-                            println!(
+                            crate::extract_log!(
                                 "ShapeKeyVertexOffset deduped path is empty: {}",
                                 shape_key_vertex_offset_buf_file_name
                             );
@@ -753,7 +753,7 @@ impl WWMINewExtractor {
                             .log
                             .get_deduped_filepath(&shape_key_scale_buf_file_name);
                         if source_file_path.is_empty() {
-                            println!(
+                            crate::extract_log!(
                                 "ShapeKeyScale deduped path is empty: {}",
                                 shape_key_scale_buf_file_name
                             );
@@ -784,7 +784,7 @@ impl WWMINewExtractor {
                             .log
                             .get_deduped_filepath(&submesh_cb4_file_name);
                         if cb4_buf_path.is_empty() {
-                            println!("cb4 deduped path is empty: {}", submesh_cb4_file_name);
+                            crate::extract_log!("cb4 deduped path is empty: {}", submesh_cb4_file_name);
                         } else {
                             let dest_name = format!("{}-BoneMatrix.buf", unique_str_folder_name);
                             fs::copy(&cb4_buf_path, game_type_output_path.join(&dest_name))
@@ -981,7 +981,7 @@ impl WWMINewExtractor {
             }
         }
 
-        println!("提取正常执行完成");
+        crate::extract_log!("提取正常执行完成");
         if self.base.specify_drawib_extract {
             sync_workspace_deduped_textures_and_json(
                 &self.base.fa,

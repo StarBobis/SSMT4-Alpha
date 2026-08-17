@@ -1,8 +1,9 @@
 import { ElMessage } from 'element-plus';
 import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
-import { mkdir } from '@tauri-apps/plugin-fs';
+import { mkdir, readDir } from '@tauri-apps/plugin-fs';
 import { ResourceManager } from '../../store/ResourceManager';
+import { AppStateManager } from '../../store/AppStateManager';
 import { i18n } from '../../i18n';
 import { debugLog } from '../../utils/debugLog';
 import { autoApplyTextureMarksFromHistoryForTab, type MarkStyle } from '../MarkTexture/MarkTextureFull';
@@ -40,6 +41,21 @@ type ExtractBaseParams = {
 
 type ExtractSharedParams = ExtractBaseParams & {
 	openPath: (path: string | undefined, emptyMsg: string) => Promise<void>;
+};
+
+const listExtractionLogNames = async (logFolder: string): Promise<Set<string>> => {
+	try {
+		return new Set((await readDir(logFolder)).map(entry => entry.name).filter(name => name.endsWith('-model-extract.log')));
+	} catch {
+		return new Set();
+	}
+};
+
+const findNewExtractionLog = async (logFolder: string, previous: Set<string>): Promise<string | undefined> => {
+	const current = [...await listExtractionLogNames(logFolder)]
+		.filter(name => !previous.has(name))
+		.sort((a, b) => b.localeCompare(a));
+	return current[0] ? join(logFolder, current[0]) : undefined;
 };
 
 const openCurrentWorkspaceFolder = async (params: ExtractSharedParams): Promise<void> => {
@@ -150,7 +166,9 @@ export const runExtractModels = async (
 	activeTabId: string,
 	textureMarkStylePreference: MarkStyle,
 	setIsExtracting: (value: boolean) => void,
-	openPath: (path: string | undefined, emptyMsg: string) => Promise<void>
+	openPath: (path: string | undefined, emptyMsg: string) => Promise<void>,
+	openExtractionLog: (path: string) => Promise<void>,
+	onExtractionLogAvailable: (path: string) => void
 ): Promise<void> => {
 	if (isExtracting) return;
 
@@ -163,6 +181,8 @@ export const runExtractModels = async (
 	}
 
 	setIsExtracting(true);
+	const logFolder = await join(AppStateManager.appSettings.DBMTWorkFolder, 'Logs');
+	const previousLogs = await listExtractionLogNames(logFolder);
 	try {
 		const invokeArgs = await resolveExtractInvokeArgs({
 			frameAnalysisFolderPath,
@@ -178,6 +198,8 @@ export const runExtractModels = async (
 			gamePreset: invokeArgs.gamePreset,
 			workspaceRootPath: invokeArgs.workspaceRootPath,
 			lodName: invokeArgs.lodName,
+			logFolder,
+			logLanguage: AppStateManager.appSettings.modelExtractionLogLanguage,
 		});
 		ElMessage.success(t('workPage.messages.modelExtractionAndDedupedCompleted'));
 		await tryAutoApplyTextureMarksAfterExtract({
@@ -193,7 +215,14 @@ export const runExtractModels = async (
 	} catch (err) {
 		console.error('Model extraction failed', err);
 		ElMessage.error(t('workPage.messages.modelExtractionFailed', { error: String(err) }));
+		const logPath = await findNewExtractionLog(logFolder, previousLogs);
+		if (logPath) {
+			onExtractionLogAvailable(logPath);
+			await openExtractionLog(logPath);
+		}
 	} finally {
+		const logPath = await findNewExtractionLog(logFolder, previousLogs);
+		if (logPath) onExtractionLogAvailable(logPath);
 		setIsExtracting(false);
 	}
 };
@@ -209,11 +238,15 @@ export const runExtractModels = async (
 	activeTabId: string,
 		textureMarkStylePreference: MarkStyle,
 		setIsExtracting: (value: boolean) => void,
-		openPath: (path: string | undefined, emptyMsg: string) => Promise<void>
+		openPath: (path: string | undefined, emptyMsg: string) => Promise<void>,
+		openExtractionLog: (path: string) => Promise<void>,
+		onExtractionLogAvailable: (path: string) => void
 	): Promise<void> => {
 		if (isExtracting) return;
 
 		setIsExtracting(true);
+		const logFolder = await join(AppStateManager.appSettings.DBMTWorkFolder, 'Logs');
+		const previousLogs = await listExtractionLogNames(logFolder);
 		try {
 			const invokeArgs = await resolveExtractInvokeArgs({
 				frameAnalysisFolderPath,
@@ -230,6 +263,8 @@ export const runExtractModels = async (
 				workspaceRootPath: invokeArgs.workspaceRootPath,
 				lodName: invokeArgs.lodName,
 				dataTypeFilter,
+				logFolder,
+				logLanguage: AppStateManager.appSettings.modelExtractionLogLanguage,
 			});
 			ElMessage.success(t('workPage.messages.fullExtractionTriggered'));
 			await tryAutoApplyTextureMarksAfterExtract({
@@ -245,7 +280,14 @@ export const runExtractModels = async (
 		} catch (err) {
 			console.error('Full extraction failed', err);
 			ElMessage.error(t('workPage.messages.fullExtractionFailed', { error: String(err) }));
+			const logPath = await findNewExtractionLog(logFolder, previousLogs);
+			if (logPath) {
+				onExtractionLogAvailable(logPath);
+				await openExtractionLog(logPath);
+			}
 		} finally {
+			const logPath = await findNewExtractionLog(logFolder, previousLogs);
+			if (logPath) onExtractionLogAvailable(logPath);
 			setIsExtracting(false);
 		}
 	};

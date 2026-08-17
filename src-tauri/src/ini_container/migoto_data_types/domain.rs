@@ -95,9 +95,9 @@ pub struct Resource {
 
 impl Resource {
     pub fn show(&self) {
-        println!("ResourceStride: {}", self.stride);
-        println!("ResourceFileName: {}", self.file_name);
-        println!("ResourceFilePath: {}", self.file_path);
+        crate::extract_log!("ResourceStride: {}", self.stride);
+        crate::extract_log!("ResourceFileName: {}", self.file_name);
+        crate::extract_log!("ResourceFilePath: {}", self.file_path);
     }
 }
 

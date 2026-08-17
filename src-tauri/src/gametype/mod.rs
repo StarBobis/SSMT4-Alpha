@@ -126,7 +126,7 @@ fn load_game_type_list_from_folder(
         ));
     }
 
-    println!(
+    crate::extract_log!(
         "Loaded {} D3D11GameType entries from JSON files for {}",
         game_type_list.len(),
         game_name
@@ -213,10 +213,8 @@ mod tests {
 
     #[test]
     fn sync_folder_copies_overwrites_and_preserves_user_files() {
-        let base = std::env::temp_dir().join(format!(
-            "ssmt4-gametype-sync-test-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("ssmt4-gametype-sync-test-{}", std::process::id()));
         let source = base.join("source").join("GIMI");
         let target = base.join("target").join("GIMI");
         fs::create_dir_all(&source).unwrap();
