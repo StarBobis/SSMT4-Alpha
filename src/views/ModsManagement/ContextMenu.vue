@@ -14,6 +14,7 @@ const props = defineProps<{
   isNsfw?: boolean;
   currentGroup?: string;
   hasModKeys?: boolean;
+  hasInlineKeyBackup?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -31,6 +32,8 @@ const emit = defineEmits<{
   'toggle-nsfw': [mod: ModInfo];
   'navigate-to-mod-group': [mod: ModInfo];
   'edit-mod-keys': [mod: ModInfo];
+  'inline-mod-keys': [mod: ModInfo];
+  'restore-inline-mod-keys': [mod: ModInfo];
 }>();
 
 const { t } = useI18n();
@@ -128,6 +131,14 @@ watch(() => props.visible, (newVal) => {
       <div v-if="hasModKeys" class="menu-item" @click="emit('close'); emit('edit-mod-keys', target as ModInfo)">
         <el-icon><Edit /></el-icon>
         <span>{{ t('modsManagement.actions.editModKeys') }}</span>
+      </div>
+      <div v-if="hasModKeys && !hasInlineKeyBackup" class="menu-item menu-item--danger" @click="emit('close'); emit('inline-mod-keys', target as ModInfo)">
+        <el-icon><WarningFilled /></el-icon>
+        <span>{{ t('modsManagement.actions.inlineModKeys') }}</span>
+      </div>
+      <div v-if="hasInlineKeyBackup" class="menu-item" @click="emit('close'); emit('restore-inline-mod-keys', target as ModInfo)">
+        <el-icon><Edit /></el-icon>
+        <span>{{ t('modsManagement.actions.restoreInlineModKeys') }}</span>
       </div>
       <div
         v-if="target.group !== 'Root' && target.group !== currentGroup"

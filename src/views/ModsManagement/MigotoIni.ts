@@ -1816,6 +1816,12 @@ class MigotoIniService {
     mods.forEach((mod) => this.ensureQueued(gameName, mod))
   }
 
+  public invalidate(gameName: string, modRelativePath: string) {
+    const cacheKey = getCacheKey(gameName, modRelativePath)
+    this.cache.delete(cacheKey)
+    this.dequeue(cacheKey)
+  }
+
   public clearGame(gameName: string) {
     this.gameGenerations.set(gameName, this.getGeneration(gameName) + 1)
 

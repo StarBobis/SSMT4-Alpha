@@ -25,6 +25,8 @@ import { useModsManagementTags } from './ModsManagement.tags';
 import { useModsManagementDialogs } from './ModsManagement.dialogs';
 import { useModsManagementPreviews } from './ModsManagement.previews';
 import EditSwitchKeyList from './EditSwitchKeyList.vue';
+import InlineModKeysDialog from './InlineModKeysDialog.vue';
+import { applyInlineModKeys, hasInlineModKeyBackup, inspectInlineModKeys, restoreInlineModKeys, type InlineKeyChoice } from './InlineModKeys';
 import TagManagement from './TagManagement.vue';
 import ContextMenu from './ContextMenu.vue';
 import GroupContextMenu from './GroupContextMenu.vue';
@@ -738,11 +740,21 @@ const navigateGroupBreadcrumb = (groupId: string) => {
 const {
     contextMenu, groupContextMenu,
     closeContextMenu, closeGroupContextMenu,
-    showModContextMenu, showGroupContextMenu,
+    showModContextMenu: showModContextMenuBase, showGroupContextMenu,
     archiveExportFormats, exportArchiveDialog,
     openExportArchiveDialog, cancelExportArchive, chooseExportOutputDir, confirmExportArchive,
     modKeyListDialog, closeModKeyList,
 } = useModsManagementDialogs({ selectedGame, t });
+
+const inlineKeyBackupState = reactive<Record<string, boolean>>({});
+const showModContextMenu = (event: MouseEvent, mod: ModInfo) => {
+    showModContextMenuBase(event, mod);
+    inlineKeyBackupState[mod.id] = false;
+    if (!selectedGame.value) return;
+    void hasInlineModKeyBackup(selectedGame.value, mod.relativePath)
+        .then(hasBackup => { inlineKeyBackupState[mod.id] = hasBackup; })
+        .catch(() => { inlineKeyBackupState[mod.id] = false; });
+};
 
 let selectedGroupTimer: ReturnType<typeof setTimeout> | null = null;
 const persistSelectedGroupState = () => {
@@ -3244,6 +3256,76 @@ const {
     t,
 });
 
+const inlineKeysDialog = reactive({
+    visible: false,
+    loading: false,
+    applying: false,
+    mod: null as ModInfo | null,
+    choices: [] as InlineKeyChoice[],
+    hasBackup: false,
+});
+
+const openInlineModKeys = async (mod: ModInfo) => {
+    if (!selectedGame.value) return;
+    inlineKeysDialog.visible = true;
+    inlineKeysDialog.loading = true;
+    inlineKeysDialog.mod = mod;
+    inlineKeysDialog.choices = [];
+    try {
+        migotoIniService.invalidate(selectedGame.value, mod.relativePath);
+        const analysis = await migotoIniService.load(selectedGame.value, mod);
+        const result = await inspectInlineModKeys(selectedGame.value, mod, analysis.modKeyList);
+        inlineKeysDialog.choices = result.choices;
+        inlineKeysDialog.hasBackup = result.hasBackup;
+        inlineKeyBackupState[mod.id] = result.hasBackup;
+    } catch (error) {
+        ElMessage.error(t('modsManagement.messages.inspectInlineModKeysFailed', { error: String(error) }));
+        inlineKeysDialog.visible = false;
+    } finally {
+        inlineKeysDialog.loading = false;
+    }
+};
+
+const applyInlineKeysFromDialog = async (selected: Record<string, string>) => {
+    const mod = inlineKeysDialog.mod;
+    if (!mod || !selectedGame.value) return;
+    inlineKeysDialog.applying = true;
+    try {
+        suppressFsRefresh(2200);
+        await applyInlineModKeys(selectedGame.value, mod, inlineKeysDialog.choices, selected);
+        migotoIniService.invalidate(selectedGame.value, mod.relativePath);
+        delete modKeyLists[mod.id];
+        inlineKeysDialog.hasBackup = true;
+        inlineKeyBackupState[mod.id] = true;
+        ElMessage.success(t('modsManagement.messages.inlineModKeysApplied'));
+        inlineKeysDialog.visible = false;
+    } catch (error) {
+        ElMessage.error(t('modsManagement.messages.inlineModKeysFailed', { error: String(error) }));
+    } finally {
+        inlineKeysDialog.applying = false;
+    }
+};
+
+const restoreInlineKeysFromDialog = async () => {
+    const mod = inlineKeysDialog.mod;
+    if (!mod || !selectedGame.value) return;
+    inlineKeysDialog.applying = true;
+    try {
+        suppressFsRefresh(2200);
+        await restoreInlineModKeys(selectedGame.value, mod);
+        migotoIniService.invalidate(selectedGame.value, mod.relativePath);
+        delete modKeyLists[mod.id];
+        inlineKeysDialog.hasBackup = false;
+        inlineKeyBackupState[mod.id] = false;
+        ElMessage.success(t('modsManagement.messages.inlineModKeysRestored'));
+        inlineKeysDialog.visible = false;
+    } catch (error) {
+        ElMessage.error(t('modsManagement.messages.restoreInlineModKeysFailed', { error: String(error) }));
+    } finally {
+        inlineKeysDialog.applying = false;
+    }
+};
+
 const queueVisibleModAnalysis = (modBatch: ModInfo[]) => {
     if (!selectedGame.value || modBatch.length === 0) return;
     const gameName = selectedGame.value;
@@ -4085,6 +4167,18 @@ const {
 
 
 
+    <InlineModKeysDialog
+      :visible="inlineKeysDialog.visible"
+      :loading="inlineKeysDialog.loading"
+      :applying="inlineKeysDialog.applying"
+      :mod-name="inlineKeysDialog.mod?.name || ''"
+      :choices="inlineKeysDialog.choices"
+      :has-backup="inlineKeysDialog.hasBackup"
+      @close="inlineKeysDialog.visible = false"
+      @apply="applyInlineKeysFromDialog"
+      @restore="restoreInlineKeysFromDialog"
+    />
+
     <!-- Custom Context Menu -->
     <ContextMenu
       :visible="contextMenu.visible"
@@ -4095,6 +4189,7 @@ const {
       :is-nsfw="contextMenu.target ? getTagsForMod(contextMenu.target).some(isNsfwTag) : false"
       :current-group="selectedGroup"
       :has-mod-keys="contextMenu.target ? getModKeyItems(contextMenu.target.id).length > 0 : false"
+      :has-inline-key-backup="contextMenu.target ? !!inlineKeyBackupState[contextMenu.target.id] : false"
       @close="closeContextMenu"
       @open-mod-folder="(path: string) => { closeContextMenu(); openModFolder(path); }"
       @move-mod-to-group="(mod: ModInfo, groupId: string) => { closeContextMenu(); moveModToGroup(mod, groupId); }"
@@ -4103,6 +4198,8 @@ const {
       @export-mod-archive="(mod: ModInfo) => { closeContextMenu(); openExportArchiveDialog(mod); }"
       @open-mod-tag-dialog="(mod: ModInfo) => { closeContextMenu(); openModTagDialogWrapped(mod); }"
       @edit-mod-keys="(mod: ModInfo) => { closeContextMenu(); openModKeyEditor(mod); }"
+      @inline-mod-keys="(mod: ModInfo) => { closeContextMenu(); void openInlineModKeys(mod); }"
+      @restore-inline-mod-keys="(mod: ModInfo) => { closeContextMenu(); void openInlineModKeys(mod); }"
       @toggle-nsfw="(mod: ModInfo) => { closeContextMenu(); void toggleModNsfwMarked(mod); }"
       @add-preview-images="(mod: ModInfo) => { closeContextMenu(); addPreviewImages(mod); }"
       @paste-clipboard-preview-image="(mod: ModInfo) => { closeContextMenu(); pasteClipboardPreviewImage(mod); }"
