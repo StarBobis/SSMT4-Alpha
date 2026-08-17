@@ -1126,6 +1126,7 @@
       "setAllToSlotStyle": "Set All to Slot Style",
       "setAllToSharedSlotStyle": "Set All to Shared Slot Style",
       "openFolders": "Open Folders",
+      "clearTextureMarkName": "Clear texture mark",
       "deleteCustomMarkName": "Delete custom mark name"
     },
     "menu": {

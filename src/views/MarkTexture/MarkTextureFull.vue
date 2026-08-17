@@ -1509,6 +1509,16 @@ const handleTextureMarkNameChanged = (markName: string) => {
 	handleTextureMarkChanged();
 };
 
+const handleClearTextureMarkName = (item: TextureItem) => {
+	item.markName = '';
+	handleTextureMarkChanged();
+};
+
+const handleQuickTextureMarkName = (item: TextureItem, markName: string) => {
+	item.markName = markName;
+	handleTextureMarkNameChanged(markName);
+};
+
 const handleRemoveCustomMarkName = (event: MouseEvent, markName: string) => {
 	event.preventDefault();
 	event.stopPropagation();
@@ -2772,13 +2782,8 @@ watch(activeChannelPreviewItem, (item) => {
 												allow-create
 												default-first-option
 												popper-class="mark-texture-select-popper mark-name-select-popper"
-												:placeholder="t('markTexture.placeholders.selectOrEnterMarkName')"
+												:placeholder="item.markName ? t('markTexture.placeholders.selectOrEnterMarkName') : ''"
 											>
-												<el-option
-													:key="'__empty_mark_name'"
-													:label="' '"
-													:value="''"
-												/>
 												<el-option-group :label="t('markTexture.markNameGroups.preset')">
 													<el-option
 														v-for="name in presetMarkNameList"
@@ -2813,6 +2818,26 @@ watch(activeChannelPreviewItem, (item) => {
 													</el-option>
 												</el-option-group>
 											</el-select>
+											<div
+												v-if="!item.markName.trim()"
+												class="mark-name-quick-actions"
+												@mousedown.stop.prevent
+											>
+												<button type="button" title="DiffuseMap" aria-label="DiffuseMap" @click.stop="handleQuickTextureMarkName(item, 'DiffuseMap')">D</button>
+												<button type="button" title="LightMap" aria-label="LightMap" @click.stop="handleQuickTextureMarkName(item, 'LightMap')">L</button>
+												<button type="button" title="NormalMap" aria-label="NormalMap" @click.stop="handleQuickTextureMarkName(item, 'NormalMap')">N</button>
+											</div>
+											<button
+												v-if="item.markName.trim()"
+												type="button"
+												class="mark-name-clear-button"
+												:title="t('markTexture.actions.clearTextureMarkName')"
+												:aria-label="t('markTexture.actions.clearTextureMarkName')"
+												@mousedown.stop.prevent
+												@click.stop="handleClearTextureMarkName(item)"
+											>
+												<el-icon><Delete /></el-icon>
+											</button>
 										</div>
 									</div>
 
@@ -3781,6 +3806,7 @@ watch(activeChannelPreviewItem, (item) => {
 }
 
 .mark-name-select-wrap {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -3791,6 +3817,68 @@ watch(activeChannelPreviewItem, (item) => {
 .mark-name-select-wrap :deep(.el-select) {
 	flex: 1 1 auto;
 	min-width: 0;
+}
+
+.mark-name-quick-actions {
+	position: absolute;
+	left: 12px;
+	top: 50%;
+	z-index: 4;
+	display: inline-flex;
+	align-items: center;
+	transform: translateY(-50%);
+	color: rgba(255, 255, 255, 0.68);
+}
+
+.mark-name-quick-actions button {
+	position: relative;
+	min-width: 25px;
+	height: 24px;
+	padding: 0 8px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	transition: color 0.16s ease;
+}
+
+.mark-name-quick-actions button + button::before {
+	position: absolute;
+	left: 0;
+	top: 5px;
+	bottom: 5px;
+	width: 1px;
+	background: rgba(255, 255, 255, 0.24);
+	content: '';
+}
+
+.mark-name-quick-actions button:hover {
+	color: rgba(255, 255, 255, 1);
+}
+
+.mark-name-clear-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 32px;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid rgba(248, 113, 113, 0.28);
+	border-radius: 8px;
+	background: rgba(239, 68, 68, 0.08);
+	color: rgba(248, 113, 113, 0.82);
+	cursor: pointer;
+	transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.mark-name-clear-button:hover {
+	border-color: rgba(248, 113, 113, 0.58);
+	background: rgba(239, 68, 68, 0.18);
+	color: rgba(254, 202, 202, 1);
 }
 
 .mark-style-select-wrap {

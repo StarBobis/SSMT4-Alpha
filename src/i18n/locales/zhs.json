@@ -1127,6 +1127,7 @@
       "setAllToSlotStyle": "全部批量设为 Slot 风格",
       "setAllToSharedSlotStyle": "全部批量设为 Shared Slot 风格",
       "openFolders": "打开文件夹",
+      "clearTextureMarkName": "取消贴图标记",
       "deleteCustomMarkName": "删除自定义标记名称"
     },
     "menu": {
