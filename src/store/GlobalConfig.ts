@@ -21,7 +21,10 @@ export class GlobalConfig {
 
   public static async EnsureFirstRunMarker(): Promise<boolean> {
     const folder = await this.SSMT4GlobalConfigsFolder()
+    const lockedMarker = await join(folder, '.lockedfirst')
     const marker = await join(folder, '.notfirst')
+    // Development/testing override: keep onboarding enabled without mutating .notfirst.
+    if (await exists(lockedMarker)) return true
     if (await exists(marker)) return false
     await mkdir(folder, { recursive: true })
     await writeTextFile(marker, '')

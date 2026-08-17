@@ -40,6 +40,7 @@ const { t } = useI18n();
 const languageOptions = computed(() => [
   { value: SSMTLocale.en, label: t('settings.personalization.languageOptions.en') },
   { value: SSMTLocale.zhs, label: t('settings.personalization.languageOptions.zhs') },
+  { value: SSMTLocale.zht, label: t('settings.personalization.languageOptions.zht') },
 ]);
 
 const appVersion = ref('1.0.0');

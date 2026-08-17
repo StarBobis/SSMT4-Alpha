@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
-import { normalizeAppUiScale, type PageVisibilitySettings } from "./store/AppSettings";
+import { normalizeAppUiScale, SSMTLocale, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
 import { useI18n } from 'vue-i18n';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -27,11 +27,14 @@ const firstRunSteps = computed<FirstRunStepKey[]>(() => {
 });
 const currentFirstRunStep = computed(() => firstRunSteps.value[firstRunStep.value] || 'language');
 const firstRunStepCount = computed(() => firstRunSteps.value.length);
+const firstRunTransitionDirection = ref<'forward' | 'backward'>('forward');
+const firstRunTransitionName = computed(() => `first-run-${firstRunTransitionDirection.value}`);
 const firstRunCacheDir = ref('');
+const firstRunDialog = ref<HTMLElement | null>(null);
+watch(firstRunStep, () => firstRunDialog.value?.scrollTo({ top: 0 }));
 const selectedFirstRunGames = ref<string[]>([]);
 const firstRunGamesInitialized = ref(false);
 const firstRunD3d11Mode = ref<D3d11Mode>('play');
-const firstRunInstallDir = ref('');
 const firstRunUseShell = ref(false);
 const firstRunHuntingMode = ref<HuntingMode>('2');
 const firstRunShowWarnings = ref(true);
@@ -91,7 +94,6 @@ const confirmFirstRunRole = async () => {
     if (!selected) continue;
     const config = await ResourceManager.loadGameConfig(game.name);
     config.d3d11Mode = selectedFirstRunRole.value === 'player' ? 'play' : firstRunD3d11Mode.value;
-    config.installDir = firstRunInstallDir.value.trim();
     config.useShell = firstRunUseShell.value;
     if (firstRunUseShell.value) {
       config.extraDll = '';
@@ -110,7 +112,10 @@ const confirmFirstRunRole = async () => {
 };
 const advanceFirstRun = () => {
   if (currentFirstRunStep.value === 'role' && !selectedFirstRunRole.value) return;
-  if (firstRunStep.value < firstRunStepCount.value - 1) firstRunStep.value += 1;
+  if (firstRunStep.value < firstRunStepCount.value - 1) {
+    firstRunTransitionDirection.value = 'forward';
+    firstRunStep.value += 1;
+  }
 };
 const selectFirstRunCacheDir = async () => {
   const selected = await openDialog({ directory: true, multiple: false, title: t('firstRun.fields.cacheDir') });
@@ -121,8 +126,16 @@ const toggleFirstRunGame = (name: string) => {
     ? selectedFirstRunGames.value.filter(item => item !== name)
     : [name, ...selectedFirstRunGames.value];
 };
+const firstRunGameIconFallback = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2230%22 height=%2230%22 viewBox=%220 0 30 30%22%3E%3Crect width=%2230%22 height=%2230%22 rx=%226%22 fill=%22black%22 fill-opacity=%22.45%22/%3E%3C/svg%3E';
+const useFirstRunGameIconFallback = (event: Event) => {
+  const image = event.currentTarget as HTMLImageElement;
+  if (image.src !== firstRunGameIconFallback) image.src = firstRunGameIconFallback;
+};
 const retreatFirstRun = () => {
-  if (firstRunStep.value > 0) firstRunStep.value -= 1;
+  if (firstRunStep.value > 0) {
+    firstRunTransitionDirection.value = 'backward';
+    firstRunStep.value -= 1;
+  }
 };
 const isHomeRoute = computed(() => route.path === '/');
 const shouldShowGlobalDimLayer = computed(() => (
@@ -230,79 +243,96 @@ onUnmounted(() => {
     <TitleBar />
 
     <div v-if="AppStateManager.isFirstRunOnboardingOpen.value" class="first-run-overlay">
-      <section class="first-run-dialog" role="dialog" aria-modal="true" :aria-label="t('firstRun.title')">
+      <section ref="firstRunDialog" class="first-run-dialog" role="dialog" aria-modal="true" :aria-label="t('firstRun.title')">
         <header>
-          <span class="first-run-kicker">SSMT4</span>
+          <div class="first-run-head-row">
+            <span class="first-run-kicker">SSMT4</span>
+            <span class="first-run-step-counter">{{ t('firstRun.progress') }} · {{ firstRunStep + 1 }}/{{ firstRunStepCount }}</span>
+          </div>
           <h2>{{ t('firstRun.title') }}</h2>
           <p>{{ t(`firstRun.steps.${currentFirstRunStep}.description`) }}</p>
         </header>
         <div class="first-run-progress" :aria-label="t('firstRun.progress')">
-          <span v-for="index in firstRunStepCount" :key="index" :class="{ 'is-active': index - 1 <= firstRunStep }"></span>
+          <span v-for="index in firstRunStepCount" :key="index" :class="{ 'is-active': index - 1 <= firstRunStep, 'is-current': index - 1 === firstRunStep }"></span>
         </div>
-        <div v-if="currentFirstRunStep === 'language'" class="first-run-form">
-          <label><span>{{ t('settings.personalization.language') }}</span><el-select v-model="appSettings.locale"><el-option value="en" label="English" /><el-option value="zhs" label="简体中文" /></el-select></label>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'role'" class="first-run-role-grid">
-            <button
-              v-for="role in (['author', 'player', 'both'] as const)"
-              :key="role"
-              type="button"
-              class="first-run-role"
-              :class="{ 'is-selected': selectedFirstRunRole === role }"
-              @click="selectedFirstRunRole = role"
-            >
-              <strong>{{ t(`firstRun.roles.${role}`) }}</strong>
-              <span>{{ t(`firstRun.roleDescriptions.${role}`) }}</span>
-            </button>
-            <div v-if="selectedFirstRunRole" class="first-run-preview first-run-role-preview">
-              <span>{{ t('firstRun.visiblePages') }}</span>
-              <div><em v-for="page in selectedFirstRunPages" :key="page">{{ page }}</em></div>
-              <p>{{ t('firstRun.settingsHint') }}</p>
+        <transition :name="firstRunTransitionName" mode="out-in">
+          <div :key="currentFirstRunStep" class="first-run-body">
+            <div v-if="currentFirstRunStep === 'language'" class="first-run-lang-grid">
+              <button
+                v-for="lang in ([SSMTLocale.en, SSMTLocale.zhs, SSMTLocale.zht] as const)"
+                :key="lang"
+                type="button"
+                class="first-run-lang"
+                :class="{ 'is-selected': appSettings.locale === lang }"
+                @click="appSettings.locale = lang"
+              >
+                <span class="first-run-lang-code">{{ lang === SSMTLocale.en ? 'EN' : lang === SSMTLocale.zht ? '繁' : '中' }}</span>
+                <span class="first-run-lang-name">{{ t(`settings.personalization.languageOptions.${lang}`) }}</span>
+                <i v-if="appSettings.locale === lang" class="first-run-check"></i>
+              </button>
             </div>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'general'" class="first-run-form">
-          <label><span>{{ t('firstRun.fields.cacheDir') }}</span><div class="first-run-path"><el-input v-model="firstRunCacheDir" readonly /><el-button @click="selectFirstRunCacheDir">{{ t('firstRun.choose') }}</el-button></div></label>
-          <label class="first-run-switch"><span>{{ t('firstRun.fields.altF') }}</span><el-switch v-model="appSettings.showWindowShortcutEnabled" /></label>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'authorPreferences'" class="first-run-form">
-          <label><span>{{ t('firstRun.fields.textureMarkStyle') }}</span><el-select v-model="appSettings.textureMarkStylePreference"><el-option value="Hash" label="Hash" /><el-option value="Slot" label="Slot" /><el-option value="SharedSlot" label="SharedSlot" /></el-select></label>
-          <label><span>{{ t('firstRun.fields.previewLighting') }}</span><el-select v-model="appSettings.postProcessPreviewLightingMode"><el-option value="half-lambert" :label="t('firstRun.options.halfLambert')" /><el-option value="unlit" :label="t('firstRun.options.unlit')" /><el-option value="pbr" label="PBR" /></el-select></label>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'games'" class="first-run-game-grid">
-          <button v-for="game in orderedFirstRunGames" :key="game.name" type="button" :class="{ 'is-selected': selectedFirstRunGames.includes(game.name) }" @click="toggleFirstRunGame(game.name)"><img :src="game.iconPath" alt="" /><span>{{ game.name }}</span></button>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'd3d11'" class="first-run-form">
-          <label><span>{{ t('firstRun.fields.d3d11Source') }}</span><el-radio-group v-model="firstRunD3d11Mode"><el-radio-button v-if="selectedFirstRunRole !== 'player'" value="dev">dev</el-radio-button><el-radio-button value="play">play</el-radio-button><el-radio-button v-if="selectedFirstRunRole !== 'player'" value="ssice-a">ssice-a</el-radio-button></el-radio-group></label>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'migoto'" class="first-run-form">
-          <label><span>{{ t('firstRun.fields.migotoDir') }}</span><el-input v-model="firstRunInstallDir" :placeholder="t('firstRun.defaults.automaticCache')" /></label>
-          <label><span>{{ t('firstRun.fields.launchMode') }}</span><el-radio-group v-model="firstRunUseShell"><el-radio-button :value="false">{{ t('firstRun.options.normalLaunch') }}</el-radio-button><el-radio-button :value="true">Shell</el-radio-button></el-radio-group></label>
-          <label v-if="selectedFirstRunRole !== 'player'"><span>{{ t('firstRun.fields.huntingMode') }}</span><el-select v-model="firstRunHuntingMode"><el-option value="0" :label="t('gameSettingsModal.options.huntingMode.off')" /><el-option value="1" :label="t('gameSettingsModal.options.huntingMode.on')" /><el-option value="2" :label="t('gameSettingsModal.options.huntingMode.toggleByNumpad0')" /></el-select></label>
-          <label class="first-run-switch"><span>{{ t('firstRun.fields.showWarnings') }}</span><el-switch v-model="firstRunShowWarnings" /></label>
-          <label class="first-run-switch"><span>{{ t('firstRun.fields.checkDllUpdate') }}</span><el-switch v-model="firstRunCheckDllUpdate" /></label>
-          <label class="first-run-switch"><span>{{ t('firstRun.fields.checkPackageUpdate') }}</span><el-switch v-model="firstRunCheckPackageUpdate" /></label>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'background'" class="first-run-form">
-          <label><span>{{ t('firstRun.fields.backgroundType') }}</span><el-radio-group v-model="firstRunBackgroundType"><el-radio-button value="Video">{{ t('firstRun.options.dynamic') }}</el-radio-button><el-radio-button value="Image">{{ t('firstRun.options.static') }}</el-radio-button></el-radio-group></label>
-          <label><span>{{ t('firstRun.fields.backgroundUpdate') }}</span><el-radio-group v-model="firstRunBackgroundUpdateMode"><el-radio-button value="manual">{{ t('firstRun.options.manual') }}</el-radio-button><el-radio-button value="auto">{{ t('firstRun.options.auto') }}</el-radio-button></el-radio-group></label>
-          <label><span>{{ t('settings.personalization.backgroundMaskOpacity') }}</span><el-slider v-model="appSettings.globalDimMaskStrength" :min="0" :max="4" :step="0.1" show-input /></label>
-        </div>
-        <div v-else-if="currentFirstRunStep === 'nsfw'" class="first-run-form">
-          <label><span>{{ t('firstRun.fields.modBlurMode') }}</span><el-radio-group v-model="appSettings.modsManagementBlurMode"><el-radio-button value="all">{{ t('firstRun.options.blurAll') }}</el-radio-button><el-radio-button value="nsfw">{{ t('firstRun.options.blurNsfw') }}</el-radio-button><el-radio-button value="none">{{ t('firstRun.options.blurNone') }}</el-radio-button></el-radio-group></label>
-          <label class="first-run-switch"><span>{{ t('firstRun.fields.revealOnHover') }}</span><el-switch v-model="appSettings.revealBlurredImagesOnHover" /></label>
-          <label><span>{{ t('firstRun.fields.showNsfwAcquisition') }}</span><el-radio-group v-model="appSettings.gamebananaShowNsfw"><el-radio-button :value="true">{{ t('firstRun.options.show') }}</el-radio-button><el-radio-button :value="false">{{ t('firstRun.options.hide') }}</el-radio-button></el-radio-group></label>
-        </div>
-        <template v-else>
-          <div class="first-run-preview">
-            <span>{{ t('firstRun.visiblePages') }}</span>
-            <div><em v-for="page in selectedFirstRunPages" :key="page">{{ page }}</em></div>
+            <div v-else-if="currentFirstRunStep === 'role'" class="first-run-role-grid">
+              <button
+                v-for="role in (['author', 'player', 'both'] as const)"
+                :key="role"
+                type="button"
+                class="first-run-role"
+                :class="{ 'is-selected': selectedFirstRunRole === role }"
+                @click="selectedFirstRunRole = role"
+              >
+                <strong>{{ t(`firstRun.roles.${role}`) }}</strong>
+                <span>{{ t(`firstRun.roleDescriptions.${role}`) }}</span>
+                <i v-if="selectedFirstRunRole === role" class="first-run-check"></i>
+              </button>
+              <div v-if="selectedFirstRunRole" class="first-run-preview first-run-role-preview">
+                <span>{{ t('firstRun.visiblePages') }}</span>
+                <div><em v-for="page in selectedFirstRunPages" :key="page">{{ page }}</em></div>
+                <p>{{ t('firstRun.settingsHint') }}</p>
+              </div>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'general'" class="first-run-form">
+              <label><span>{{ t('firstRun.fields.cacheDir') }}</span><div class="first-run-path"><el-input v-model="firstRunCacheDir" readonly /><el-button @click="selectFirstRunCacheDir">{{ t('firstRun.choose') }}</el-button></div></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.altF') }}</span><el-switch v-model="appSettings.showWindowShortcutEnabled" /></label>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'authorPreferences'" class="first-run-form">
+              <label><span>{{ t('firstRun.fields.textureMarkStyle') }}</span><el-select v-model="appSettings.textureMarkStylePreference"><el-option value="Hash" label="Hash" /><el-option value="Slot" label="Slot" /><el-option value="SharedSlot" label="SharedSlot" /></el-select></label>
+              <label><span>{{ t('firstRun.fields.previewLighting') }}</span><el-select v-model="appSettings.postProcessPreviewLightingMode"><el-option value="half-lambert" :label="t('firstRun.options.halfLambert')" /><el-option value="unlit" :label="t('firstRun.options.unlit')" /><el-option value="pbr" label="PBR" /></el-select></label>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'games'">
+              <div class="first-run-game-grid">
+                <button v-for="game in orderedFirstRunGames" :key="game.name" type="button" :class="{ 'is-selected': selectedFirstRunGames.includes(game.name) }" @click="toggleFirstRunGame(game.name)"><img :src="game.iconPath" alt="" @error="useFirstRunGameIconFallback" /><span>{{ game.name }}</span><i v-if="selectedFirstRunGames.includes(game.name)" class="first-run-check"></i></button>
+              </div>
+              <div class="first-run-game-summary">
+                <span>{{ t('firstRun.selectedCount', { count: selectedFirstRunGames.length }) }}</span>
+                <span>{{ t('firstRun.selectedMoveFront') }}</span>
+              </div>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'd3d11'" class="first-run-form">
+              <label><span>{{ t('firstRun.fields.d3d11Source') }}</span><el-radio-group v-model="firstRunD3d11Mode"><el-radio-button v-if="selectedFirstRunRole !== 'player'" value="dev">dev</el-radio-button><el-radio-button value="play">play</el-radio-button><el-radio-button v-if="selectedFirstRunRole !== 'player'" value="ssice-a">ssice-a</el-radio-button></el-radio-group></label>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'migoto'" class="first-run-form">
+              <label><span>{{ t('firstRun.fields.launchMode') }}</span><el-radio-group v-model="firstRunUseShell"><el-radio-button :value="false">{{ t('firstRun.options.normalLaunch') }}</el-radio-button><el-radio-button :value="true">Shell</el-radio-button></el-radio-group></label>
+              <label v-if="selectedFirstRunRole !== 'player'"><span>{{ t('firstRun.fields.huntingMode') }}</span><el-select v-model="firstRunHuntingMode"><el-option value="0" :label="t('gameSettingsModal.options.huntingMode.off')" /><el-option value="1" :label="t('gameSettingsModal.options.huntingMode.on')" /><el-option value="2" :label="t('gameSettingsModal.options.huntingMode.toggleByNumpad0')" /></el-select></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.showWarnings') }}</span><el-switch v-model="firstRunShowWarnings" /></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.checkDllUpdate') }}</span><el-switch v-model="firstRunCheckDllUpdate" /></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.checkPackageUpdate') }}</span><el-switch v-model="firstRunCheckPackageUpdate" /></label>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'background'" class="first-run-form">
+              <label><span>{{ t('firstRun.fields.backgroundType') }}</span><el-radio-group v-model="firstRunBackgroundType"><el-radio-button value="Video">{{ t('firstRun.options.dynamic') }}</el-radio-button><el-radio-button value="Image">{{ t('firstRun.options.static') }}</el-radio-button></el-radio-group></label>
+              <label><span>{{ t('firstRun.fields.backgroundUpdate') }}</span><el-radio-group v-model="firstRunBackgroundUpdateMode"><el-radio-button value="manual">{{ t('firstRun.options.manual') }}</el-radio-button><el-radio-button value="auto">{{ t('firstRun.options.auto') }}</el-radio-button></el-radio-group></label>
+              <label><span>{{ t('settings.personalization.backgroundMaskOpacity') }}</span><el-slider v-model="appSettings.globalDimMaskStrength" :min="0" :max="4" :step="0.1" show-input /></label>
+            </div>
+            <div v-else-if="currentFirstRunStep === 'nsfw'" class="first-run-form">
+              <label><span>{{ t('firstRun.fields.modBlurMode') }}</span><el-radio-group v-model="appSettings.modsManagementBlurMode"><el-radio-button value="all">{{ t('firstRun.options.blurAll') }}</el-radio-button><el-radio-button value="nsfw">{{ t('firstRun.options.blurNsfw') }}</el-radio-button><el-radio-button value="none">{{ t('firstRun.options.blurNone') }}</el-radio-button></el-radio-group></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.revealOnHover') }}</span><el-switch v-model="appSettings.revealBlurredImagesOnHover" /></label>
+              <label><span>{{ t('firstRun.fields.showNsfwAcquisition') }}</span><el-radio-group v-model="appSettings.gamebananaShowNsfw"><el-radio-button :value="true">{{ t('firstRun.options.show') }}</el-radio-button><el-radio-button :value="false">{{ t('firstRun.options.hide') }}</el-radio-button></el-radio-group></label>
+            </div>
           </div>
-          <p class="first-run-settings-hint">{{ t('firstRun.settingsHint') }}</p>
-        </template>
+        </transition>
         <footer class="first-run-actions">
           <el-button v-if="firstRunStep > 0" @click="retreatFirstRun">{{ t('firstRun.back') }}</el-button>
+          <span class="first-run-actions-grow"></span>
           <el-button v-if="firstRunStep < firstRunStepCount - 1 && currentFirstRunStep !== 'role'" text @click="advanceFirstRun">{{ t('firstRun.skip') }}</el-button>
-          <span v-else></span>
           <el-button v-if="firstRunStep < firstRunStepCount - 1" type="primary" :disabled="currentFirstRunStep === 'role' && !selectedFirstRunRole" @click="advanceFirstRun">{{ t('firstRun.next') }}</el-button>
           <el-button v-else type="primary" @click="confirmFirstRunRole">{{ t('firstRun.confirm') }}</el-button>
         </footer>
@@ -447,23 +477,67 @@ input, textarea {
 
 .first-run-dialog {
   width: min(680px, calc(100vw - 48px));
+  height: min(700px, calc(100vh - 48px));
   padding: 26px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   border: var(--t-card-dark-border);
   border-radius: 18px;
   background: var(--t-card-dark-bg);
   box-shadow: var(--t-card-dark-shadow);
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  overflow: hidden;
 }
 
 .first-run-dialog header h2 { margin: 5px 0 8px; font-size: 22px; }
-.first-run-dialog header p, .first-run-settings-hint { color: rgba(255,255,255,.62); line-height: 1.55; }
+.first-run-dialog header p { color: rgba(255,255,255,.62); line-height: 1.55; }
 .first-run-kicker { color: rgba(117,214,187,.9); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.first-run-head-row { display: flex; align-items: center; justify-content: space-between; }
+.first-run-step-counter { color: rgba(255,255,255,.42); font-size: 11px; font-weight: 600; letter-spacing: .05em; }
 .first-run-role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-.first-run-role { min-height: 94px; padding: 14px; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: rgba(255,255,255,.035); color: white; text-align: left; cursor: pointer; }
+.first-run-role, .first-run-lang {
+  position: relative;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.first-run-role:hover, .first-run-lang:hover { border-color: rgba(255,255,255,.26); background: rgba(255,255,255,.06); }
+.first-run-role:active, .first-run-lang:active { transform: scale(.99); }
+.first-run-role { min-height: 94px; }
 .first-run-role strong, .first-run-role span { display: block; }
 .first-run-role span { margin-top: 7px; color: rgba(255,255,255,.55); font-size: 12px; line-height: 1.45; }
-.first-run-role.is-selected { border-color: rgba(117,214,187,.65); background: rgba(117,214,187,.13); }
+.first-run-role.is-selected, .first-run-lang.is-selected { border-color: rgba(117,214,187,.65); background: rgba(117,214,187,.13); }
+.first-run-lang-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(420px, 100%); margin: 20px auto; }
+.first-run-lang { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.first-run-lang-code { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,.09); font-size: 13px; font-weight: 800; }
+.first-run-lang.is-selected .first-run-lang-code { background: rgba(117,214,187,.22); color: rgba(117,214,187,1); }
+.first-run-lang-name { font-size: 14px; font-weight: 600; }
+.first-run-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(117,214,187,.92);
+  box-shadow: 0 0 8px rgba(117,214,187,.35);
+}
+.first-run-check::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 3px;
+  width: 4px;
+  height: 9px;
+  border: solid #0a1410;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 .first-run-preview { padding: 14px; border-radius: 12px; background: rgba(255,255,255,.035); }
 .first-run-preview > span { color: rgba(255,255,255,.56); font-size: 12px; }
 .first-run-preview div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
@@ -471,22 +545,67 @@ input, textarea {
 .first-run-role-preview { grid-column: 1 / -1; }
 .first-run-role-preview p { margin: 10px 0 0; color: rgba(255,255,255,.55); font-size: 12px; }
 .first-run-form { display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
+.first-run-body { min-height: 0; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; overflow-x: hidden; padding: 4px 2px; box-sizing: border-box; }
 .first-run-form > label { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr); align-items: center; gap: 18px; min-height: 38px; }
 .first-run-form > label > span { color: rgba(255,255,255,.84); font-size: 13px; }
-.first-run-form .first-run-switch { grid-template-columns: 1fr auto; }
+.first-run-form .first-run-switch { grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr); }
+.first-run-form .first-run-switch .el-switch { justify-self: start; }
 .first-run-path { display: flex; gap: 8px; min-width: 0; }
 .first-run-path .el-input { flex: 1; }
-.first-run-game-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-height: 330px; margin: 20px 0; overflow: auto; }
-.first-run-game-grid button { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(255,255,255,.03); color: rgba(255,255,255,.76); cursor: pointer; }
+.first-run-game-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-height: 330px; margin: 20px 0 12px; overflow: auto; }
+.first-run-game-grid button { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(255,255,255,.03); color: rgba(255,255,255,.76); cursor: pointer; transition: border-color .18s ease, background .18s ease; }
+.first-run-game-grid button:hover { border-color: rgba(255,255,255,.24); background: rgba(255,255,255,.06); }
 .first-run-game-grid button.is-selected { order: -1; border-color: rgba(117,214,187,.58); background: rgba(117,214,187,.13); color: white; }
 .first-run-game-grid img { width: 30px; height: 30px; object-fit: contain; }
 .first-run-game-grid span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.first-run-game-grid button .first-run-check { top: 7px; right: 7px; width: 15px; height: 15px; box-shadow: none; }
+.first-run-game-grid button .first-run-check::after { left: 5px; top: 2px; width: 3px; height: 7px; }
+.first-run-game-summary { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 18px; color: rgba(255,255,255,.5); font-size: 12px; }
 .first-run-progress { display: flex; gap: 6px; margin-top: 18px; }
-.first-run-progress span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.1); }
+.first-run-progress span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.1); transition: background .25s ease, box-shadow .25s ease; }
 .first-run-progress span.is-active { background: rgba(117,214,187,.72); }
-.first-run-actions { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; margin-top: 18px; }
+.first-run-progress span.is-current { background: rgba(117,214,187,.95); box-shadow: 0 0 8px rgba(117,214,187,.4); }
+.first-run-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.first-run-actions-grow { flex: 1; }
+.first-run-dialog :deep(.el-radio-group) {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.045);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+}
+.first-run-dialog :deep(.el-radio-button__inner) {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: rgba(13, 18, 25, .58) !important;
+  color: rgba(235, 242, 248, .72) !important;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: none !important;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.first-run-dialog :deep(.el-radio-button__inner:hover) { color: rgba(245, 250, 253, .96) !important; background: rgba(255,255,255,.075) !important; }
+.first-run-dialog :deep(.el-radio-button.is-active .el-radio-button__inner),
+.first-run-dialog :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: rgba(76, 155, 139, .28) !important;
+  color: rgba(238, 255, 250, .98) !important;
+  box-shadow: inset 0 0 0 1px rgba(117, 214, 187, .52) !important;
+}
+.first-run-forward-enter-active, .first-run-forward-leave-active,
+.first-run-backward-enter-active, .first-run-backward-leave-active { transition: opacity .2s ease, transform .2s ease; }
+.first-run-forward-enter-from { opacity: 0; transform: translateX(28px); }
+.first-run-forward-leave-to { opacity: 0; transform: translateX(-28px); }
+.first-run-backward-enter-from { opacity: 0; transform: translateX(-28px); }
+.first-run-backward-leave-to { opacity: 0; transform: translateX(28px); }
 
-@media (max-width: 620px) { .first-run-role-grid, .first-run-game-grid { grid-template-columns: 1fr; } .first-run-form > label { grid-template-columns: 1fr; gap: 7px; } }
+@media (max-width: 620px) { .first-run-role-grid, .first-run-game-grid, .first-run-lang-grid { grid-template-columns: 1fr; } .first-run-form > label { grid-template-columns: 1fr; gap: 7px; } }
 
 .app-layout {
   display: flex;

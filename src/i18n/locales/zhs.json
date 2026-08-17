@@ -385,7 +385,7 @@
     "title": "欢迎使用 SSMT4",
     "progress": "首次启动配置进度",
     "steps": {
-      "language": { "description": "选择 SSMT4 的界面语言。" },
+      "language": { "description": "选择 SSMT4 的界面语言。\nChoose the interface language for SSMT4." },
       "role": { "description": "请选择最符合你的使用方式，我们会据此准备初始界面。" },
       "general": { "description": "配置缓存位置与窗口快捷唤起。所有项目都可以保留默认值。" },
       "authorPreferences": { "description": "设置 Mod 制作相关的默认工作流。" },
@@ -413,7 +413,6 @@
       "textureMarkStyle": "贴图标记风格偏好",
       "previewLighting": "3D 预览简易渲染模式",
       "d3d11Source": "d3d11.dll 来源",
-      "migotoDir": "3DMigoto 目录",
       "launchMode": "启动方式偏好",
       "huntingMode": "Hunting 显示模式",
       "showWarnings": "显示左上角警告",
@@ -439,7 +438,8 @@
       "show": "显示",
       "hide": "隐藏"
     },
-    "defaults": { "automaticCache": "留空时使用默认缓存路径" },
+    "selectedCount": "已选 {count} 个游戏",
+    "selectedMoveFront": "已选游戏自动排在最前",
     "confirm": "完成配置"
   },
   "settings": {
@@ -501,7 +501,8 @@
       "language": "语言",
       "languageOptions": {
         "en": "英语",
-        "zhs": "简体中文"
+        "zhs": "简体中文",
+        "zht": "繁體中文"
       }
     },
     "about": {

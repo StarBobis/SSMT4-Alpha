@@ -385,7 +385,7 @@
     "title": "Welcome to SSMT4",
     "progress": "First-run setup progress",
     "steps": {
-      "language": { "description": "Choose the interface language for SSMT4." },
+      "language": { "description": "选择 SSMT4 的界面语言。\nChoose the interface language for SSMT4." },
       "role": { "description": "Choose how you use SSMT4 and we will prepare the initial interface." },
       "general": { "description": "Configure cache storage and the window shortcut. Every option may keep its default." },
       "authorPreferences": { "description": "Set defaults for the Mod authoring workflow." },
@@ -413,7 +413,6 @@
       "textureMarkStyle": "Texture Marking Style",
       "previewLighting": "Simple 3D Preview Rendering",
       "d3d11Source": "d3d11.dll Source",
-      "migotoDir": "3DMigoto Directory",
       "launchMode": "Preferred Launch Method",
       "huntingMode": "Hunting Display Mode",
       "showWarnings": "Show Top-left Warnings",
@@ -439,7 +438,8 @@
       "show": "Show",
       "hide": "Hide"
     },
-    "defaults": { "automaticCache": "Leave empty to use the default cache path" },
+    "selectedCount": "Selected {count} games",
+    "selectedMoveFront": "Selected games move to the front",
     "confirm": "Finish setup"
   },
   "settings": {
@@ -501,7 +501,8 @@
       "language": "Language",
       "languageOptions": {
         "en": "English",
-        "zhs": "Simplified Chinese"
+        "zhs": "Simplified Chinese",
+        "zht": "Traditional Chinese"
       }
     },
     "about": {

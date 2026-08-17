@@ -4,6 +4,7 @@ import type { AppSettings } from '../store/AppSettings'
 import { SSMTLocale } from '../store/AppSettings'
 import en from './locales/en.json'
 import zhs from './locales/zhs.json'
+import zht from './locales/zht.json'
 
 type SettingsWithLocale = Pick<AppSettings, 'locale'>
 
@@ -21,8 +22,7 @@ export const i18n = createI18n({
   messages: {
     [SSMTLocale.en]: en,
     [SSMTLocale.zhs]: zhs,
-    // Reuse Simplified Chinese resources as fallback for Traditional Chinese for now.
-    [SSMTLocale.zht]: zhs,
+    [SSMTLocale.zht]: zht,
   },
 })
 
