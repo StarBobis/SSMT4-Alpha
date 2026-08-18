@@ -83,9 +83,17 @@ type PreviewSubMeshTarget = {
 	workspacePath: string;
 	subMeshName: string;
 	diffuseUrl?: string;
+	diffuseUrls?: string[];
 	normalUrl?: string;
+	lightMapUrl?: string;
+	rampMapUrl?: string;
+	metalMapUrl?: string;
 	diffuseDdsPath?: string;
+	diffuseDdsPaths?: string[];
 	normalDdsPath?: string;
+	lightMapDdsPath?: string;
+	rampMapDdsPath?: string;
+	metalMapDdsPath?: string;
 };
 
 type SubMeshMarkedTextureSummary = {
@@ -653,14 +661,30 @@ const previewSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
 		const findMarkedDdsPath = (markName: string): string | undefined => markedTextures.find(summary => (
 			summary.markName.trim().toLowerCase() === markName.toLowerCase()
 		))?.ddsPath;
+		const findMarkedPreviews = (markName: string): string[] => markedTextures
+			.filter(summary => summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.preview)
+			.map(summary => summary.preview);
+		const findMarkedDdsPaths = (markName: string): string[] => markedTextures
+			.filter(summary => summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.ddsPath)
+			.map(summary => summary.ddsPath);
+		const diffuseUrls = findMarkedPreviews('DiffuseMap');
+		const diffuseDdsPaths = findMarkedDdsPaths('DiffuseMap');
 		return [{
 			id: item.value,
 			workspacePath: source.workspacePath,
 			subMeshName: parsed.subMeshName,
 			diffuseUrl: findMarkedPreview('DiffuseMap'),
+			diffuseUrls,
 			normalUrl: findMarkedPreview('NormalMap'),
+			lightMapUrl: findMarkedPreview('LightMap'),
+			rampMapUrl: findMarkedPreview('RampMap'),
+			metalMapUrl: findMarkedPreview('MetalMap'),
 			diffuseDdsPath: findMarkedDdsPath('DiffuseMap'),
+			diffuseDdsPaths,
 			normalDdsPath: findMarkedDdsPath('NormalMap'),
+			lightMapDdsPath: findMarkedDdsPath('LightMap'),
+			rampMapDdsPath: findMarkedDdsPath('RampMap'),
+			metalMapDdsPath: findMarkedDdsPath('MetalMap'),
 		}];
 	});
 });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { join } from '@tauri-apps/api/path';
+import { join, resourceDir } from '@tauri-apps/api/path';
 import { exists, readDir, readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -9,6 +9,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { moveDirectoryToRecycleBin } from '../../utils/RecycleBin';
 import { AppStateManager } from '../../store/AppStateManager';
+import {
+	createGIMIHighFidelityMaterial,
+	GIMIShaderController,
+	GIMITextureSet,
+	type GIMITextureKind,
+} from './GIMIHighFidelityMaterial';
 
 type PreviewTextureOption = {
 	id: string;
@@ -23,9 +29,17 @@ type PreviewSubMeshTarget = {
 	workspacePath: string;
 	subMeshName: string;
 	diffuseUrl?: string;
+	diffuseUrls?: string[];
 	normalUrl?: string;
+	lightMapUrl?: string;
+	rampMapUrl?: string;
+	metalMapUrl?: string;
 	diffuseDdsPath?: string;
+	diffuseDdsPaths?: string[];
 	normalDdsPath?: string;
+	lightMapDdsPath?: string;
+	rampMapDdsPath?: string;
+	metalMapDdsPath?: string;
 };
 
 type SubMeshElement = {
@@ -55,7 +69,7 @@ type SubMeshJson = {
 	CategoryBufferList?: SubMeshCategoryBuffer[];
 };
 
-type LightingMode = 'half-lambert' | 'unlit' | 'pbr';
+type LightingMode = 'half-lambert' | 'unlit' | 'pbr' | 'gimi-body';
 
 type ElementSource = {
 	buffer: SubMeshCategoryBuffer;
@@ -114,7 +128,10 @@ const mapWithConcurrency = async <T, R>(
 	return results;
 };
 const DDS_3D_TEXTURE_MAX_DIMENSION = 1024;
+type GIMIDefaultTexturePaths = { rampMap: string; metalMap: string };
+let gimiDefaultTexturePaths: Promise<GIMIDefaultTexturePaths> | undefined;
 const PREVIEW_LIGHTING_MODE_STORAGE_KEY = 'ssmt4:post-processing-preview:lighting-mode';
+const PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-virtual-sun-x';
 const PREVIEW_OUTLINE_STORAGE_KEY = 'ssmt4:post-processing-preview:outline';
 const PREVIEW_OUTLINE_WIDTH_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-width';
 const PREVIEW_OUTLINE_COLOR_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-color';
@@ -142,11 +159,34 @@ const PREVIEW_CAMERA_DISTANCE_MULTIPLIER = 1.65;
 const STRUCTURED_BUFFER_TYPES = new Set(['NORMAL', 'BLENDWEIGHT', 'TANGENTFRAME']);
 const REVERSED_WINDING_GAME_PRESETS = new Set(['WWMI', 'NTEMI', 'YYSLS', 'SNOWBREAK']);
 
+const getGIMIDefaultTexturePaths = (): Promise<GIMIDefaultTexturePaths> => {
+	gimiDefaultTexturePaths ??= (async () => {
+		const candidates: string[] = [];
+		try {
+			const bundledResources = await resourceDir();
+			candidates.push(await join(bundledResources, 'DefultTextures'));
+			candidates.push(await join(bundledResources, 'resources', 'DefultTextures'));
+		} catch {
+			// The development fallback below remains available when Tauri's path API
+			// is not initialised yet.
+		}
+		candidates.push('src-tauri/resources/DefultTextures', 'resources/DefultTextures');
+		for (const directory of candidates) {
+			const rampMap = await join(directory, 'RampMap.dds');
+			const metalMap = await join(directory, 'MetalMap.dds');
+			if (await exists(rampMap) && await exists(metalMap)) return { rampMap, metalMap };
+		}
+		throw new Error('Bundled GIMI default textures are missing.');
+	})();
+	return gimiDefaultTexturePaths;
+};
+
 const previewHost = ref<HTMLDivElement>();
 const dataTypes = ref<DataTypeItem[]>([]);
 const selectedDataTypeId = ref('');
 const selectedUvLayerId = ref('');
 const lightingMode = ref<LightingMode>(AppStateManager.appSettings.postProcessPreviewLightingMode);
+const gimiVirtualSunX = ref(Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY) || '50'));
 // This controls the tangent-space normal's tilt, not mesh vertex displacement.
 // Keeping 1.0 as the default applies a normal map without exaggerating it.
 const normalStrength = ref(1);
@@ -196,6 +236,7 @@ let mesh: THREE.Mesh | undefined;
 let previewRoot: THREE.Group | undefined;
 let framingMeshes: THREE.Mesh[] = [];
 let passiveMaterials: THREE.ShaderMaterial[] = [];
+const gimiShaderController = new GIMIShaderController();
 type OutlineDirectionSource = 'normal' | 'tangent' | '-tangent' | 'auto';
 type OutlineWeightSource = 'constant' | 'color-a-raw' | 'color-a-signed';
 type OutlineVisualization = 'outline' | 'normal' | 'tangent' | 'color-a' | 'weight';
@@ -346,14 +387,30 @@ let zoomTextureToken = 0;
 let zoomTextureSnapshots: Array<{
 	material: THREE.ShaderMaterial;
 	diffuse: THREE.Texture | null;
+	diffuseLayers: Array<THREE.Texture | null>;
 	normal: THREE.Texture | null;
+	lightMap: THREE.Texture | null;
+	rampMap: THREE.Texture | null;
+	metalMap: THREE.Texture | null;
 }> = [];
 let zoomFullTextures: THREE.Texture[] = [];
-let previewMaterialTextureSources: Array<{ material: THREE.ShaderMaterial; diffuseDdsPath: string; normalDdsPath: string }> = [];
+let previewMaterialTextureSources: Array<{
+	material: THREE.ShaderMaterial;
+	diffuseDdsPath: string;
+	diffuseDdsPaths: string[];
+	normalDdsPath: string;
+	lightMapDdsPath: string;
+	rampMapDdsPath: string;
+	metalMapDdsPath: string;
+}> = [];
 let disposePreviewPointerControls: (() => void) | undefined;
 let disposeZoomPointerControls: (() => void) | undefined;
 let diffuseTexture: THREE.Texture | undefined;
+let diffuseLayerTextures: THREE.Texture[] = [];
 let normalTexture: THREE.Texture | undefined;
+let lightMapTexture: THREE.Texture | undefined;
+let rampMapTexture: THREE.Texture | undefined;
+let metalMapTexture: THREE.Texture | undefined;
 const rotationCenter = new THREE.Vector3();
 const zoomPreviewHost = ref<HTMLDivElement>();
 const previewZoomDialogStyle = ref<Record<string, string>>({});
@@ -371,10 +428,17 @@ const activeUvLayer = computed(() => {
 const selectedDiffuse = computed(() => {
 	return findMarkedTexture('DiffuseMap');
 });
+const selectedDiffuses = computed(() => props.textureOptions.filter(item => (
+	item.ddsPath && item.markName?.trim().toLowerCase() === 'diffusemap'
+)));
 
 const selectedNormal = computed(() => {
 	return findMarkedTexture('NormalMap');
 });
+
+const selectedLightMap = computed(() => findMarkedTexture('LightMap'));
+const selectedRampMap = computed(() => findMarkedTexture('RampMap'));
+const selectedMetalMap = computed(() => findMarkedTexture('MetalMap'));
 
 const hasPreviewTarget = computed(() => !!props.workspacePath && !!props.subMeshName);
 
@@ -391,30 +455,33 @@ const selectedUvLayerLabel = computed(() => {
 });
 
 const currentLightingModeLabel = computed(() => {
+	if (lightingMode.value === 'gimi-body') return 'GIMI Body/Clothes v12';
 	if (lightingMode.value === 'pbr') return t('markTexture.preview.pbr');
 	if (lightingMode.value === 'unlit') return t('markTexture.preview.unlit');
 	return t('markTexture.preview.halfLambert');
 });
 
 const restoreLightingModePreference = () => {
-	const configuredMode = AppStateManager.appSettings.postProcessPreviewLightingMode;
-	if (configuredMode === 'half-lambert' || configuredMode === 'unlit' || configuredMode === 'pbr') {
-		lightingMode.value = configuredMode;
-		return;
-	}
 	try {
 		const stored = localStorage.getItem(PREVIEW_LIGHTING_MODE_STORAGE_KEY);
-		if (stored === 'half-lambert' || stored === 'unlit' || stored === 'pbr') {
+		if (stored === 'half-lambert' || stored === 'unlit' || stored === 'pbr' || stored === 'gimi-body') {
 			lightingMode.value = stored;
+			return;
 		}
 	} catch {
 		// Storage can be unavailable in constrained web contexts. The default is
 		// still a valid render mode, so persistence is intentionally optional.
 	}
+	const configuredMode = AppStateManager.appSettings.postProcessPreviewLightingMode;
+	if (configuredMode === 'half-lambert' || configuredMode === 'unlit' || configuredMode === 'pbr') {
+		lightingMode.value = configuredMode;
+	}
 };
 
 const saveLightingModePreference = (mode: LightingMode) => {
-	AppStateManager.appSettings.postProcessPreviewLightingMode = mode;
+	if (mode !== 'gimi-body') {
+		AppStateManager.appSettings.postProcessPreviewLightingMode = mode;
+	}
 	try {
 		localStorage.setItem(PREVIEW_LIGHTING_MODE_STORAGE_KEY, mode);
 	} catch {
@@ -584,7 +651,7 @@ const loadDefaultDataTypeForTarget = async (
 	return undefined;
 };
 
-const findMarkedTexture = (markName: 'DiffuseMap' | 'NormalMap'): PreviewTextureOption | undefined => {
+const findMarkedTexture = (markName: 'DiffuseMap' | 'NormalMap' | 'LightMap' | 'RampMap' | 'MetalMap'): PreviewTextureOption | undefined => {
 	return props.textureOptions.find(item => item.ddsPath && item.markName?.trim().toLowerCase() === markName.toLowerCase());
 };
 
@@ -816,7 +883,7 @@ const getBufferData = async (
 	return data;
 };
 
-const createMaterial = (color = fallbackColor.value, needsReview = false) => {
+const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) => {
 	return new THREE.ShaderMaterial({
 		uniforms: {
 			uDiffuseMap: { value: null },
@@ -1022,6 +1089,24 @@ const openZoomPreview = () => {
 	});
 };
 
+const isGIMIBodyPipeline = () => lightingMode.value === 'gimi-body';
+
+const isGIMIMaterial = (previewMaterial: THREE.ShaderMaterial): boolean => !!previewMaterial.uniforms.uLightMap;
+
+const createPreviewMaterial = (color = fallbackColor.value, needsReview = false): THREE.ShaderMaterial => {
+	const previewMaterial = isGIMIBodyPipeline()
+		? createGIMIHighFidelityMaterial(color, needsReview)
+		: createLegacyMaterial(color, needsReview);
+	if (isGIMIBodyPipeline()) gimiShaderController.attach(previewMaterial);
+	return previewMaterial;
+};
+
+const disposePreviewMaterial = (previewMaterial: THREE.ShaderMaterial | undefined): void => {
+	if (!previewMaterial) return;
+	gimiShaderController.detach(previewMaterial);
+	previewMaterial.dispose();
+};
+
 const closeZoomPreview = () => {
 	restoreEmbeddedPreviewTextures();
 	previewZoomOpen.value = false;
@@ -1188,11 +1273,19 @@ const clearPreviewMesh = () => {
 		});
 	}
 	for (const passiveMaterial of passiveMaterials) {
-		const diffuse = passiveMaterial.uniforms.uDiffuseMap.value as THREE.Texture | null;
+		const diffuseLayers = isGIMIMaterial(passiveMaterial)
+			? [0, 1, 2, 3].map(index => passiveMaterial.uniforms[`uDiffuseMap${index}`].value as THREE.Texture | null)
+			: [passiveMaterial.uniforms.uDiffuseMap.value as THREE.Texture | null];
 		const normal = passiveMaterial.uniforms.uNormalMap.value as THREE.Texture | null;
-		diffuse?.dispose();
+		const lightMap = isGIMIMaterial(passiveMaterial) ? GIMITextureSet.texture(passiveMaterial, 'lightMap') : null;
+		const rampMap = isGIMIMaterial(passiveMaterial) ? GIMITextureSet.texture(passiveMaterial, 'rampMap') : null;
+		const metalMap = isGIMIMaterial(passiveMaterial) ? GIMITextureSet.texture(passiveMaterial, 'metalMap') : null;
+		for (const diffuse of diffuseLayers) diffuse?.dispose();
 		normal?.dispose();
-		passiveMaterial.dispose();
+		lightMap?.dispose();
+		rampMap?.dispose();
+		metalMap?.dispose();
+		disposePreviewMaterial(passiveMaterial);
 	}
 	passiveMaterials = [];
 	previewRoot = undefined;
@@ -1308,6 +1401,11 @@ const initializePreviewPointerControls = () => {
 };
 
 const updateMaterialMode = () => {
+	if (isGIMIBodyPipeline()) {
+		gimiShaderController.setVirtualSun(gimiVirtualSunX.value);
+		renderPreview();
+		return;
+	}
 	const previewMaterials = [material, ...passiveMaterials].filter((item): item is THREE.ShaderMaterial => !!item);
 	if (previewMaterials.length === 0) {
 		return;
@@ -1326,7 +1424,7 @@ const updateMaterialMode = () => {
 
 const updateMaterialSettings = () => {
 	for (const previewMaterial of [material, ...passiveMaterials]) {
-		if (previewMaterial) {
+		if (previewMaterial && !isGIMIBodyPipeline()) {
 			previewMaterial.uniforms.uNormalStrength.value = normalStrength.value;
 			previewMaterial.uniforms.uEmissionEnabled.value = diffuseAlphaEmissionEnabled.value ? 1 : 0;
 			previewMaterial.uniforms.uEmissionColor.value.set(emissionColor.value);
@@ -1339,8 +1437,32 @@ const updateMaterialSettings = () => {
 	renderPreview();
 };
 
-const replaceTexture = (kind: 'diffuse' | 'normal', texture: THREE.Texture | undefined) => {
+const replaceTexture = (kind: GIMITextureKind, texture: THREE.Texture | undefined) => {
 	if (!material) {
+		texture?.dispose();
+		return;
+	}
+	if (isGIMIBodyPipeline()) {
+		const previous = kind === 'diffuse'
+			? diffuseTexture
+			: kind === 'normal'
+				? normalTexture
+				: kind === 'lightMap'
+					? lightMapTexture
+					: kind === 'rampMap'
+						? rampMapTexture
+						: metalMapTexture;
+		previous?.dispose();
+		if (kind === 'diffuse') diffuseTexture = texture;
+		if (kind === 'normal') normalTexture = texture;
+		if (kind === 'lightMap') lightMapTexture = texture;
+		if (kind === 'rampMap') rampMapTexture = texture;
+		if (kind === 'metalMap') metalMapTexture = texture;
+		GIMITextureSet.apply(material, kind, texture);
+		renderPreview();
+		return;
+	}
+	if (kind === 'lightMap' || kind === 'rampMap' || kind === 'metalMap') {
 		texture?.dispose();
 		return;
 	}
@@ -1360,9 +1482,17 @@ const replaceTexture = (kind: 'diffuse' | 'normal', texture: THREE.Texture | und
 
 const applyTextureToMaterial = (
 	targetMaterial: THREE.ShaderMaterial,
-	kind: 'diffuse' | 'normal',
+	kind: GIMITextureKind,
 	texture: THREE.Texture | undefined
 ) => {
+	if (isGIMIBodyPipeline()) {
+		GIMITextureSet.apply(targetMaterial, kind, texture);
+		return;
+	}
+	if (kind === 'lightMap' || kind === 'rampMap' || kind === 'metalMap') {
+		texture?.dispose();
+		return;
+	}
 	if (kind === 'diffuse') {
 		targetMaterial.uniforms.uDiffuseMap.value = texture ?? null;
 		targetMaterial.uniforms.uHasDiffuseMap.value = texture ? 1 : 0;
@@ -1390,6 +1520,17 @@ const loadTexture = (url: string, colorTexture: boolean): Promise<THREE.Texture 
 			() => resolve(undefined)
 		);
 	});
+};
+
+const replaceDiffuseLayers = (textures: THREE.Texture[]): void => {
+	if (!material) {
+		for (const texture of textures) texture.dispose();
+		return;
+	}
+	for (const texture of diffuseLayerTextures) texture.dispose();
+	diffuseLayerTextures = textures;
+	GIMITextureSet.applyDiffuseLayers(material, textures);
+	renderPreview();
 };
 
 const decodeRgbaDds = (bytes: Uint8Array): { width: number; height: number; pixels: Uint8Array } => {
@@ -1504,10 +1645,19 @@ const loadDdsTexture = async (
 const restoreEmbeddedPreviewTextures = () => {
 	zoomTextureToken += 1;
 	for (const snapshot of zoomTextureSnapshots) {
-		snapshot.material.uniforms.uDiffuseMap.value = snapshot.diffuse;
-		snapshot.material.uniforms.uHasDiffuseMap.value = snapshot.diffuse ? 1 : 0;
+		if (isGIMIMaterial(snapshot.material)) {
+			GIMITextureSet.applyDiffuseLayers(snapshot.material, snapshot.diffuseLayers.filter((texture): texture is THREE.Texture => !!texture));
+		} else {
+			snapshot.material.uniforms.uDiffuseMap.value = snapshot.diffuse;
+			snapshot.material.uniforms.uHasDiffuseMap.value = snapshot.diffuse ? 1 : 0;
+		}
 		snapshot.material.uniforms.uNormalMap.value = snapshot.normal;
 		snapshot.material.uniforms.uHasNormalMap.value = snapshot.normal ? 1 : 0;
+		if (isGIMIMaterial(snapshot.material)) {
+			GIMITextureSet.apply(snapshot.material, 'lightMap', snapshot.lightMap ?? undefined);
+			GIMITextureSet.apply(snapshot.material, 'rampMap', snapshot.rampMap ?? undefined);
+			GIMITextureSet.apply(snapshot.material, 'metalMap', snapshot.metalMap ?? undefined);
+		}
 	}
 	zoomTextureSnapshots = [];
 	for (const texture of zoomFullTextures) texture.dispose();
@@ -1521,31 +1671,61 @@ const applyFullSizeZoomTextures = async () => {
 	const activeToken = ++zoomTextureToken;
 	zoomTextureSnapshots = previewMaterialTextureSources.map(source => ({
 		material: source.material,
-		diffuse: source.material.uniforms.uDiffuseMap.value as THREE.Texture | null,
+		diffuse: source.material.uniforms.uDiffuseMap?.value as THREE.Texture | null,
+		diffuseLayers: isGIMIMaterial(source.material)
+			? [0, 1, 2, 3].map(index => source.material.uniforms[`uDiffuseMap${index}`].value as THREE.Texture | null)
+			: [],
 		normal: source.material.uniforms.uNormalMap.value as THREE.Texture | null,
+		lightMap: isGIMIMaterial(source.material) ? GIMITextureSet.texture(source.material, 'lightMap') : null,
+		rampMap: isGIMIMaterial(source.material) ? GIMITextureSet.texture(source.material, 'rampMap') : null,
+		metalMap: isGIMIMaterial(source.material) ? GIMITextureSet.texture(source.material, 'metalMap') : null,
 	}));
 	const loaded = await mapWithConcurrency(previewMaterialTextureSources, async source => ({
 		source,
-		diffuse: await loadDdsTexture(source.diffuseDdsPath, true, undefined),
+		diffuseLayers: await Promise.all((source.diffuseDdsPaths.length > 0 ? source.diffuseDdsPaths : [source.diffuseDdsPath])
+			.map(path => loadDdsTexture(path, true, undefined))),
 		normal: await loadDdsTexture(source.normalDdsPath, false, undefined),
+		lightMap: await loadDdsTexture(source.lightMapDdsPath, false, undefined),
+		rampMap: await loadDdsTexture(source.rampMapDdsPath, true, undefined),
+		metalMap: await loadDdsTexture(source.metalMapDdsPath, false, undefined),
 	}));
 	if (!previewZoomOpen.value || activeToken !== zoomTextureToken) {
 		for (const item of loaded) {
-			item.diffuse?.dispose();
+			for (const texture of item.diffuseLayers) texture?.dispose();
 			item.normal?.dispose();
+			item.lightMap?.dispose();
+			item.rampMap?.dispose();
+			item.metalMap?.dispose();
 		}
 		return;
 	}
 	for (const item of loaded) {
-		if (item.diffuse) {
-			item.source.material.uniforms.uDiffuseMap.value = item.diffuse;
-			item.source.material.uniforms.uHasDiffuseMap.value = 1;
-			zoomFullTextures.push(item.diffuse);
+		const diffuseLayers = item.diffuseLayers.filter((texture): texture is THREE.Texture => !!texture);
+		if (diffuseLayers.length > 0) {
+			if (isGIMIMaterial(item.source.material)) {
+				GIMITextureSet.applyDiffuseLayers(item.source.material, diffuseLayers);
+			} else {
+				item.source.material.uniforms.uDiffuseMap.value = diffuseLayers[0];
+				item.source.material.uniforms.uHasDiffuseMap.value = 1;
+			}
+			zoomFullTextures.push(...diffuseLayers);
 		}
 		if (item.normal) {
 			item.source.material.uniforms.uNormalMap.value = item.normal;
 			item.source.material.uniforms.uHasNormalMap.value = 1;
 			zoomFullTextures.push(item.normal);
+		}
+		if (item.lightMap && isGIMIMaterial(item.source.material)) {
+			GIMITextureSet.apply(item.source.material, 'lightMap', item.lightMap);
+			zoomFullTextures.push(item.lightMap);
+		}
+		if (item.rampMap && isGIMIMaterial(item.source.material)) {
+			GIMITextureSet.apply(item.source.material, 'rampMap', item.rampMap);
+			zoomFullTextures.push(item.rampMap);
+		}
+		if (item.metalMap && isGIMIMaterial(item.source.material)) {
+			GIMITextureSet.apply(item.source.material, 'metalMap', item.metalMap);
+			zoomFullTextures.push(item.metalMap);
 		}
 	}
 	renderPreview();
@@ -1557,17 +1737,45 @@ const loadPreviewTexture = (ddsPath: string, url: string, colorTexture: boolean)
 
 const updateMaterialTextures = async () => {
 	const token = ++textureLoadToken;
-	const [nextDiffuse, nextNormal] = await Promise.all([
-		loadPreviewTexture(selectedDiffuse.value?.ddsPath || '', selectedDiffuse.value?.url || '', true),
+	const defaultTextures = isGIMIBodyPipeline() ? await getGIMIDefaultTexturePaths() : undefined;
+	const diffuseSources = isGIMIBodyPipeline()
+		? selectedDiffuses.value.map(item => ({ ddsPath: item.ddsPath, url: item.url }))
+		: [{ ddsPath: selectedDiffuse.value?.ddsPath || '', url: selectedDiffuse.value?.url || '' }];
+	const [nextDiffuseLayers, nextNormal, nextLightMap, nextRampMap, nextMetalMap] = await Promise.all([
+		Promise.all(diffuseSources.map(source => loadPreviewTexture(source.ddsPath, source.url, true))),
 		loadPreviewTexture(selectedNormal.value?.ddsPath || '', selectedNormal.value?.url || '', false),
+		loadPreviewTexture(selectedLightMap.value?.ddsPath || '', selectedLightMap.value?.url || '', false),
+		loadPreviewTexture(
+			selectedRampMap.value?.ddsPath || defaultTextures?.rampMap || '',
+			selectedRampMap.value?.url || '',
+			true
+		),
+		loadPreviewTexture(
+			selectedMetalMap.value?.ddsPath || defaultTextures?.metalMap || '',
+			selectedMetalMap.value?.url || '',
+			false
+		),
 	]);
+	const loadedDiffuseLayers = nextDiffuseLayers.filter((texture): texture is THREE.Texture => !!texture);
 	if (token !== textureLoadToken) {
-		nextDiffuse?.dispose();
+		for (const texture of loadedDiffuseLayers) texture.dispose();
 		nextNormal?.dispose();
+		nextLightMap?.dispose();
+		nextRampMap?.dispose();
+		nextMetalMap?.dispose();
 		return;
 	}
-	replaceTexture('diffuse', nextDiffuse);
+	if (isGIMIBodyPipeline()) {
+		diffuseTexture?.dispose();
+		diffuseTexture = undefined;
+		replaceDiffuseLayers(loadedDiffuseLayers);
+	} else {
+		replaceTexture('diffuse', loadedDiffuseLayers[0]);
+	}
 	replaceTexture('normal', nextNormal);
+	replaceTexture('lightMap', nextLightMap);
+	replaceTexture('rampMap', nextRampMap);
+	replaceTexture('metalMap', nextMetalMap);
 };
 
 type PreviewGeometryBuildResult = {
@@ -1884,14 +2092,29 @@ const getPreviewRootCentroid = (previewMeshes: THREE.Mesh[]): THREE.Vector3 => {
 	return totalWeight > 0 ? centroid.multiplyScalar(1 / totalWeight) : centroid;
 };
 
+const ensureActivePreviewMaterial = (): void => {
+	const requiresGIMI = isGIMIBodyPipeline();
+	if (material && isGIMIMaterial(material) === requiresGIMI) return;
+	const previousMaterial = material;
+	const nextMaterial = createPreviewMaterial();
+	// Do not clear the current scene before asynchronous geometry/texture work
+	// completes. A render-mode switch must keep the last valid preview visible.
+	if (mesh && mesh.material === previousMaterial) mesh.material = nextMaterial;
+	material = nextMaterial;
+	disposePreviewMaterial(previousMaterial);
+	void updateMaterialTextures();
+};
+
 const buildPreviewGeometry = async (buildToken: number) => {
 	const dataType = activeDataType.value;
 	const uvLayer = activeUvLayer.value;
-	if (!scene || !material) {
+	if (!scene) {
 		clearPreviewMesh();
 		previewStatus.value = '';
 		return;
 	}
+	ensureActivePreviewMaterial();
+	if (!material) return;
 	const activeTargetIsVisible = visibleSubMeshTargets.value.some(target => (
 		target.workspacePath === props.workspacePath && target.subMeshName === props.subMeshName
 	));
@@ -1936,18 +2159,28 @@ const buildPreviewGeometry = async (buildToken: number) => {
 	}, () => buildToken === previewBuildToken);
 	const passiveRenderables = await mapWithConcurrency(passiveSources, async source => {
 		if (!source) return undefined;
-		const [diffuse, normal] = await Promise.all([
-			loadPreviewTexture(source.target.diffuseDdsPath || '', source.target.diffuseUrl || '', true),
+		const defaultTextures = isGIMIBodyPipeline() ? await getGIMIDefaultTexturePaths() : undefined;
+		const diffuseSources = isGIMIBodyPipeline()
+			? (source.target.diffuseDdsPaths?.map((ddsPath, index) => ({ ddsPath, url: source.target.diffuseUrls?.[index] || '' })) ?? [])
+			: [{ ddsPath: source.target.diffuseDdsPath || '', url: source.target.diffuseUrl || '' }];
+		const [diffuseLayers, normal, lightMap, rampMap, metalMap] = await Promise.all([
+			Promise.all(diffuseSources.map(texture => loadPreviewTexture(texture.ddsPath, texture.url, true))),
 			loadPreviewTexture(source.target.normalDdsPath || '', source.target.normalUrl || '', false),
+			loadPreviewTexture(source.target.lightMapDdsPath || '', source.target.lightMapUrl || '', false),
+			loadPreviewTexture(source.target.rampMapDdsPath || defaultTextures?.rampMap || '', source.target.rampMapUrl || '', true),
+			loadPreviewTexture(source.target.metalMapDdsPath || defaultTextures?.metalMap || '', source.target.metalMapUrl || '', false),
 		]);
-		return { source, diffuse, normal };
+		return { source, diffuseLayers: diffuseLayers.filter((texture): texture is THREE.Texture => !!texture), normal, lightMap, rampMap, metalMap };
 	}, () => buildToken === previewBuildToken);
 	if (buildToken !== previewBuildToken) {
 		activeGeometry?.geometry.dispose();
 		for (const renderable of passiveRenderables) {
 			renderable?.source.geometry.geometry.dispose();
-			renderable?.diffuse?.dispose();
+			for (const texture of renderable?.diffuseLayers ?? []) texture.dispose();
 			renderable?.normal?.dispose();
+			renderable?.lightMap?.dispose();
+			renderable?.rampMap?.dispose();
+			renderable?.metalMap?.dispose();
 		}
 		return;
 	}
@@ -1971,23 +2204,39 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		previewMaterialTextureSources.push({
 			material,
 			diffuseDdsPath: activeTextureTarget?.diffuseDdsPath || selectedDiffuse.value?.ddsPath || '',
+			diffuseDdsPaths: activeTextureTarget?.diffuseDdsPaths || selectedDiffuses.value.map(item => item.ddsPath),
 			normalDdsPath: activeTextureTarget?.normalDdsPath || selectedNormal.value?.ddsPath || '',
+			lightMapDdsPath: activeTextureTarget?.lightMapDdsPath || selectedLightMap.value?.ddsPath || '',
+			rampMapDdsPath: activeTextureTarget?.rampMapDdsPath || selectedRampMap.value?.ddsPath || (isGIMIBodyPipeline() ? (await getGIMIDefaultTexturePaths()).rampMap : ''),
+			metalMapDdsPath: activeTextureTarget?.metalMapDdsPath || selectedMetalMap.value?.ddsPath || (isGIMIBodyPipeline() ? (await getGIMIDefaultTexturePaths()).metalMap : ''),
 		});
 	}
 	for (const renderable of passiveRenderables) {
 		if (!renderable) continue;
-		const { source, diffuse, normal } = renderable;
-		const passiveMaterial = createMaterial(
+		const { source, diffuseLayers, normal, lightMap, rampMap, metalMap } = renderable;
+		const passiveMaterial = createPreviewMaterial(
 			getFallbackColorForKey(source.target.subMeshName),
 			source.geometry.needsReview === true
 		);
-		applyTextureToMaterial(passiveMaterial, 'diffuse', diffuse);
+		if (isGIMIMaterial(passiveMaterial)) {
+			GIMITextureSet.applyDiffuseLayers(passiveMaterial, diffuseLayers);
+		} else {
+			applyTextureToMaterial(passiveMaterial, 'diffuse', diffuseLayers[0]);
+			for (const texture of diffuseLayers.slice(1)) texture.dispose();
+		}
 		applyTextureToMaterial(passiveMaterial, 'normal', normal);
+		applyTextureToMaterial(passiveMaterial, 'lightMap', lightMap);
+		applyTextureToMaterial(passiveMaterial, 'rampMap', rampMap);
+		applyTextureToMaterial(passiveMaterial, 'metalMap', metalMap);
 		passiveMaterials.push(passiveMaterial);
 		previewMaterialTextureSources.push({
 			material: passiveMaterial,
 			diffuseDdsPath: source.target.diffuseDdsPath || '',
+			diffuseDdsPaths: source.target.diffuseDdsPaths || [],
 			normalDdsPath: source.target.normalDdsPath || '',
+			lightMapDdsPath: source.target.lightMapDdsPath || '',
+			rampMapDdsPath: source.target.rampMapDdsPath || (isGIMIBodyPipeline() ? (await getGIMIDefaultTexturePaths()).rampMap : ''),
+			metalMapDdsPath: source.target.metalMapDdsPath || (isGIMIBodyPipeline() ? (await getGIMIDefaultTexturePaths()).metalMap : ''),
 		});
 		const passiveMesh = new THREE.Mesh(source.geometry.geometry, passiveMaterial);
 		previewRoot.add(passiveMesh);
@@ -2035,8 +2284,10 @@ const rebuildPreview = async () => {
 		await buildPreviewGeometry(token);
 	} catch (error) {
 		if (token === previewBuildToken) {
-			clearPreviewMesh();
+			// A failed replacement (for example, a texture conversion race) must
+			// not blank the last successful preview.
 			previewError.value = error instanceof Error ? error.message : String(error);
+			renderPreview();
 		}
 	} finally {
 		if (token === previewBuildToken) {
@@ -2125,6 +2376,13 @@ const initializeRenderer = () => {
 		return;
 	}
 	renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
+	renderer.debug.checkShaderErrors = true;
+	renderer.debug.onShaderError = (_gl, _program, vertexShader, fragmentShader) => {
+		console.error('[SSMT Preview] shader compilation failed', {
+			vertex: vertexShader,
+			fragment: fragmentShader,
+		});
+	};
 	renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 	renderer.setClearColor(0x000000, 0);
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -2132,7 +2390,7 @@ const initializeRenderer = () => {
 
 	scene = new THREE.Scene();
 	camera = new THREE.PerspectiveCamera(36, 1, 0.01, 10_000);
-	material = createMaterial();
+	material = createPreviewMaterial();
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = false;
 	// Mouse drag is handled below as model rotation.  OrbitControls remains for
@@ -2157,11 +2415,20 @@ const disposeRenderer = () => {
 	controls = undefined;
 	clearPreviewMesh();
 	diffuseTexture?.dispose();
+	for (const texture of diffuseLayerTextures) texture.dispose();
 	normalTexture?.dispose();
+	lightMapTexture?.dispose();
+	rampMapTexture?.dispose();
+	metalMapTexture?.dispose();
 	diffuseTexture = undefined;
+	diffuseLayerTextures = [];
 	normalTexture = undefined;
-	material?.dispose();
+	lightMapTexture = undefined;
+	rampMapTexture = undefined;
+	metalMapTexture = undefined;
+	disposePreviewMaterial(material);
 	material = undefined;
+	gimiShaderController.dispose();
 	renderer?.dispose();
 	renderer?.domElement.remove();
 	renderer = undefined;
@@ -2179,7 +2446,7 @@ watch(
 
 watch(
 	() => visibleSubMeshTargets.value
-		.map(target => `${target.id}:${target.workspacePath}:${target.subMeshName}:${target.diffuseDdsPath || ''}:${target.normalDdsPath || ''}`)
+		.map(target => `${target.id}:${target.workspacePath}:${target.subMeshName}:${target.diffuseDdsPaths?.join(',') || target.diffuseDdsPath || ''}:${target.normalDdsPath || ''}:${target.lightMapDdsPath || ''}:${target.rampMapDdsPath || ''}:${target.metalMapDdsPath || ''}`)
 		.join('|'),
 	() => {
 		schedulePreviewRebuild();
@@ -2210,6 +2477,13 @@ watch(selectedUvLayerId, () => {
 watch(lightingMode, mode => {
 	updateMaterialMode();
 	saveLightingModePreference(mode);
+	schedulePreviewRebuild();
+});
+
+watch(gimiVirtualSunX, value => {
+	localStorage.setItem(PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY, String(value));
+	gimiShaderController.setVirtualSun(value);
+	renderPreview();
 });
 
 watch([normalStrength, fallbackColor, diffuseAlphaEmissionEnabled, emissionColor, emissionFactor], () => {
@@ -2377,35 +2651,44 @@ onActivated(async () => {
 				<label>
 					<span>{{ t('markTexture.preview.renderMode') }}</span>
 					<el-select v-model="lightingMode" size="small">
+						<el-option label="GIMI Body/Clothes v12" value="gimi-body" />
 						<el-option :label="t('markTexture.preview.halfLambert')" value="half-lambert" />
 						<el-option :label="t('markTexture.preview.pbr')" value="pbr" />
 						<el-option :label="t('markTexture.preview.unlit')" value="unlit" />
 					</el-select>
 				</label>
-				<label class="displacement-control">
-					<span>{{ t('markTexture.preview.normalDisplacement') }}</span>
-					<el-slider v-model="normalStrength" :min="0" :max="1" :step="0.002" :disabled="!selectedNormal" />
-				</label>
-				<label class="outline-control">
-					<span>{{ t('markTexture.preview.diffuseAlphaEmission') }}</span>
-					<el-switch v-model="diffuseAlphaEmissionEnabled" />
-				</label>
-				<label class="outline-control">
-					<span>{{ t('markTexture.preview.emissionColor') }}</span>
-					<el-color-picker v-model="emissionColor" size="small" :disabled="!diffuseAlphaEmissionEnabled" />
-				</label>
-				<label class="displacement-control">
-					<span>{{ t('markTexture.preview.emissionFactor') }}</span>
-					<el-slider
-						v-model="emissionFactor"
-						:min="0"
-						:max="8"
-						:step="0.01"
-						:disabled="!diffuseAlphaEmissionEnabled"
-						show-input
-						:show-input-controls="false"
-					/>
-				</label>
+				<template v-if="lightingMode === 'gimi-body'">
+					<label class="displacement-control">
+						<span>Virtual Sun X</span>
+						<el-slider v-model="gimiVirtualSunX" :min="-180" :max="180" :step="0.1" show-input :show-input-controls="false" />
+					</label>
+				</template>
+				<template v-else>
+					<label class="displacement-control">
+						<span>{{ t('markTexture.preview.normalDisplacement') }}</span>
+						<el-slider v-model="normalStrength" :min="0" :max="1" :step="0.002" :disabled="!selectedNormal" />
+					</label>
+					<label class="outline-control">
+						<span>{{ t('markTexture.preview.diffuseAlphaEmission') }}</span>
+						<el-switch v-model="diffuseAlphaEmissionEnabled" />
+					</label>
+					<label class="outline-control">
+						<span>{{ t('markTexture.preview.emissionColor') }}</span>
+						<el-color-picker v-model="emissionColor" size="small" :disabled="!diffuseAlphaEmissionEnabled" />
+					</label>
+					<label class="displacement-control">
+						<span>{{ t('markTexture.preview.emissionFactor') }}</span>
+						<el-slider
+							v-model="emissionFactor"
+							:min="0"
+							:max="8"
+							:step="0.01"
+							:disabled="!diffuseAlphaEmissionEnabled"
+							show-input
+							:show-input-controls="false"
+						/>
+					</label>
+				</template>
 				<label class="outline-control">
 					<span>{{ t('markTexture.preview.outline') }}</span>
 					<el-switch v-model="outlineEnabled" />
@@ -2459,6 +2742,8 @@ onActivated(async () => {
 				<div class="preview-settings-map-status">
 					<span>{{ selectedDiffuse ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
 					<span>{{ selectedNormal ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
+					<span v-if="lightingMode === 'gimi-body'">{{ selectedLightMap ? 'LightMap' : 'LightMap fallback' }}</span>
+					<span v-if="lightingMode === 'gimi-body'">{{ selectedRampMap ? 'RampMap' : 'RampMap fallback' }}</span>
 				</div>
 			</section>
 		</el-drawer>
