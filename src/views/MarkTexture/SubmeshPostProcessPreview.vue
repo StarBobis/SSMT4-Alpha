@@ -2896,6 +2896,7 @@ onDeactivated(() => {
 	previewBuildToken += 1;
 	textureLoadToken += 1;
 	stopGIMIEmissionAnimation();
+	previewSettingsOpen.value = false;
 	closeZoomPreview();
 	disposeRenderer();
 });
@@ -3021,18 +3022,31 @@ onActivated(async () => {
 		</div>
 		<p v-if="previewStatus" class="preview-status">{{ previewStatus }}</p>
 
-		<el-drawer
-			v-model="previewSettingsOpen"
-			:with-header="false"
-			direction="rtl"
-			size="min(320px, 88vw)"
-			append-to-body
-			class="preview-settings-drawer"
-		>
-			<section class="preview-settings-page">
+		<Teleport to="body">
+			<Transition name="preview-settings-fade">
+				<div v-if="previewSettingsOpen" class="preview-settings-overlay" @click.self="previewSettingsOpen = false">
+					<section
+						class="preview-settings-floating-page"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="preview-settings-title"
+						tabindex="-1"
+						@keydown.esc="previewSettingsOpen = false"
+					>
 				<div class="preview-settings-heading">
-					<h3>{{ t('markTexture.preview.settings') }}</h3>
-					<p>{{ t('markTexture.preview.autoTextureMaps') }}</p>
+					<div>
+						<h3 id="preview-settings-title">{{ t('markTexture.preview.settings') }}</h3>
+						<p>{{ t('markTexture.preview.autoTextureMaps') }}</p>
+					</div>
+					<button
+						class="preview-settings-close"
+						type="button"
+						title="Close"
+						aria-label="Close"
+						@click="previewSettingsOpen = false"
+					>
+						×
+					</button>
 				</div>
 				<label>
 					<span>{{ t('markTexture.preview.renderMode') }}</span>
@@ -3150,8 +3164,10 @@ onActivated(async () => {
 					<span v-if="lightingMode === 'gimi-body'">{{ selectedLightMap ? 'LightMap' : 'LightMap fallback' }}</span>
 					<span v-if="lightingMode === 'gimi-body'">{{ selectedRampMap ? 'RampMap' : 'RampMap fallback' }}</span>
 				</div>
-			</section>
-		</el-drawer>
+					</section>
+				</div>
+			</Transition>
+		</Teleport>
 
 		<Teleport to="body">
 			<div
@@ -3300,32 +3316,80 @@ onActivated(async () => {
 	width: auto;
 }
 
-.preview-settings-page {
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
-	min-height: 100%;
-	padding: 18px;
+
+.preview-settings-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 2200;
+	display: grid;
+	place-items: center;
+	padding: 36px;
+	background: rgba(4, 7, 12, 0.56);
+	backdrop-filter: blur(5px);
+	-webkit-backdrop-filter: blur(5px);
+}
+
+.preview-settings-floating-page {
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 15px 18px;
+	width: min(680px, 100%);
+	max-height: calc(100dvh - 72px);
+	overflow: auto;
+	padding: 22px;
 	color: rgba(236, 241, 250, 0.82);
-	background:
-		linear-gradient(150deg, rgba(var(--theme-surface-tint-rgb), 0.095), rgba(9, 12, 20, 0.94)),
-		var(--t-material-bg);
+	border: var(--t-material-border);
+	border-radius: 8px;
+	background: var(--t-material-bg);
+	box-shadow: var(--t-material-shadow);
+	outline: none;
+}
+
+.preview-settings-heading {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
 }
 
 .preview-settings-heading h3 {
 	margin: 0;
 	color: rgba(249, 251, 255, 0.96);
-	font-size: 15px;
+	font-size: 16px;
 }
 
 .preview-settings-heading p {
 	margin: 6px 0 0;
 	color: rgba(232, 236, 245, 0.58);
-	font-size: 11px;
+	font-size: 12px;
 	line-height: 1.45;
 }
 
-.preview-settings-page > label {
+.preview-settings-close {
+	flex: 0 0 30px;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	color: rgba(244, 247, 255, 0.78);
+	font-size: 22px;
+	line-height: 1;
+	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+	border-radius: 6px;
+	background: rgba(var(--theme-surface-tint-rgb), 0.05);
+	cursor: pointer;
+}
+
+.preview-settings-close:hover,
+.preview-settings-close:focus-visible {
+	color: #fff;
+	border-color: rgba(var(--theme-surface-tint-rgb), 0.34);
+	background: rgba(var(--theme-surface-tint-rgb), 0.13);
+	outline: none;
+}
+
+.preview-settings-floating-page > label {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -3333,14 +3397,14 @@ onActivated(async () => {
 	font-size: 11px;
 }
 
-.preview-settings-page > .outline-control {
+.preview-settings-floating-page > .outline-control {
 	flex-direction: row;
 	align-items: center;
 	justify-content: space-between;
 	min-height: 32px;
 }
 
-.preview-settings-page :deep(.el-select__wrapper) {
+.preview-settings-floating-page :deep(.el-select__wrapper) {
 	min-height: 32px;
 	border-radius: 8px;
 	font-size: 11px;
@@ -3348,31 +3412,44 @@ onActivated(async () => {
 	box-shadow: 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.17) inset !important;
 }
 
-.preview-settings-page .displacement-control :deep(.el-slider) {
+.preview-settings-floating-page .displacement-control :deep(.el-slider) {
 	margin: 4px 8px 0;
 	width: auto;
 }
 
 .preview-settings-map-status {
+	grid-column: 1 / -1;
 	display: flex;
-	flex-direction: column;
+	flex-flow: row wrap;
 	gap: 5px;
 	padding: 10px;
 	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
-	border-radius: 9px;
+	border-radius: 6px;
 	color: rgba(236, 241, 250, 0.67);
 	font-size: 11px;
 	line-height: 1.35;
 	background: rgba(var(--theme-surface-tint-rgb), 0.045);
 }
 
-:deep(.preview-settings-drawer .el-drawer) {
-	border-left: 1px solid rgba(var(--theme-surface-tint-rgb), 0.2);
-	background: transparent;
+.preview-settings-fade-enter-active,
+.preview-settings-fade-leave-active {
+	transition: opacity 0.16s ease;
 }
 
-:deep(.preview-settings-drawer .el-drawer__body) {
-	padding: 0;
+.preview-settings-fade-enter-active .preview-settings-floating-page,
+.preview-settings-fade-leave-active .preview-settings-floating-page {
+	transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.preview-settings-fade-enter-from,
+.preview-settings-fade-leave-to {
+	opacity: 0;
+}
+
+.preview-settings-fade-enter-from .preview-settings-floating-page,
+.preview-settings-fade-leave-to .preview-settings-floating-page {
+	opacity: 0;
+	transform: translateY(12px);
 }
 
 .preview-actions {
@@ -3572,6 +3649,20 @@ onActivated(async () => {
 	background: rgba(3, 6, 12, 0.72);
 	backdrop-filter: blur(2px);
 	-webkit-backdrop-filter: blur(2px);
+}
+
+@media (max-width: 640px) {
+	.preview-settings-overlay {
+		align-items: end;
+		padding: 12px;
+	}
+
+	.preview-settings-floating-page {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 14px;
+		max-height: calc(100dvh - 24px);
+		padding: 18px;
+	}
 }
 
 @keyframes preview-loading {
