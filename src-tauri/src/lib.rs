@@ -181,6 +181,8 @@ pub fn run() {
             commands::compress::extract_zip_archive,
             commands::compress::create_rar_archive,
             commands::compress::create_mod_archive,
+            commands::workspace_merge::workspace_merge_preview,
+            commands::workspace_merge::workspace_merge,
             workspace_access::commands::workspace_access_preflight,
             workspace_access::commands::workspace_access_create_archive,
             workspace_access::commands::workspace_access_validate_archive,

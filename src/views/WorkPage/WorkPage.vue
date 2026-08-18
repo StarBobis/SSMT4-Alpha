@@ -164,6 +164,19 @@ type WorkspaceTabSaveSnapshot = {
   tabConfig: WorkPageTabConfig;
 };
 
+type WorkspaceMergeMode = 'chain' | 'zip';
+type WorkspaceMergePreview = { conflictingHashes: string[] };
+type WorkspaceMergeLod = {
+  name: string;
+  firstLodName: string | null;
+  secondLodName: string | null;
+};
+type WorkspaceMergeResult = {
+  workspaceName: string;
+  lods: WorkspaceMergeLod[];
+  copiedFileCount: number;
+};
+
 // Removed unused appWindow
 const workspaceName = ref('');
 const workspaceDraftName = ref('');
@@ -176,6 +189,16 @@ const activeWorkspaceTabId = ref('');
 const editingWorkspaceTabId = ref<string | null>(null);
 const workspaceTabNameEditBackup = ref<Record<string, string>>({});
 let workspaceTabSeed = 1;
+const workspaceMergeDialog = ref(false);
+const workspaceMergeOptions = ref<string[]>([]);
+const workspaceMergeFirst = ref('');
+const workspaceMergeSecond = ref('');
+const workspaceMergeOutput = ref('');
+const workspaceMergeMode = ref<WorkspaceMergeMode>('chain');
+const workspaceMergeConflictingHashes = ref<string[]>([]);
+const workspaceMergeHashPreferences = ref<Record<string, 'first' | 'second'>>({});
+const workspaceMergeBusy = ref(false);
+const workspaceMergePreviewLoading = ref(false);
 
 const modelRows = ref<ModelRow[]>([{ drawIB: '', aliasName: '' }]);
 const skipRows = ref<SkipRow[]>([{ skipIB: '', aliasName: '', indexCount: '', firstIndex: '' }]);
@@ -242,6 +265,11 @@ const findExistingWorkspaceOption = (name: string): string | undefined => {
   }
 
   return workspaceOptions.value.find((option) => option.trim().toLowerCase() === normalizedName);
+};
+
+const findWorkspaceMergeOption = (name: string): string | undefined => {
+  const normalizedName = normalizeWorkspaceNameInput(name).toLowerCase();
+  return workspaceMergeOptions.value.find((option) => option.trim().toLowerCase() === normalizedName);
 };
 
 const waitForInitialAppState = async (): Promise<void> => {
@@ -2714,6 +2742,204 @@ const handleDeleteWorkspaceTab = async (tabId: string) => {
 
 // quick menu actions removed — use explicit buttons in UI instead
 
+const loadWorkspaceMergeConfig = async (
+  sourceWorkspaceName: string,
+  lodName: string | null
+): Promise<WorkPageTabConfig> => {
+  if (!lodName) return normalizeWorkspaceTabConfig();
+  const index = await readWorkspaceTabsIndexBySnapshot(sourceWorkspaceName);
+  const tab = index?.tabs.find((item) => item.name.localeCompare(lodName, undefined, { sensitivity: 'accent' }) === 0);
+  return tab
+    ? readWorkspaceTabConfigBySnapshot(sourceWorkspaceName, tab.id)
+    : normalizeWorkspaceTabConfig();
+};
+
+const filterWorkspaceMergeConfig = (
+  config: WorkPageTabConfig,
+  source: 'first' | 'second'
+): WorkPageTabConfig => {
+  const shouldKeep = (hash: string): boolean => {
+    const normalizedHash = hash.trim().toLowerCase();
+    return !workspaceMergeConflictingHashes.value.includes(normalizedHash)
+      || workspaceMergeHashPreferences.value[normalizedHash] === source;
+  };
+  const filtered = cloneWorkspaceTabConfig(config);
+  filtered.modelRows = filtered.modelRows.filter((row) => shouldKeep(row.drawIB));
+  return filtered;
+};
+
+const mergeWorkspaceTabConfigs = (
+  firstConfig: WorkPageTabConfig,
+  secondConfig: WorkPageTabConfig
+): WorkPageTabConfig => {
+  const first = filterWorkspaceMergeConfig(firstConfig, 'first');
+  const second = filterWorkspaceMergeConfig(secondConfig, 'second');
+  const mergeRows = <T>(
+    firstRows: T[],
+    secondRows: T[],
+    hash: (row: T) => string,
+    useDrawIBPreference = false
+  ): T[] => {
+    const result = [...firstRows];
+    const indexes = new Map(result.map((row, index) => [hash(row).trim().toLowerCase(), index]));
+    for (const row of secondRows) {
+      const key = hash(row).trim().toLowerCase();
+      const existing = indexes.get(key);
+      if (existing === undefined) {
+        indexes.set(key, result.length);
+        result.push(row);
+      } else if (useDrawIBPreference && workspaceMergeHashPreferences.value[key] === 'second') {
+        result[existing] = row;
+      }
+    }
+    return result;
+  };
+
+  return {
+    ...first,
+    modelRows: mergeRows(first.modelRows, second.modelRows, (row) => row.drawIB, true),
+    skipRows: mergeRows(first.skipRows, second.skipRows, (row) => row.skipIB),
+    vsRows: mergeRows(first.vsRows, second.vsRows, (row) => row.hash),
+  };
+};
+
+const writeMergedWorkspaceConfiguration = async (result: WorkspaceMergeResult): Promise<void> => {
+  const tabs = result.lods.map((lod) => ({ id: createWorkspaceTabId(), name: lod.name }));
+  for (let index = 0; index < result.lods.length; index += 1) {
+    const lod = result.lods[index];
+    const [firstConfig, secondConfig] = await Promise.all([
+      loadWorkspaceMergeConfig(workspaceMergeFirst.value, lod.firstLodName),
+      loadWorkspaceMergeConfig(workspaceMergeSecond.value, lod.secondLodName),
+    ]);
+    const tabConfig = lod.firstLodName && lod.secondLodName
+      ? mergeWorkspaceTabConfigs(firstConfig, secondConfig)
+      : lod.firstLodName
+        ? filterWorkspaceMergeConfig(firstConfig, 'first')
+        : filterWorkspaceMergeConfig(secondConfig, 'second');
+    await writeLegacyWorkspaceRuntimeFiles(result.workspaceName, tabConfig, {
+      tabId: tabs[index].id,
+      tabs,
+      drawIBScope: 'active-tab',
+    });
+  }
+};
+
+const refreshWorkspaceMergePreview = async (): Promise<void> => {
+  const first = findWorkspaceMergeOption(workspaceMergeFirst.value);
+  const second = findWorkspaceMergeOption(workspaceMergeSecond.value);
+  workspaceMergeConflictingHashes.value = [];
+  workspaceMergeHashPreferences.value = {};
+  if (!first || !second || first === second) return;
+
+  workspaceMergePreviewLoading.value = true;
+  try {
+    const base = await getWorkspaceBaseDir();
+    if (!base) return;
+    const preview = await invoke<WorkspaceMergePreview>('workspace_merge_preview', {
+      workspaceBase: base,
+      firstWorkspaceName: first,
+      secondWorkspaceName: second,
+    });
+    workspaceMergeConflictingHashes.value = preview.conflictingHashes;
+  } catch (error) {
+    console.error('Failed to preview workspace merge', error);
+    ElMessage.error(t('workPage.messages.workspaceMergePreviewFailed', { error: String(error) }));
+  } finally {
+    workspaceMergePreviewLoading.value = false;
+  }
+};
+
+const refreshWorkspaceMergeOptions = async (): Promise<string[]> => {
+  const base = await getWorkspaceBaseDir();
+  if (!base) {
+    workspaceMergeOptions.value = [];
+    return [];
+  }
+  try {
+    const options = (await readDir(base))
+      .filter((entry) => entry.isDirectory && !!entry.name)
+      .map((entry) => entry.name as string)
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
+    workspaceMergeOptions.value = options;
+    return options;
+  } catch {
+    workspaceMergeOptions.value = [];
+    return [];
+  }
+};
+
+const openWorkspaceMergeDialog = async (): Promise<void> => {
+  const options = await refreshWorkspaceMergeOptions();
+  if (options.length < 2) {
+    ElMessage.warning(t('workPage.messages.workspaceMergeNeedsTwo'));
+    return;
+  }
+  const first = findWorkspaceMergeOption(workspaceName.value) || options[0];
+  const second = options.find((name) => name !== first) || '';
+  workspaceMergeFirst.value = first;
+  workspaceMergeSecond.value = second;
+  workspaceMergeOutput.value = `${first}_${second}`;
+  workspaceMergeMode.value = 'chain';
+  workspaceMergeDialog.value = true;
+  await refreshWorkspaceMergePreview();
+};
+
+const handleWorkspaceMerge = async (): Promise<void> => {
+  const first = findWorkspaceMergeOption(workspaceMergeFirst.value);
+  const second = findWorkspaceMergeOption(workspaceMergeSecond.value);
+  const output = normalizeWorkspaceNameInput(workspaceMergeOutput.value);
+  if (!first || !second || first === second) {
+    ElMessage.warning(t('workPage.messages.workspaceMergeSelectTwo'));
+    return;
+  }
+  if (!output || !isValidWindowsFileName(output)) {
+    ElMessage.warning(t('workPage.messages.workspaceMergeInvalidName'));
+    return;
+  }
+  if (findExistingWorkspaceOption(output)) {
+    ElMessage.warning(t('workPage.messages.workspaceAlreadyExists'));
+    return;
+  }
+  if (workspaceMergeConflictingHashes.value.some((hash) => !workspaceMergeHashPreferences.value[hash])) {
+    ElMessage.warning(t('workPage.messages.workspaceMergeChooseConflicts'));
+    return;
+  }
+
+  const base = await getWorkspaceBaseDir();
+  if (!base) return;
+  const sourceSnapshot = createWorkspaceTabSaveSnapshot();
+  workspaceMergeBusy.value = true;
+  try {
+    if (sourceSnapshot) await flushCurrentWorkspaceTabConfig(sourceSnapshot);
+    const result = await invoke<WorkspaceMergeResult>('workspace_merge', {
+      workspaceBase: base,
+      firstWorkspaceName: first,
+      secondWorkspaceName: second,
+      outputWorkspaceName: output,
+      mode: workspaceMergeMode.value,
+      hashPreferences: workspaceMergeHashPreferences.value,
+    });
+    await writeMergedWorkspaceConfiguration(result);
+    await refreshWorkspaces();
+    await switchWorkspace(result.workspaceName);
+    workspaceMergeDialog.value = false;
+    ElMessage.success(t('workPage.messages.workspaceMerged', { name: result.workspaceName, files: result.copiedFileCount }));
+  } catch (error) {
+    console.error('Workspace merge failed', error);
+    ElMessage.error(t('workPage.messages.workspaceMergeFailed', { error: String(error) }));
+  } finally {
+    workspaceMergeBusy.value = false;
+  }
+};
+
+watch([workspaceMergeFirst, workspaceMergeSecond], () => {
+  if (workspaceMergeDialog.value) void refreshWorkspaceMergePreview();
+});
+
+watch(() => appSettings.CurrentGameName, () => {
+  workspaceMergeDialog.value = false;
+  workspaceMergeOptions.value = [];
+});
 
 const refreshWorkspaces = async () => {
     const scannedGameKey = getCurrentWorkspaceMemoryGameKey();
@@ -3213,10 +3439,60 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
         @textureMenu="handleTextureMenu"
         @openWorkspaceUpload="openWorkspaceUploadDialog"
         @openWorkspaceDownload="openWorkspaceDownloadDialog"
+        @openWorkspaceMerge="openWorkspaceMergeDialog"
         @specificIbDumpToggle="handleSpecificIbDumpToggle"
       />
 
     </div>
+
+    <el-dialog
+      class="workspace-merge-dialog"
+      :model-value="workspaceMergeDialog"
+      width="min(680px, 94vw)"
+      :close-on-click-modal="!workspaceMergeBusy"
+      @update:model-value="(visible) => { if (!visible && !workspaceMergeBusy) workspaceMergeDialog = false; }"
+    >
+      <template #header>{{ t('workPage.dialog.workspaceMergeTitle') }}</template>
+      <el-form label-position="top">
+        <div class="workspace-merge-sources">
+          <el-form-item :label="t('workPage.dialog.workspaceMergeFirst')">
+            <el-select v-model="workspaceMergeFirst" :disabled="workspaceMergeBusy" @change="refreshWorkspaceMergePreview">
+              <el-option v-for="name in workspaceMergeOptions" :key="`first-${name}`" :label="name" :value="name" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('workPage.dialog.workspaceMergeSecond')">
+            <el-select v-model="workspaceMergeSecond" :disabled="workspaceMergeBusy" @change="refreshWorkspaceMergePreview">
+              <el-option v-for="name in workspaceMergeOptions" :key="`second-${name}`" :label="name" :value="name" :disabled="name === workspaceMergeFirst" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item :label="t('workPage.dialog.workspaceMergeOutput')">
+          <el-input v-model="workspaceMergeOutput" :disabled="workspaceMergeBusy" />
+        </el-form-item>
+        <el-form-item :label="t('workPage.dialog.workspaceMergeMode')">
+          <el-radio-group v-model="workspaceMergeMode" :disabled="workspaceMergeBusy">
+            <el-radio value="chain">{{ t('workPage.dialog.workspaceMergeChain') }}</el-radio>
+            <el-radio value="zip">{{ t('workPage.dialog.workspaceMergeZip') }}</el-radio>
+          </el-radio-group>
+          <p class="workspace-merge-hint">{{ workspaceMergeMode === 'chain' ? t('workPage.dialog.workspaceMergeChainHint') : t('workPage.dialog.workspaceMergeZipHint') }}</p>
+        </el-form-item>
+        <section v-loading="workspaceMergePreviewLoading" class="workspace-merge-conflicts">
+          <p class="workspace-merge-conflicts-title">{{ t('workPage.dialog.workspaceMergeConflicts') }}</p>
+          <el-empty v-if="!workspaceMergePreviewLoading && workspaceMergeConflictingHashes.length === 0" :description="t('workPage.dialog.workspaceMergeNoConflicts')" :image-size="48" />
+          <div v-for="hash in workspaceMergeConflictingHashes" :key="hash" class="workspace-merge-conflict">
+            <code>{{ hash }}</code>
+            <el-radio-group v-model="workspaceMergeHashPreferences[hash]" :disabled="workspaceMergeBusy">
+              <el-radio value="first">{{ workspaceMergeFirst }}</el-radio>
+              <el-radio value="second">{{ workspaceMergeSecond }}</el-radio>
+            </el-radio-group>
+          </div>
+        </section>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="workspaceMergeBusy" @click="workspaceMergeDialog = false">{{ t('workPage.common.cancel') }}</el-button>
+        <el-button type="primary" :loading="workspaceMergeBusy" @click="handleWorkspaceMerge">{{ t('workPage.actions.mergeWorkspaces') }}</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog class="workspace-access-dialog" :model-value="workspaceAccessDialog !== null" @update:model-value="(visible) => { if (!visible) workspaceAccessDialog = null; }" width="min(760px, 94vw)" :close-on-click-modal="!workspaceAccessBusy">
       <template #header>
@@ -3585,6 +3861,78 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
 
 .workspace-tabs-shell :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
   color: rgba(var(--theme-text-secondary-rgb), 0.90) !important;
+}
+
+:deep(.workspace-merge-dialog) {
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.22);
+  border-radius: 8px;
+  background: rgba(18, 24, 34, 0.98);
+}
+
+:deep(.workspace-merge-dialog .el-dialog__body) {
+  padding-top: 12px;
+}
+
+.workspace-merge-sources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-merge-sources :deep(.el-select) {
+  width: 100%;
+}
+
+.workspace-merge-hint {
+  width: 100%;
+  margin: 8px 0 0;
+  color: rgba(var(--theme-text-secondary-rgb), 0.72);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workspace-merge-conflicts {
+  min-height: 80px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
+  border-radius: 8px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.035);
+}
+
+.workspace-merge-conflicts-title {
+  margin: 0 0 8px;
+  color: rgba(var(--theme-text-primary-rgb), 0.92);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.workspace-merge-conflict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(var(--theme-surface-tint-rgb), 0.10);
+}
+
+.workspace-merge-conflict code {
+  color: var(--theme-accent);
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .workspace-merge-sources {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .workspace-merge-conflict {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .panel {

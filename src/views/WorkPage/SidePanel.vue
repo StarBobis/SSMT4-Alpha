@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { ArrowDown, Edit, Plus, FolderAdd, FolderOpened, BrushFilled, Delete, UploadFilled, Download } from '@element-plus/icons-vue';
+import { ArrowDown, Edit, Plus, FolderAdd, FolderOpened, BrushFilled, Delete, UploadFilled, Download, Connection } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import type { DrawerCollapsedState } from './WorkPage.types';
 
@@ -42,6 +42,7 @@ const emit = defineEmits<{
   textureMenu: [cmd: unknown];
   openWorkspaceUpload: [];
   openWorkspaceDownload: [];
+  openWorkspaceMerge: [];
   specificIbDumpToggle: [value: string | number | boolean];
 }>();
 
@@ -153,6 +154,11 @@ const toggleDrawer = (key: keyof DrawerCollapsedState) => {
             <el-tooltip :content="t('workPage.actions.openWorkspaceDownload')" placement="bottom">
               <button type="button" class="workspace-inline-action workspace-inline-action--library" @click="emit('openWorkspaceDownload')">
                 <el-icon><Download /></el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip :content="t('workPage.actions.mergeWorkspaces')" placement="bottom">
+              <button type="button" class="workspace-inline-action workspace-inline-action--secondary" @click="emit('openWorkspaceMerge')">
+                <el-icon><Connection /></el-icon>
               </button>
             </el-tooltip>
           </div>

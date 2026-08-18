@@ -876,7 +876,18 @@
       "workspaceLibraryResultsTitle": "工作空间条目",
       "workspaceLibraryDownloadMessage": "该条目包含完整工作空间包，是否下载并导入？",
       "workspaceLibraryLowDiskSpaceMessage": "目标工作空间所在磁盘仅剩 {available} GiB 可用空间。完整包在解压前至少需要 1 GiB 可用空间，仍要继续吗？",
-      "workspaceLibraryLowDiskSpaceContinue": "仍要下载"
+      "workspaceLibraryLowDiskSpaceContinue": "仍要下载",
+      "workspaceMergeTitle": "合并工作空间",
+      "workspaceMergeFirst": "工作空间 1",
+      "workspaceMergeSecond": "工作空间 2",
+      "workspaceMergeOutput": "新工作空间名称",
+      "workspaceMergeMode": "LOD 合并方式",
+      "workspaceMergeChain": "追加为新 LOD",
+      "workspaceMergeZip": "匹配 LOD 追加内容",
+      "workspaceMergeChainHint": "按顺序将两个工作空间的所有 LOD 写入新的 LOD0、LOD1……目录。",
+      "workspaceMergeZipHint": "同名 LOD 会合并内容；只存在于一边的 LOD 会保留为独立 LOD。",
+      "workspaceMergeConflicts": "相同 DrawIB 的来源选择",
+      "workspaceMergeNoConflicts": "没有相同 DrawIB，可直接合并。"
     },
     "tabs": {
       "extractByDrawIB": "按 DrawIB 提取",
@@ -965,6 +976,7 @@
       "sortWorkspaceLibraryByDownloads": "按下载量",
       "importWorkspaceMetadata": "仅导入元数据",
       "downloadWorkspacePackage": "下载完整包"
+      ,"mergeWorkspaces": "合并工作空间"
     },
     "menu": {
       "open3DmigotoFolder": "打开 3Dmigoto 文件夹",
@@ -1075,6 +1087,13 @@
       "workspacePublishNameInvalid": "请输入有效的公共工作空间名称",
       "workspaceMetadataImported": "已导入元数据骨架：{name}",
       "workspaceFullPackageUnavailable": "该工作空间的完整包已不可用，仍可仅导入元数据。"
+      ,"workspaceMergeNeedsTwo": "至少需要两个工作空间才能合并",
+      "workspaceMergeSelectTwo": "请选择两个不同的工作空间",
+      "workspaceMergeInvalidName": "请输入有效的新工作空间名称",
+      "workspaceMergeChooseConflicts": "请为每个相同 DrawIB 选择要使用的工作空间",
+      "workspaceMergePreviewFailed": "无法读取工作空间 DrawIB: {error}",
+      "workspaceMerged": "已创建合并工作空间 {name}，复制了 {files} 个文件",
+      "workspaceMergeFailed": "合并工作空间失败: {error}"
     }
   },
   "gameType": {

@@ -876,7 +876,18 @@
       "workspaceLibraryResultsTitle": "Workspace Entries",
       "workspaceLibraryDownloadMessage": "This entry includes a complete workspace package. Download and import it?",
       "workspaceLibraryLowDiskSpaceMessage": "The target workspace disk has only {available} GiB free. A full package download needs at least 1 GiB of free space before extraction. Continue anyway?",
-      "workspaceLibraryLowDiskSpaceContinue": "Download anyway"
+      "workspaceLibraryLowDiskSpaceContinue": "Download anyway",
+      "workspaceMergeTitle": "Merge Workspaces",
+      "workspaceMergeFirst": "Workspace 1",
+      "workspaceMergeSecond": "Workspace 2",
+      "workspaceMergeOutput": "New workspace name",
+      "workspaceMergeMode": "LOD merge mode",
+      "workspaceMergeChain": "Append as new LODs",
+      "workspaceMergeZip": "Append matching LOD content",
+      "workspaceMergeChainHint": "Writes all LODs in order to new LOD0, LOD1, and subsequent directories.",
+      "workspaceMergeZipHint": "Merges content for LODs with the same name and keeps unmatched LODs independently.",
+      "workspaceMergeConflicts": "Source for matching DrawIB values",
+      "workspaceMergeNoConflicts": "No matching DrawIB values were found. The workspaces can be merged directly."
     },
     "tabs": {
       "extractByDrawIB": "Extract by DrawIB",
@@ -964,7 +975,8 @@
       "sortWorkspaceLibraryByTime": "By time",
       "sortWorkspaceLibraryByDownloads": "By downloads",
       "importWorkspaceMetadata": "Import metadata only",
-      "downloadWorkspacePackage": "Download full package"
+      "downloadWorkspacePackage": "Download full package",
+      "mergeWorkspaces": "Merge workspaces"
     },
     "menu": {
       "open3DmigotoFolder": "Open 3Dmigoto Folder",
@@ -1074,7 +1086,14 @@
       "workspaceLibraryFailed": "Public workspace library request failed",
       "workspacePublishNameInvalid": "Enter a valid public workspace name",
       "workspaceMetadataImported": "Imported metadata skeleton: {name}",
-      "workspaceFullPackageUnavailable": "This workspace's complete package is unavailable. You can still import its metadata only."
+      "workspaceFullPackageUnavailable": "This workspace's complete package is unavailable. You can still import its metadata only.",
+      "workspaceMergeNeedsTwo": "At least two workspaces are required to merge",
+      "workspaceMergeSelectTwo": "Select two different workspaces",
+      "workspaceMergeInvalidName": "Enter a valid name for the new workspace",
+      "workspaceMergeChooseConflicts": "Choose a source workspace for every matching DrawIB value",
+      "workspaceMergePreviewFailed": "Unable to read workspace DrawIB values: {error}",
+      "workspaceMerged": "Merged workspace {name} created with {files} copied files",
+      "workspaceMergeFailed": "Failed to merge workspaces: {error}"
     }
   },
   "gameType": {

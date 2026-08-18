@@ -7,3 +7,4 @@ pub mod mod_library;
 pub mod mod_manager;
 pub mod recycle_bin;
 pub mod vscheck;
+pub mod workspace_merge;
