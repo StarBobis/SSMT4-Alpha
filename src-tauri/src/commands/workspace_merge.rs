@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::helper::mark_texture_helper::MarkTextureHelper;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceMergePreview {
@@ -174,6 +176,215 @@ fn source_path_extension_is_json(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
 }
 
+fn is_draw_ib_component_map(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("DrawIB-Component.json"))
+}
+
+fn is_object_map_metadata(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.eq_ignore_ascii_case("ComponentName_DrawCallIndexList.json")
+                || name.eq_ignore_ascii_case("TrianglelistDedupedFileName.json")
+        })
+}
+
+fn is_draw_ib_config(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("Config.json"))
+}
+
+fn read_json_object_if_present(
+    path: &Path,
+) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    if !path.is_file() {
+        return Ok(serde_json::Map::new());
+    }
+    let content = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "Failed to read merge metadata {}: {error}",
+            path.to_string_lossy()
+        )
+    })?;
+    serde_json::from_str(&content)
+        .map_err(|error| format!("Invalid merge metadata {}: {error}", path.to_string_lossy()))
+}
+
+fn source_submesh_is_selected(
+    submesh_name: &str,
+    source_key: &str,
+    preferences: &HashMap<String, String>,
+    conflicting_hashes: &HashSet<String>,
+) -> bool {
+    match hash_from_file_name(submesh_name) {
+        Some(hash) => {
+            !conflicting_hashes.contains(&hash)
+                || preferences.get(&hash).map(String::as_str) == Some(source_key)
+        }
+        None => true,
+    }
+}
+
+/// The legacy trianglelist metadata is indexed only by DrawCall filename.
+/// DrawCall indexes repeat across separate captures, so a merged LOD needs a
+/// submesh-scoped copy to keep its face/body texture sets distinct.
+fn write_submesh_trianglelist_metadata(
+    target_lod: &Path,
+    sources: &[(Option<PathBuf>, &str)],
+    preferences: &HashMap<String, String>,
+    conflicting_hashes: &HashSet<String>,
+) -> Result<(), String> {
+    let mut scoped_map: HashMap<String, serde_json::Map<String, serde_json::Value>> =
+        HashMap::new();
+
+    for (source_lod, source_key) in sources {
+        let Some(source_lod) = source_lod else {
+            continue;
+        };
+        let component_map =
+            read_json_object_if_present(&source_lod.join("ComponentName_DrawCallIndexList.json"))?;
+        let trianglelist_map =
+            read_json_object_if_present(&source_lod.join("TrianglelistDedupedFileName.json"))?;
+
+        for (submesh_name, draw_calls) in component_map {
+            if !target_lod.join(&submesh_name).is_dir()
+                || !source_submesh_is_selected(
+                    &submesh_name,
+                    source_key,
+                    preferences,
+                    conflicting_hashes,
+                )
+            {
+                continue;
+            }
+            let Some(draw_calls) = draw_calls.as_array() else {
+                continue;
+            };
+            let draw_calls = draw_calls
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .filter(|draw_call| !draw_call.is_empty())
+                .collect::<Vec<_>>();
+            if draw_calls.is_empty() {
+                continue;
+            }
+
+            let target_textures = scoped_map.entry(submesh_name).or_default();
+            for (texture_name, property) in &trianglelist_map {
+                if draw_calls
+                    .iter()
+                    .any(|draw_call| texture_name.starts_with(draw_call))
+                {
+                    target_textures
+                        .entry(texture_name.clone())
+                        .or_insert_with(|| property.clone());
+                }
+            }
+        }
+    }
+
+    if scoped_map.is_empty() {
+        return Ok(());
+    }
+    let content = serde_json::to_string_pretty(&scoped_map)
+        .map_err(|error| format!("Failed to serialize submesh texture metadata: {error}"))?;
+    fs::write(
+        target_lod.join("SubMeshTrianglelistDedupedFileName.json"),
+        content,
+    )
+    .map_err(|error| format!("Failed to write submesh texture metadata: {error}"))
+}
+
+fn merge_object_map_metadata(source: &Path, target: &Path) -> Result<(), String> {
+    let source_content = fs::read_to_string(source)
+        .map_err(|error| format!("Failed to read merge metadata: {error}"))?;
+    let target_content = fs::read_to_string(target)
+        .map_err(|error| format!("Failed to read merge metadata: {error}"))?;
+    let source_map =
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&source_content)
+            .map_err(|error| {
+                format!(
+                    "Invalid merge metadata {}: {error}",
+                    source.to_string_lossy()
+                )
+            })?;
+    let mut target_map =
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&target_content)
+            .map_err(|error| {
+                format!(
+                    "Invalid merge metadata {}: {error}",
+                    target.to_string_lossy()
+                )
+            })?;
+
+    for (key, value) in source_map {
+        target_map.entry(key).or_insert(value);
+    }
+
+    let content = serde_json::to_string_pretty(&target_map)
+        .map_err(|error| format!("Failed to serialize merged metadata: {error}"))?;
+    fs::write(target, content).map_err(|error| format!("Failed to write merged metadata: {error}"))
+}
+
+fn merge_draw_ib_config(
+    source: &Path,
+    target: &Path,
+    source_key: &str,
+    preferences: &HashMap<String, String>,
+) -> Result<(), String> {
+    let source_content = fs::read_to_string(source)
+        .map_err(|error| format!("Failed to read DrawIB config: {error}"))?;
+    let target_content = fs::read_to_string(target)
+        .map_err(|error| format!("Failed to read DrawIB config: {error}"))?;
+    let source_entries =
+        serde_json::from_str::<Vec<serde_json::Value>>(&source_content).map_err(|error| {
+            format!(
+                "Invalid DrawIB config {}: {error}",
+                source.to_string_lossy()
+            )
+        })?;
+    let mut target_entries = serde_json::from_str::<Vec<serde_json::Value>>(&target_content)
+        .map_err(|error| {
+            format!(
+                "Invalid DrawIB config {}: {error}",
+                target.to_string_lossy()
+            )
+        })?;
+
+    let mut entry_indexes = HashMap::new();
+    for (index, entry) in target_entries.iter().enumerate() {
+        if let Some(draw_ib) = entry.get("DrawIB").and_then(serde_json::Value::as_str) {
+            entry_indexes.insert(draw_ib.trim().to_ascii_lowercase(), index);
+        }
+    }
+
+    for entry in source_entries {
+        let Some(draw_ib) = entry.get("DrawIB").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let draw_ib = draw_ib.trim().to_ascii_lowercase();
+        if draw_ib.is_empty() {
+            continue;
+        }
+        if let Some(index) = entry_indexes.get(&draw_ib) {
+            if preferences.get(&draw_ib).map(String::as_str) == Some(source_key) {
+                target_entries[*index] = entry;
+            }
+        } else {
+            entry_indexes.insert(draw_ib, target_entries.len());
+            target_entries.push(entry);
+        }
+    }
+
+    let content = serde_json::to_string_pretty(&target_entries)
+        .map_err(|error| format!("Failed to serialize merged DrawIB config: {error}"))?;
+    fs::write(target, content)
+        .map_err(|error| format!("Failed to write merged DrawIB config: {error}"))
+}
+
 fn workspace_draw_ib_hashes(workspace: &Path) -> Result<HashSet<String>, String> {
     let mut hashes = HashSet::new();
     collect_draw_ib_hashes(workspace, &mut hashes)?;
@@ -237,6 +448,13 @@ fn copy_lod(
             continue;
         }
 
+        // This map is derived from the extracted submesh folders. It must not
+        // be carried over from either source, or a zip merge hides the other
+        // source's components in the post-processing page.
+        if is_draw_ib_component_map(&source_path) {
+            continue;
+        }
+
         if let Some(hash) = hash_from_file_name(&entry.file_name().to_string_lossy()) {
             if conflicting_hashes.contains(&hash)
                 && preferences.get(&hash).map(String::as_str) != Some(source_key)
@@ -245,9 +463,12 @@ fn copy_lod(
             }
         }
 
-        // Common metadata files can exist in both sources. The first source to
-        // claim a relative path wins; the UI regenerates the merged LOD configs.
         if !copied_paths.insert(target_path.clone()) {
+            if is_object_map_metadata(&source_path) {
+                merge_object_map_metadata(&source_path, &target_path)?;
+            } else if is_draw_ib_config(&source_path) {
+                merge_draw_ib_config(&source_path, &target_path, source_key, preferences)?;
+            }
             continue;
         }
         if let Some(parent) = target_path.parent() {
@@ -427,6 +648,26 @@ pub fn workspace_merge(
                 }
             }
         }
+        for lod in &lods {
+            let lod_path = temporary.join(&lod.name);
+            write_submesh_trianglelist_metadata(
+                &lod_path,
+                &[
+                    (
+                        lod.first_lod_name.as_ref().map(|name| first.join(name)),
+                        "first",
+                    ),
+                    (
+                        lod.second_lod_name.as_ref().map(|name| second.join(name)),
+                        "second",
+                    ),
+                ],
+                &hash_preferences,
+                &conflicting_hashes,
+            )?;
+            MarkTextureHelper::generate_draw_ib_component_json(&lod_path.to_string_lossy());
+        }
+
         Ok::<_, String>((lods, copied_file_count))
     })();
 
@@ -503,6 +744,114 @@ mod tests {
             b"second"
         );
         assert!(base.join("merged/LOD0/second_bbbbbbbb.buf").exists());
+        fs::remove_dir_all(base).expect("remove test workspace");
+    }
+
+    #[test]
+    fn zip_merge_unions_post_process_metadata_and_regenerates_components() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock is available")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("ssmt-workspace-merge-metadata-test-{nonce}"));
+        let first_lod = base.join("first").join("LOD0");
+        let second_lod = base.join("second").join("LOD0");
+        fs::create_dir_all(first_lod.join("aaaaaaaa-3-0")).expect("create first submesh");
+        fs::create_dir_all(second_lod.join("bbbbbbbb-3-0")).expect("create second submesh");
+
+        fs::write(
+            first_lod.join("Config.json"),
+            r#"[{"DrawIB":"aaaaaaaa","Alias":"First"}]"#,
+        )
+        .expect("write first config");
+        fs::write(
+            second_lod.join("Config.json"),
+            r#"[{"DrawIB":"bbbbbbbb","Alias":"Second"}]"#,
+        )
+        .expect("write second config");
+        fs::write(
+            first_lod.join("ComponentName_DrawCallIndexList.json"),
+            r#"{"aaaaaaaa-3-0":["000001"]}"#,
+        )
+        .expect("write first component metadata");
+        fs::write(
+            second_lod.join("ComponentName_DrawCallIndexList.json"),
+            r#"{"bbbbbbbb-3-0":["000001"]}"#,
+        )
+        .expect("write second component metadata");
+        fs::write(
+            first_lod.join("TrianglelistDedupedFileName.json"),
+            r#"{"000001-ps-t0=deadbeef.dds":{"FALogDedupedFileName":"first"}}"#,
+        )
+        .expect("write first texture metadata");
+        fs::write(
+            second_lod.join("TrianglelistDedupedFileName.json"),
+            r#"{"000001-ps-t0=deadbeef.dds":{"FALogDedupedFileName":"second"}}"#,
+        )
+        .expect("write second texture metadata");
+
+        workspace_merge(
+            base.to_string_lossy().into_owned(),
+            "first".to_string(),
+            "second".to_string(),
+            "merged".to_string(),
+            WorkspaceMergeMode::Zip,
+            HashMap::new(),
+        )
+        .expect("merge workspaces");
+
+        let merged_lod = base.join("merged").join("LOD0");
+        let component_map: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(merged_lod.join("ComponentName_DrawCallIndexList.json"))
+                .expect("read merged component metadata"),
+        )
+        .expect("parse merged component metadata");
+        assert!(component_map.get("aaaaaaaa-3-0").is_some());
+        assert!(component_map.get("bbbbbbbb-3-0").is_some());
+
+        let texture_map: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(merged_lod.join("TrianglelistDedupedFileName.json"))
+                .expect("read merged texture metadata"),
+        )
+        .expect("parse merged texture metadata");
+        assert_eq!(
+            texture_map["000001-ps-t0=deadbeef.dds"]["FALogDedupedFileName"],
+            serde_json::Value::String("first".to_string())
+        );
+
+        let scoped_texture_map: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(merged_lod.join("SubMeshTrianglelistDedupedFileName.json"))
+                .expect("read submesh-scoped texture metadata"),
+        )
+        .expect("parse submesh-scoped texture metadata");
+        assert_eq!(
+            scoped_texture_map["aaaaaaaa-3-0"]["000001-ps-t0=deadbeef.dds"]["FALogDedupedFileName"],
+            serde_json::Value::String("first".to_string())
+        );
+        assert_eq!(
+            scoped_texture_map["bbbbbbbb-3-0"]["000001-ps-t0=deadbeef.dds"]["FALogDedupedFileName"],
+            serde_json::Value::String("second".to_string())
+        );
+
+        let draw_ib_component_map: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(merged_lod.join("DrawIB-Component.json"))
+                .expect("read regenerated DrawIB component map"),
+        )
+        .expect("parse regenerated DrawIB component map");
+        assert_eq!(
+            draw_ib_component_map["aaaaaaaa"]["0"],
+            serde_json::Value::String("aaaaaaaa-3-0".to_string())
+        );
+        assert_eq!(
+            draw_ib_component_map["bbbbbbbb"]["0"],
+            serde_json::Value::String("bbbbbbbb-3-0".to_string())
+        );
+
+        let config: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(merged_lod.join("Config.json")).expect("read merged config"),
+        )
+        .expect("parse merged config");
+        assert_eq!(config.as_array().expect("config array").len(), 2);
         fs::remove_dir_all(base).expect("remove test workspace");
     }
 }

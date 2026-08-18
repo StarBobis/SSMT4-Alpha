@@ -121,6 +121,7 @@ type TrianglelistDedupedTextureProperty = {
 };
 
 type TrianglelistDedupedFileNameJson = Record<string, TrianglelistDedupedTextureProperty>;
+type SubMeshTrianglelistDedupedFileNameJson = Record<string, TrianglelistDedupedFileNameJson>;
 
 type MarkTextureSelectionMemory = {
 	subMesh?: string;
@@ -139,6 +140,7 @@ type WorkspaceMarkTextureSource = {
 	workspacePath: string;
 	subMeshDrawCallMap: Record<string, string[]>;
 	trianglelistDedupedData: TrianglelistDedupedFileNameJson;
+	subMeshTrianglelistDedupedData: SubMeshTrianglelistDedupedFileNameJson;
 	drawIBAliasMap: Record<string, string>;
 	drawIBOrderMap: Record<string, number>;
 	drawIBKeysByLengthDesc: string[];
@@ -779,6 +781,7 @@ const loadWorkspaceMarkTextureSource = async (
 	const componentJsonPath = await getMarkTextureComponentJsonPath(workspacePath);
 	const trianglelistJsonPath = await getMarkTextureTrianglelistJsonPath(workspacePath);
 	const drawIBComponentJsonPath = await getMarkTextureDrawIBComponentJsonPath(workspacePath);
+	const subMeshTrianglelistJsonPath = await join(workspacePath, 'SubMeshTrianglelistDedupedFileName.json');
 
 	try {
 		// Repair mappings produced by older builds from the extracted folders.
@@ -788,14 +791,16 @@ const loadWorkspaceMarkTextureSource = async (
 				.catch(error => console.warn(`${logPrefix} failed to rebuild component map`, error));
 		}
 
-		const [componentContent, trianglelistContent, drawIBConfigEntries] = await Promise.all([
+		const [componentContent, trianglelistContent, subMeshTrianglelistContent, drawIBConfigEntries] = await Promise.all([
 			readTextFile(componentJsonPath),
 			readTextFile(trianglelistJsonPath),
+			await exists(subMeshTrianglelistJsonPath) ? readTextFile(subMeshTrianglelistJsonPath) : '{}',
 			readDrawIBConfigFromWorkspace(workspacePath).catch(() => []),
 		]);
 
 		const parsedComponent = JSON.parse(componentContent) as Record<string, unknown>;
 		const parsedTrianglelist = JSON.parse(trianglelistContent) as TrianglelistDedupedFileNameJson;
+		const parsedSubMeshTrianglelist = JSON.parse(subMeshTrianglelistContent) as SubMeshTrianglelistDedupedFileNameJson;
 		const rawSubMeshDrawCallMap: Record<string, string[]> = {};
 
 		for (const [subMeshName, drawCalls] of Object.entries(parsedComponent)) {
@@ -870,6 +875,7 @@ const loadWorkspaceMarkTextureSource = async (
 			workspacePath,
 			subMeshDrawCallMap,
 			trianglelistDedupedData: parsedTrianglelist,
+			subMeshTrianglelistDedupedData: parsedSubMeshTrianglelist,
 			drawIBAliasMap,
 			drawIBOrderMap,
 			drawIBKeysByLengthDesc: Object.keys(drawIBOrderMap).sort((a, b) => b.length - a.length),
@@ -1219,18 +1225,21 @@ const nextMarkedTexturePreviewCacheBustToken = (): number => {
 
 const getTextureEntriesForDrawCall = (
 	source: WorkspaceMarkTextureSource,
+	subMeshName: string,
 	drawCall: string
 ): Array<[string, TrianglelistDedupedTextureProperty]> => {
-	return Object.entries(source.trianglelistDedupedData)
+	const trianglelistData = source.subMeshTrianglelistDedupedData[subMeshName] ?? source.trianglelistDedupedData;
+	return Object.entries(trianglelistData)
 		.filter(([textureFileName]) => textureFileName.startsWith(drawCall))
 		.sort((a, b) => naturalCompare(a[0], b[0]));
 };
 
 const getVisibleTextureEntriesForDrawCall = (
 	source: WorkspaceMarkTextureSource,
+	subMeshName: string,
 	drawCall: string
 ): Array<[string, TrianglelistDedupedTextureProperty]> => {
-	const entries = getTextureEntriesForDrawCall(source, drawCall);
+	const entries = getTextureEntriesForDrawCall(source, subMeshName, drawCall);
 	if (showUnrenderedTextures.value) {
 		return entries;
 	}
@@ -1263,7 +1272,7 @@ const findAppliedTextureSourceEntry = (
 	const normalizedMarkSlot = markSlot.trim().toLowerCase();
 
 	for (const drawCall of drawCalls) {
-		const entries = getTextureEntriesForDrawCall(source, drawCall);
+		const entries = getTextureEntriesForDrawCall(source, subMeshName, drawCall);
 		const matchedByDedupedFileName = entries.find(([, textureProperty]) => {
 			const dedupedFileName = (textureProperty?.FALogDedupedFileName || '').trim().toLowerCase();
 			return !!normalizedMarkDedupedFileName && dedupedFileName === normalizedMarkDedupedFileName;
@@ -1341,7 +1350,7 @@ const resolveDrawCallSelectionForAppliedMark = (
 	const normalizedMarkSlot = markSlot.trim().toLowerCase();
 
 	for (const drawCall of drawCalls) {
-		const entries = getTextureEntriesForDrawCall(source, drawCall);
+		const entries = getTextureEntriesForDrawCall(source, subMeshName, drawCall);
 		const matched = entries.some(([textureFileName, textureProperty]) => {
 			const dedupedFileName = (textureProperty?.FALogDedupedFileName || '').trim().toLowerCase();
 			const fileHash = SSMTStringUtils.getFileHashFromFileName(textureFileName).trim().toLowerCase();
@@ -2135,7 +2144,7 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 			return;
 		}
 
-		const matchedEntries = getVisibleTextureEntriesForDrawCall(source, drawCall);
+		const matchedEntries = getVisibleTextureEntriesForDrawCall(source, subMeshName, drawCall);
 		const nextTextureList: TextureItem[] = await mapWithConcurrency(
 			matchedEntries, SUBMESH_TASK_CONCURRENCY, async ([textureFileName, textureProperty], index) => {
 				const defaultMarkStyle: MarkStyle =
@@ -2206,13 +2215,14 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 
 const getDrawCallTextureItemCount = (
 	source: WorkspaceMarkTextureSource,
+	subMeshName: string,
 	drawCall: string
 ): number => {
 	if (!drawCall) {
 		return 0;
 	}
 
-	return getTextureEntriesForDrawCall(source, drawCall).length;
+	return getTextureEntriesForDrawCall(source, subMeshName, drawCall).length;
 };
 
 const getPreferredDrawCallSelectionValue = (
@@ -2233,7 +2243,7 @@ const getPreferredDrawCallSelectionValue = (
 			continue;
 		}
 
-		const textureItemCount = getDrawCallTextureItemCount(source, parsed.drawCall);
+		const textureItemCount = getDrawCallTextureItemCount(source, subMeshName, parsed.drawCall);
 		if (textureItemCount > maxTextureItemCount) {
 			maxTextureItemCount = textureItemCount;
 			preferredSelectionValue = selectionValue;
@@ -2249,7 +2259,7 @@ const syncDrawCallOptionsBySubMesh = (options?: { preferCurrentSelection?: boole
 	const drawCalls = source && subMeshName ? source.subMeshDrawCallMap[subMeshName] ?? [] : [];
 	const nextDrawCallOptions = source && subMeshName
 		? drawCalls
-			.filter(drawCall => getDrawCallTextureItemCount(source, drawCall) > 0)
+			.filter(drawCall => getDrawCallTextureItemCount(source, subMeshName, drawCall) > 0)
 			.map(drawCall => serializeDrawCallSelection(source.tabId, subMeshName, drawCall))
 		: [];
 	drawCallOptions.value = nextDrawCallOptions;
