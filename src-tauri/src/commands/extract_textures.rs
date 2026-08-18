@@ -65,3 +65,8 @@ pub async fn extract_trianglelist_textures(
 
     Ok(())
 }
+
+#[test]
+fn tttt() -> Option<i32> {
+    Some(1)
+}
