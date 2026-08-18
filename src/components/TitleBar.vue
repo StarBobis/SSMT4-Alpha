@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { join } from '@tauri-apps/api/path';
 import { readDir, stat } from '@tauri-apps/plugin-fs';
@@ -167,6 +167,19 @@ const displayItems = computed(() => {
     });
 });
 
+const navControlsElement = ref<HTMLElement | null>(null);
+const isNavOverflowing = ref(false);
+let navOverflowObserver: ResizeObserver | null = null;
+
+const updateNavOverflow = () => {
+    const element = navControlsElement.value;
+    isNavOverflowing.value = !!element && element.scrollWidth > element.clientWidth + 1;
+};
+
+watch(displayItems, () => {
+    void nextTick(updateNavOverflow);
+}, { flush: 'post' });
+
 // Manual drag state to bypass Tauri drag restrictions
 const navHoverId = ref<string | null>(null);
 const navDraggingId = ref<string | null>(null);
@@ -245,6 +258,12 @@ const onNavMouseUp = (_e: MouseEvent) => {
 onMounted(async () => {
     checkMaximized();
     loadOrder();
+    await nextTick();
+    updateNavOverflow();
+    navOverflowObserver = new ResizeObserver(updateNavOverflow);
+    if (navControlsElement.value) {
+        navOverflowObserver.observe(navControlsElement.value);
+    }
     // Listen to resize event to update maximized state icon
     unlistenResize = await appWindow.onResized(() => {
         checkMaximized();
@@ -267,6 +286,8 @@ onUnmounted(() => {
     }
     document.removeEventListener('mousemove', onNavMouseMove);
     document.removeEventListener('mouseup', onNavMouseUp);
+    navOverflowObserver?.disconnect();
+    navOverflowObserver = null;
     resetNavDrag();
 });
 
@@ -329,8 +350,8 @@ const togglePin = async () => {
 
 <template>
   <div class="titlebar">
-    <div class="nav-controls">
-        <transition-group name="nav-list">
+    <div ref="navControlsElement" class="nav-controls" :class="{ 'is-overflowing': isNavOverflowing }">
+        <transition-group name="nav-list" tag="div" class="nav-list">
           <div
             v-for="item in displayItems"
             :key="item.id"
@@ -493,7 +514,32 @@ const togglePin = async () => {
     display: flex;
     align-items: center;
     height: 100%;
-    padding-left: 0; 
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    position: relative;
+    z-index: 10001; /* Above drag region */
+}
+
+.nav-controls.is-overflowing::after {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    right: 0;
+    width: 44px;
+    height: 100%;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgba(14, 12, 9, 0), rgba(14, 12, 9, 0.90));
+}
+
+.nav-list {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: max-content;
+    min-width: max-content;
+    height: 100%;
     z-index: 10001; /* Above drag region */
 }
 
@@ -501,6 +547,7 @@ const togglePin = async () => {
     display: flex;
     align-items: center;
     height: 100%;
+    flex: 0 0 auto;
 }
 
 .nav-button {
@@ -516,6 +563,7 @@ const togglePin = async () => {
     border-radius: 6px;
     position: relative;
     margin: 0 1px;
+    white-space: nowrap;
 }
 .nav-button:hover {
     color: rgba(var(--theme-text-primary-rgb), 0.90);
@@ -572,6 +620,10 @@ const togglePin = async () => {
     display: flex;
     align-items: center;
     font-size: 12px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .window-controls {
