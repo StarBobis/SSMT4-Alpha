@@ -1351,6 +1351,14 @@
       "configureMigotoPathFirst": "Please configure the 3Dmigoto path first"
     }
   },
+  "uiBuilder": {
+    "refresh": "Refresh",
+    "refreshTooltip": "Reload the UI Builder page",
+    "refreshConfirmTitle": "Refresh UI Builder",
+    "refreshConfirmMessage": "Refreshing will discard all unsaved changes in the UI Builder. Continue?",
+    "refreshConfirmOk": "Refresh",
+    "refreshConfirmCancel": "Cancel"
+  },
   "appState": {
     "common": {
       "errorTitle": "Error",

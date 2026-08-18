@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
@@ -9,6 +9,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
 import type { D3d11Mode, HuntingMode } from './store/GameConfig';
+import UIBuilderHost from "./views/UIBuilder/UIBuilderHost.vue";
 
 const route = useRoute();
 const appSettings = AppStateManager.appSettings;
@@ -356,6 +357,8 @@ onUnmounted(() => {
                   </KeepAlive>
                 </transition>
               </router-view>
+              <!-- UI 构造器常驻宿主：iframe 不随路由卸载，切页不刷新 -->
+              <UIBuilderHost />
             </div>
           </main>
         </div>

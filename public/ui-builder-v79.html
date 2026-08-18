@@ -1352,9 +1352,9 @@
                     <input type="number" id="p_zone_drag_id" step="1" min="0" value="0" onchange="updateZoneDragZoneId()">
                 </div>
                 <div class="anim-note" id="zone_drag_hint" style="display:none;">
-                    启用后，鼠标命中模型的指定区域并按住拖拽键（默认左键）时，等同于抓住本组件的手柄：手柄从当前值出发、按鼠标位移相对移动（不会瞬间跳到光标位置），松开按键后照常回弹/吸附；光标在组件上的原有拖拽不受影响，两者皆可触发。<br>
-                    “区域变量名”必须与模型侧（TheHerta4 拖拽交互节点）导出的命中区域变量一致——节点保留默认名 ssmtdrag_ui_zone 时会自动追加命名空间后缀，请填写节点上显示的最终变量名（如 $ssmtdrag_ui_zone_xxx）；“命中区域编号”与节点的区域 ID 完全一致，未命中时该变量为 -1。<br>
-                    需要模型侧拖拽交互处于运行模式（仅命中 / 命中+拖拽）才会实时更新该变量；浏览器内的布局预览无法模拟，导出后在游戏内生效。
+                    启用后，模型侧拖拽交互处于<b>仅命中模式（模式 1）</b>时：按住 Alt 并点击左键（或按 X 键）命中模型指定区域，即绑定本组件手柄——手柄从当前值出发、按鼠标位移相对移动（不会瞬间跳到光标位置）；绑定后移出区域也不会中断，松开左键 / X 键 / Alt 后绑定结束并照常回弹/吸附。面板关闭（Home 收起）时同样生效，模式 0 / 2 不会触发绑定；光标在组件上的原有拖拽不受影响。<br>
+                    “区域变量名”必须与模型侧（TheHerta4 拖拽交互节点）导出的命中区域变量一致——节点保留默认名 ssmtdrag_ui_zone 时会自动追加命名空间后缀，请填写节点上显示的最终变量名（如 $ssmtdrag_ui_zone_xxx），命名空间会自动从该变量名推导并用于匹配模型侧按键状态变量；“命中区域编号”与节点的区域 ID 完全一致，未命中时该变量为 -1。<br>
+                    浏览器内的布局预览无法模拟，导出后在游戏内生效。
                 </div>
                 <div id="generic_var_block">
                 <h4 style="margin: 5px 0; font-size:0.85em; color:var(--muted-color);">绑定变量列表</h4>
@@ -3483,6 +3483,10 @@ void main(vs2ps input, out float4 result : SV_Target0)
         toggleOn: '4_on.png',
         toggleProgressOff: TOGGLE_PROGRESS_ASSETS.off,
         toggleProgressOn: TOGGLE_PROGRESS_ASSETS.on,
+        fxWhite: '__fx_white.png',
+        // 格子滑条档位刻度专用白图：与 FX 着色器/流光开关无关，始终随打包，
+        // 避免关闭“常驻流光与表面高光”后配置仍引用未打包的 __fx_white.png。
+        gridTick: '__grid_tick.png'
     });
     const LEGACY_ASSET_PATHS = Object.freeze({
         postMarker: '__post_marker.png'
@@ -3767,6 +3771,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             [DEFAULT_ASSET_PATHS.toggleOff]: createRoundedRectDataUrl([[0, '#6b7d97'], [0.5, '#2f4055'], [1, '#17202d']], { radius: 36, padding: 3 }),
             [DEFAULT_ASSET_PATHS.toggleOn]: createRoundedRectDataUrl([[0, '#ffe588'], [0.45, '#ff9c66'], [1, '#d9567f']], { radius: 36, padding: 3 }),
             [DEFAULT_ASSET_PATHS.fxWhite]: createSolidColorDataUrl('#ffffff', 16),
+            [DEFAULT_ASSET_PATHS.gridTick]: createSolidColorDataUrl('#ffffff', 16),
             [TOGGLE_PROGRESS_ASSETS.off]: createRoundedRectDataUrl([[0, '#6cc4ff'], [0.45, '#1d5f95'], [1, '#0f2336']], { radius: 28 }),
             [TOGGLE_PROGRESS_ASSETS.on]: createRoundedRectDataUrl([[0, '#ffe283'], [0.45, '#ff9368'], [1, '#d44b87']], { radius: 28 })
         };
@@ -8165,6 +8170,26 @@ void main(vs2ps input, out float4 result : SV_Target0)
         return Number.isFinite(value) && value > 0 ? value : 0;
     }
 
+    // 拖拽侧命名空间后缀：从用户填写的“区域变量名”推导（$ssmtdrag_ui_zone_xxx → xxx）。
+    // 拖拽侧契约变量（$ssmtdrag_drag_enabled_{ns} / $ssmtdrag_modifier_down_{ns} /
+    // $ssmtdrag_lmb_down_{ns} / $ssmtdrag_x_down_{ns}）与面板侧锁存变量共用此后缀。
+    // 变量名不带 ssmtdrag_ui_zone 前缀（或恰为 $ssmtdrag_ui_zone）时后缀为空。
+    function getZoneDragNamespace(component) {
+        const base = 'ssmtdrag_ui_zone';
+        const varName = getZoneDragVarName(component);
+        const name = varName.startsWith('$') ? varName.slice(1) : varName;
+        if(name === base) return '';
+        if(!name.startsWith(base + '_') && !name.startsWith(base + '.')) return '';
+        return name.slice(base.length).replace(/^[_.]+/, '').replace(/[^A-Za-z0-9_]/g, '_');
+    }
+
+    // 面板侧锁存变量（每组件一个）：绑定后锁存到松开，移出区域不丢。
+    // 命名刻意避开拖拽侧重写范围（$ssmtdrag_ui_detected_* / $ssmtdrag_ui_zone_*）。
+    function getZoneDragLatchVarName(component, index) {
+        const ns = getZoneDragNamespace(component);
+        return `$ssmtdrag_zone_bound${ns ? `_${ns}` : ''}_${index + 1}`;
+    }
+
     function getFollowCursorOffsets(component) {
         const clampOffset = value => {
             const num = Number(value);
@@ -9030,15 +9055,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             canvas.height = size;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.save();
-            ctx.translate(0, size);
-            ctx.scale(1, -1);
+            // 注意：不要再做 Y 轴翻转。游戏端 draw_2d.hlsl 以 UV(0,0)=左上角
+            // 直接 tex.Load 采样，PNG 顶行对应屏幕顶部，正立的位图才会正立显示。
             ctx.font = task.fontStr;
             ctx.fillStyle = task.color;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(task.char, canvas.width / 2, size / 2);
-            ctx.restore();
             fontAssets[task.fileName] = canvas.toDataURL('image/png');
         }
 
@@ -13388,6 +13411,16 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const proceduralAssets = { ...buildProceduralAssetDataMap() };
         if(!fxAssetsEnabled) delete proceduralAssets[DEFAULT_ASSET_PATHS.fxWhite];
         const packagedAssets = collectAssetPackageEntries(components, proceduralAssets);
+        // FX 白图 __fx_white.png 不挂在任何组件路径上，需在开启“常驻流光与表面高光”时显式打入，
+        // 与 INI 中 [CustomShaderFx] 高光/悬停光引用保持一致；关闭时 INI 不引用、包内也不含。
+        if(fxAssetsEnabled) {
+            packagedAssets.set(DEFAULT_ASSET_PATHS.fxWhite, { type: 'dataUrl', source: proceduralAssets[DEFAULT_ASSET_PATHS.fxWhite], origin: DEFAULT_ASSET_PATHS.fxWhite });
+        }
+        // 格子滑条档位刻度引用独立白图 __grid_tick.png，与“常驻流光与表面高光”开关无关：
+        // 只要存在格子模式滑条就始终打包，保证 INI 引用与资源包一致。
+        if(components.some(isSliderGridMode)) {
+            packagedAssets.set(DEFAULT_ASSET_PATHS.gridTick, { type: 'dataUrl', source: proceduralAssets[DEFAULT_ASSET_PATHS.gridTick], origin: DEFAULT_ASSET_PATHS.gridTick });
+        }
 
         try {
             if(shaderTemplateSource && shaderTemplateSource.trim()) {
@@ -14367,6 +14400,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
             (node.config && node.config.branches || []).forEach(branch => { if(branch.targetTextId) controlledIds.add(branch.targetTextId); });
         }));
         const componentIndex = new Map(components.map((component, index) => [component.id, index]));
+        // 生命周期（外部驱动文本）：未接入文本蓝图、显示变量由外部触发器（动画驱动等）直接改写的
+        // 文本框，也同样需要在打开后按 lifetimeSeconds 自动关闭。这类文本不在 controlledIds 内，
+        // 走独立的边沿检测 + 倒计时（用内置 time 计时，不受 $help 门控，保证默认固定的常驻面板
+        // 在 Home 隐藏帮助层时也能正常到期关闭）。
+        const externalLifetimeIds = components.filter(component =>
+            component && component.type === 'text' && isTextVisibilityEnabled(component) &&
+            !controlledIds.has(component.id) && (Math.max(0, Number(component.lifetimeSeconds) || 0) > 0)
+        ).map(component => component.id);
         const declarations = ['$dlg_clock = 0', '$dlg_prev_time = 0', '$dlg_dt = 0'];
         const reset = ['$dlg_clock = 0', '$dlg_prev_time = $time'];
         const userVariables = new Map(dialogueLogic.variables.map(item => [item.name, Number(item.initialValue) || 0]));
@@ -14413,6 +14454,11 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const component = getComponentById(id); if(!component) return; const vars = textVars(id);
             declarations.push(`${vars.seen} = 0`, `${vars.last} = 0`, `${vars.expires} = 0`);
             reset.push(`${vars.seen} = 0`, `${vars.last} = 0`, `${vars.expires} = 0`, `${getTextVisibilityVar(component)} = ${component.visDefault !== false ? 1 : 0}`);
+        });
+        externalLifetimeIds.forEach(id => {
+            const vars = textVars(id);
+            declarations.push(`${vars.seen} = 0`, `${vars.expires} = 0`);
+            reset.push(`${vars.seen} = 0`, `${vars.expires} = 0`);
         });
         dialogueLogic.dialogues.forEach(dialogue => {
             declarations.push(`${dialogVar('active', dialogue)} = 0`, `${dialogVar('step', dialogue)} = 0`);
@@ -14492,6 +14538,26 @@ void main(vs2ps input, out float4 result : SV_Target0)
             present.push(`        endif`, `        ${prev} = 1`, '    else', `        ${prev} = 0`, '    endif');
         });
         present.push('endif');
+
+        // 外部驱动文本的生命周期：显示变量 0→1 边沿时盖时间戳，到点自动关闭；
+        // 显示变量被外部清 0 时复位边沿标记，下次打开重新计时。
+        externalLifetimeIds.forEach(id => {
+            const component = getComponentById(id); if(!component) return;
+            const vars = textVars(id), visVar = getTextVisibilityVar(component);
+            const lifetime = Math.max(0, Number(component.lifetimeSeconds) || 0);
+            present.push(
+                `if ${visVar} == 1 && ${vars.seen} == 0`,
+                `    ${vars.seen} = 1`,
+                `    ${vars.expires} = time + ${lifetime.toFixed(6)}`,
+                'endif',
+                `if ${visVar} == 0`,
+                `    ${vars.seen} = 0`,
+                'endif',
+                `if ${vars.seen} == 1 && time >= ${vars.expires}`,
+                `    ${visVar} = 0`,
+                'endif'
+            );
+        });
 
         controlledIds.forEach(id => {
             const lines = []; const membership = findMembership(id); const directRandom = getTextRandomNode(id);
@@ -14664,6 +14730,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
             }
             components.forEach(m=>{ 
                 if(m.paths && m.paths.bg) getRes(m.paths.bg);
+                // 格子档位刻度白图需在资源块输出前注册（刻度绘制代码在渲染队列阶段才执行）
+                if(isSliderGridMode(m)) getRes(DEFAULT_ASSET_PATHS.gridTick);
                 if(Array.isArray(m.vars)) {
                     if(isSliderGridMode(m)) getSliderGridMainVars(m).forEach(addDeclaredVar);
                     else m.vars.forEach(v => splitVarStr(v).forEach(addDeclaredVar));
@@ -14928,6 +14996,10 @@ void main(vs2ps input, out float4 result : SV_Target0)
             if(components.some(componentUsesZoneDrag)) {
                 t+=`global $zgrab_rx\nglobal $zgrab_ry\n`;
             }
+            // 区域绑定锁存变量（每组件一个）：绑定后保持到松开，移出区域不丢；初始 0
+            components.forEach((m, i) => {
+                if(componentUsesZoneDrag(m)) t+=`global ${getZoneDragLatchVarName(m, i)} = 0\n`;
+            });
             if(hasPersistentSheen) {
                 t+=`global persist $persistent_phase = 0\nglobal $persistent_speed = ${persistentAnim.speedMultiplier.toFixed(6)}\nglobal $persistent_boost = 0.360000\n`;
             }
@@ -15597,25 +15669,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 t+=`        $dx = (${cursorXExpr} - $cx) * $aspect\n $dy = (${cursorYExpr} - $cy)\n`;
                 t+=`        $rx = ($dx * $cos_${i} + $dy * $sin_${i}) / $aspect\n`;
                 t+=`        $ry = $dy * $cos_${i} - $dx * $sin_${i}\n`;
-                // 模型区域拖拽：命中模型指定区域并按住拖拽键时，视为抓住本组件手柄（光标无需位于组件上）。
-                // 相对拖动（action 3）：认领时记录光标与手柄当前值位置的偏移，拖动按位移映射，手柄不跳到光标处。
-                if(componentUsesZoneDrag(m)) {
-                    t+=`        ; 模型区域 ${getZoneDragZoneId(m)} 命中拖拽（相对位移）\n`;
-                    t+=`        if $is_dragging == 0 && ${getZoneDragVarName(m)} == ${getZoneDragZoneId(m)}\n`;
-                   t+=`            $is_dragging = ${i+1}\n $drag_dx = $rx\n $drag_dy = $ry\n $drag_action = 3\n`;
-                    t += buildAccumClaimInitCode(m, i, '            ');
-                   if(m.type === 'joystick') {
-                        t+=`            $zgrab_rx = $rx - $val_${i}_x * ($abs_w_${i}-$hs_${i}*$zoom_global) * 0.5\n`;
-                        t+=`            $zgrab_ry = $ry + $val_${i}_y * ($abs_h_${i}-$hh_${i}*$zoom_global) * 0.5\n`;
-                    } else if(m.type === 'slider_v') {
-                        t+=`            $zgrab_rx = 0\n`;
-                        t+=`            $zgrab_ry = $ry - ($abs_h_${i}-$hh_${i}*$zoom_global) * (0.5 - $val_${i})\n`;
-                    } else {
-                        t+=`            $zgrab_rx = $rx - ($abs_w_${i}-$hs_${i}*$zoom_global) * ($val_${i} - 0.5)\n`;
-                        t+=`            $zgrab_ry = 0\n`;
-                    }
-                    t+=`        endif\n`;
-                }
+                // 模型区域拖拽已改为独立的锁存绑定块（见下方“模型区域拖拽绑定”段），不再在鼠标命中循环内认领。
                 let mw=`$abs_w_${i}*0.5`, mh=`$abs_h_${i}*0.5`; 
                 let outerHitCheck = `$rx > -${mw} && $rx < ${mw} && $ry > -${mh} && $ry < ${mh}`;
                 let hasControl = (m.type !== 'static' && m.type !== 'text' && m.type !== 'sequence' && m.type !== 'accum') || (m.type === 'text' && (!!getTextClickVar(m) || dialogueIni.clickCodeByComponentId.has(m.id)));
@@ -15651,9 +15705,47 @@ void main(vs2ps input, out float4 result : SV_Target0)
             });
             t+=`    endif\n\n`;
 
+            // 模型区域拖拽绑定（独立块）：不依赖面板开关（$help），拖拽侧运行模式必须为 1（仅命中）。
+            // Alt+左键 / Alt+X 按下且命中指定区域时锁存绑定本组件手柄；绑定期间光标移出区域不中断；
+            // 松开左键 / X 键 / Alt 后 gate 不成立 → 锁存清零，手柄照常回弹/吸附。
+            interactionOrder.forEach((i) => {
+                let m = components[i];
+                if(!componentUsesZoneDrag(m)) return;
+                const ns = getZoneDragNamespace(m);
+                const nsSuffix = ns ? `_${ns}` : '';
+                const latchVar = getZoneDragLatchVarName(m, i);
+                t+=`    ; 模型区域拖拽绑定: comp ${i + 1} (${getZoneDragVarName(m)} == ${getZoneDragZoneId(m)})\n`;
+                t+=`    if $ssmtdrag_drag_enabled${nsSuffix} == 1 && $ssmtdrag_modifier_down${nsSuffix} == 1 && ($ssmtdrag_lmb_down${nsSuffix} == 1 || $ssmtdrag_x_down${nsSuffix} == 1)\n`;
+                t+=`        if ${latchVar} == 0\n`;
+                t+=`            if ${getZoneDragVarName(m)} == ${getZoneDragZoneId(m)}\n`;
+                t+=`                $cx = $abs_x_${i} + $abs_w_${i}*0.5\n                $cy = $abs_y_${i} + $abs_h_${i}*0.5\n`;
+                t+=`                $dx = (${cursorXExpr} - $cx) * $aspect\n                $dy = (${cursorYExpr} - $cy)\n`;
+                t+=`                $rx = ($dx * $cos_${i} + $dy * $sin_${i}) / $aspect\n`;
+                t+=`                $ry = $dy * $cos_${i} - $dx * $sin_${i}\n`;
+                t+=`                $drag_dx = $rx\n                $drag_dy = $ry\n`;
+                t += buildAccumClaimInitCode(m, i, '                ');
+                if(m.type === 'joystick') {
+                    t+=`                $zgrab_rx = $rx - $val_${i}_x * ($abs_w_${i}-$hs_${i}*$zoom_global) * 0.5\n`;
+                    t+=`                $zgrab_ry = $ry + $val_${i}_y * ($abs_h_${i}-$hh_${i}*$zoom_global) * 0.5\n`;
+                } else if(m.type === 'slider_v') {
+                    t+=`                $zgrab_rx = 0\n`;
+                    t+=`                $zgrab_ry = $ry - ($abs_h_${i}-$hh_${i}*$zoom_global) * (0.5 - $val_${i})\n`;
+                } else {
+                    t+=`                $zgrab_rx = $rx - ($abs_w_${i}-$hs_${i}*$zoom_global) * ($val_${i} - 0.5)\n`;
+                    t+=`                $zgrab_ry = 0\n`;
+                }
+                t+=`                ${latchVar} = 1\n`;
+                t+=`            endif\n`;
+                t+=`        endif\n`;
+                t+=`        if ${latchVar} == 1\n`;
+                t+=`            $is_dragging = ${i+1}\n            $drag_action = 3\n`;
+                t+=`        endif\n`;
+                t+=`    else\n`;
+                t+=`        ${latchVar} = 0\n`;
+                t+=`    endif\n`;
+            });
 
-
-            t+=`    if $is_dragging > 0 && $help == 1\n`;
+            t+=`    if $is_dragging > 0\n`;
             t+=`        $cursor_delta_x = (${cursorXExpr} - $prev_cursor_x) / $zoom_global\n`;
             t+=`        $cursor_delta_y = (${cursorYExpr} - $prev_cursor_y) / $zoom_global\n`;
             components.forEach((m,i) => {
@@ -17288,7 +17380,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 const activeFxCond = `$is_dragging == ${i + 1} && $drag_action >= 2`;
                 const meta = componentExportMeta[i];
                 const visCond = meta.visibilityExpr ? `(${meta.visibilityExpr})` : '';
-                let drawCond = `if $help == 1\n`;
+                // 默认固定（pin）：编组开启后其渲染不受 $help（Home 键）影响，常驻显示。
+                // 注意只放宽渲染门控，交互/拖拽命中仍然要求 $help == 1，避免常驻面板在游戏过程中被误拖。
+                // 哈希总判定（$active，角色哈希不匹配/人物不绘制时为 0）优先级最高：
+                // 固定组只在人物绘制时绕过 Home 常驻显示，人物不绘制时一律不绘制。
+                const pinCond = meta.pinExpr && meta.pinExpr !== '0' ? ` || (${meta.pinExpr})` : '';
+                let drawCond = `if $active == 1 && ($help == 1${pinCond})\n`;
                 let endDraw = `endif\n`;
                 if(visCond) {
                     drawCond += `    if ${visCond}\n`;
@@ -17623,7 +17720,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         }
                     }
                     if(m.paramMode === '3') {
-                        const tickRes = getRes(DEFAULT_ASSET_PATHS.fxWhite);
+                        const tickRes = getRes(DEFAULT_ASSET_PATHS.gridTick);
                         const gridSteps = Math.max(2, m.gridSteps || 3);
                         const tickW = isVertical ? Math.max(m.w * 0.18, 0.010) : Math.max(m.w * 0.0045, 0.0014);
                         const tickH = isVertical ? Math.max(m.h * 0.0045, 0.0014) : Math.max(m.h * 0.18, 0.010);
