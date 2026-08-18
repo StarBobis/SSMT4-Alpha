@@ -313,13 +313,11 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 				geometricNormal
 			);
 			vec3 lightDirection = safeNormalize(uLightDir, vec3(0.0, 0.64278761, 0.76604444));
-			float ndotl = dot(surfaceNormal, lightDirection);
+			float ndotl = clamp(dot(surfaceNormal, lightDirection), 0.0, 1.0);
 			float lightGain = clamp(lightSample.g * 2.2, 0.0, 1.0);
-			// The URP reference keeps the signed N.L term and forms the toon
-			// shadow with a shifted smoothstep. Clamping N.L first makes the
-			// back side start at 0.25, which washes out the entire character.
-			float shadow = smoothstep(0.0, 1.08, ndotl + 0.55);
-			float halfLambert = clamp(shadow * clamp(lightGain + 0.01, 0.0, 1.0), 0.0, 1.0);
+			// v12's half-Lambert term deliberately retains a 0.25 ambient floor
+			// on the unlit side. It is part of the material response, not bloom.
+			float halfLambert = pow(ndotl * 0.5 + 0.5, 2.0) * (lightGain + 0.01);
 			float rampX = clamp(halfLambert * 2.0, 0.0, 1.0);
 			float fullyLit = 0.0;
 			if (rampX > 0.998) fullyLit = 1.0;
@@ -333,7 +331,8 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 			if (dot(gradedBase, gradedBase) < 0.000001 && dot(baseLinear, baseLinear) > 0.000001) gradedBase = baseLinear;
 			if (dot(gradedRamp, gradedRamp) < 0.000001 && dot(rampLinear, rampLinear) > 0.000001) gradedRamp = rampLinear;
 			gradedBase *= 1.8;
-			vec3 bodyRamp = mix(gradedRamp, vec3(0.9294118, 0.89411765, 0.8901961), fullyLit);
+			gradedRamp *= 0.97;
+			vec3 bodyRamp = mix(gradedRamp, vec3(0.85, 0.77519834, 0.765), fullyLit);
 
 			vec3 nonmetalColor = gradedBase * bodyRamp;
 			float metalMask = step(0.55, lightSample.r);

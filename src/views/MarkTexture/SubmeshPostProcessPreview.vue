@@ -152,6 +152,8 @@ const PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY = 'ssmt4:post-processing-preview:out
 const PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-weight';
 const PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-visualization';
 const PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-skip-transparent';
+const GIMI_BLOOM_STRENGTH = 0.14;
+const GIMI_BLOOM_BASE_RADIUS = 0.28;
 const PREVIEW_OUTLINE_PREFERENCE_VERSION_KEY = 'ssmt4:post-processing-preview:outline-preference-version';
 const PREVIEW_EMISSION_STORAGE_KEY = 'ssmt4:post-processing-preview:diffuse-alpha-emission';
 const PREVIEW_EMISSION_COLOR_STORAGE_KEY = 'ssmt4:post-processing-preview:emission-color';
@@ -1167,9 +1169,23 @@ const updateFXAAResolution = (pass: ShaderPass | undefined, width: number, heigh
 	if (resolution) resolution.set(1 / Math.max(1, width * pixelRatio), 1 / Math.max(1, height * pixelRatio));
 };
 
+const getGIMIBloomRadius = (): number => {
+	if (!camera || !previewRoot) return GIMI_BLOOM_BASE_RADIUS;
+	const objectsToFrame = framingMeshes.length > 0 ? framingMeshes : [previewRoot];
+	const box = new THREE.Box3();
+	for (const object of objectsToFrame) box.expandByObject(object);
+	if (box.isEmpty()) return GIMI_BLOOM_BASE_RADIUS;
+	const actualDiameter = Math.max(...box.getSize(new THREE.Vector3()).toArray(), 0.001);
+	const fittedDiameter = Math.min(actualDiameter, PREVIEW_REFERENCE_FRAME_DIAMETER_METERS);
+	const framingDistance = fittedDiameter
+		/ (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)))
+		* PREVIEW_CAMERA_DISTANCE_MULTIPLIER;
+	const currentDistance = Math.max(camera.position.distanceTo(rotationCenter), 0.001);
+	return THREE.MathUtils.clamp(GIMI_BLOOM_BASE_RADIUS * framingDistance / currentDistance, 0.08, 0.8);
+};
+
 const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): PreviewPostProcessor | undefined => {
 	if (!scene || !camera) return undefined;
-	const isZoomRenderer = targetRenderer === zoomRenderer;
 	const nextComposer = new EffectComposer(targetRenderer);
 	nextComposer.setPixelRatio(targetRenderer.getPixelRatio());
 	let nextTaaPass: TAARenderPass | undefined;
@@ -1181,13 +1197,13 @@ const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): PreviewPostPr
 	} else {
 		nextComposer.addPass(new RenderPass(scene, camera));
 	}
-	// UnrealBloomPass radius is more aggressive than Blender Glare's Size.
-	// The embedded preview therefore uses a compact halo; the enlarged preview
-	// retains a stronger, broader result at its higher effective resolution.
+	// Both canvases use the same screen-space bloom profile. The radius is
+	// updated from the camera distance so it follows model zoom rather than the
+	// preview window that happens to render it.
 	const nextBloomPass = new UnrealBloomPass(
 		new THREE.Vector2(1, 1),
-		isZoomRenderer ? 0.92 : 0.26,
-		isZoomRenderer ? 0.46 : 0.22,
+		GIMI_BLOOM_STRENGTH,
+		getGIMIBloomRadius(),
 		1.0,
 	);
 	const bloomUniforms = nextBloomPass.highPassUniforms as Record<string, { value: number }>;
@@ -1261,13 +1277,19 @@ const renderPreview = () => {
 		gimiShaderController.setFrame(performance.now() * 0.06);
 	}
 	if (renderer && scene && camera) {
-		if (bloomPass) bloomPass.enabled = useGIMIBloom();
+		if (bloomPass) {
+			bloomPass.enabled = useGIMIBloom();
+			bloomPass.radius = getGIMIBloomRadius();
+		}
 		if (taaPass) taaPass.accumulate = antiAliasingMode.value === 'taa' && !isGIMIBodyPipeline();
 		if (usePostProcessing() && composer) composer.render();
 		else renderer.render(scene, camera);
 	}
 	if (zoomRenderer && scene && camera) {
-		if (zoomBloomPass) zoomBloomPass.enabled = useGIMIBloom();
+		if (zoomBloomPass) {
+			zoomBloomPass.enabled = useGIMIBloom();
+			zoomBloomPass.radius = getGIMIBloomRadius();
+		}
 		if (zoomTaaPass) zoomTaaPass.accumulate = antiAliasingMode.value === 'taa' && !isGIMIBodyPipeline();
 		if (usePostProcessing() && zoomComposer) zoomComposer.render();
 		else zoomRenderer.render(scene, camera);
@@ -2000,10 +2022,10 @@ const applyFullSizeZoomTextures = async () => {
 	const loaded = await mapWithConcurrency(previewMaterialTextureSources, async source => ({
 		source,
 		diffuseLayers: await Promise.all((source.diffuseDdsPaths.length > 0 ? source.diffuseDdsPaths : [source.diffuseDdsPath])
-			.map(path => loadDdsTexture(path, true, undefined))),
+			.map(path => loadDdsTexture(path, !isGIMIMaterial(source.material), undefined))),
 		normal: await loadDdsTexture(source.normalDdsPath, false, undefined),
 		lightMap: await loadDdsTexture(source.lightMapDdsPath, false, undefined),
-		rampMap: await loadDdsTexture(source.rampMapDdsPath, true, undefined),
+		rampMap: await loadDdsTexture(source.rampMapDdsPath, !isGIMIMaterial(source.material), undefined),
 		metalMap: await loadDdsTexture(source.metalMapDdsPath, false, undefined),
 	}));
 	if (!previewZoomOpen.value || activeToken !== zoomTextureToken) {
@@ -2054,18 +2076,21 @@ const loadPreviewTexture = (ddsPath: string, url: string, colorTexture: boolean)
 
 const updateMaterialTextures = async () => {
 	const token = ++textureLoadToken;
-	const defaultTextures = isGIMIBodyPipeline() ? await getGIMIDefaultTexturePaths() : undefined;
-	const diffuseSources = isGIMIBodyPipeline()
+	const usesGIMI = isGIMIBodyPipeline();
+	const defaultTextures = usesGIMI ? await getGIMIDefaultTexturePaths() : undefined;
+	const diffuseSources = usesGIMI
 		? selectedDiffuses.value.map(item => ({ ddsPath: item.ddsPath, url: item.url }))
 		: [{ ddsPath: selectedDiffuse.value?.ddsPath || '', url: selectedDiffuse.value?.url || '' }];
 	const [nextDiffuseLayers, nextNormal, nextLightMap, nextRampMap, nextMetalMap] = await Promise.all([
-		Promise.all(diffuseSources.map(source => loadPreviewTexture(source.ddsPath, source.url, true))),
+		// GIMI decodes its sRGB texture samples in GLSL. Upload those maps as
+		// raw bytes so WebGL does not decode them a second time.
+		Promise.all(diffuseSources.map(source => loadPreviewTexture(source.ddsPath, source.url, !usesGIMI))),
 		loadPreviewTexture(selectedNormal.value?.ddsPath || '', selectedNormal.value?.url || '', false),
 		loadPreviewTexture(selectedLightMap.value?.ddsPath || '', selectedLightMap.value?.url || '', false),
 		loadPreviewTexture(
 			selectedRampMap.value?.ddsPath || defaultTextures?.rampMap || '',
 			selectedRampMap.value?.url || '',
-			true
+			!usesGIMI
 		),
 		loadPreviewTexture(
 			selectedMetalMap.value?.ddsPath || defaultTextures?.metalMap || '',
@@ -2476,15 +2501,16 @@ const buildPreviewGeometry = async (buildToken: number) => {
 	}, () => buildToken === previewBuildToken);
 	const passiveRenderables = await mapWithConcurrency(passiveSources, async source => {
 		if (!source) return undefined;
-		const defaultTextures = isGIMIBodyPipeline() ? await getGIMIDefaultTexturePaths() : undefined;
-		const diffuseSources = isGIMIBodyPipeline()
+		const usesGIMI = isGIMIBodyPipeline();
+		const defaultTextures = usesGIMI ? await getGIMIDefaultTexturePaths() : undefined;
+		const diffuseSources = usesGIMI
 			? (source.target.diffuseDdsPaths?.map((ddsPath, index) => ({ ddsPath, url: source.target.diffuseUrls?.[index] || '' })) ?? [])
 			: [{ ddsPath: source.target.diffuseDdsPath || '', url: source.target.diffuseUrl || '' }];
 		const [diffuseLayers, normal, lightMap, rampMap, metalMap] = await Promise.all([
-			Promise.all(diffuseSources.map(texture => loadPreviewTexture(texture.ddsPath, texture.url, true))),
+			Promise.all(diffuseSources.map(texture => loadPreviewTexture(texture.ddsPath, texture.url, !usesGIMI))),
 			loadPreviewTexture(source.target.normalDdsPath || '', source.target.normalUrl || '', false),
 			loadPreviewTexture(source.target.lightMapDdsPath || '', source.target.lightMapUrl || '', false),
-			loadPreviewTexture(source.target.rampMapDdsPath || defaultTextures?.rampMap || '', source.target.rampMapUrl || '', true),
+			loadPreviewTexture(source.target.rampMapDdsPath || defaultTextures?.rampMap || '', source.target.rampMapUrl || '', !usesGIMI),
 			loadPreviewTexture(source.target.metalMapDdsPath || defaultTextures?.metalMap || '', source.target.metalMapUrl || '', false),
 		]);
 		return { source, diffuseLayers: diffuseLayers.filter((texture): texture is THREE.Texture => !!texture), normal, lightMap, rampMap, metalMap };
