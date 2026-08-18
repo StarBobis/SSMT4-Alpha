@@ -127,6 +127,13 @@ export class GIMIShaderController {
 		this.setLightDirection(new THREE.Vector3(0, Math.cos(angle), Math.sin(angle)));
 	}
 
+	setFrame(frame: number): void {
+		if (!Number.isFinite(frame)) return;
+		for (const material of this.materials) {
+			material.uniforms.uFrame.value = frame;
+		}
+	}
+
 	dispose(): void {
 		this.materials.clear();
 	}
@@ -152,7 +159,9 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uNeedsReview: { value: needsReview ? 1 : 0 },
 		uLightDir: { value: new THREE.Vector3(0, Math.cos(THREE.MathUtils.degToRad(50)), Math.sin(THREE.MathUtils.degToRad(50))) },
 		uBaseCurveLut: { value: baseCurveLut },
-		uRampCurveLut: { value: rampCurveLut },
+		 uRampCurveLut: { value: rampCurveLut },
+		uFrame: { value: 0 },
+		uElementColor: { value: new THREE.Color(0.434153, 0.434153, 0.434153) },
 	},
 	vertexShader: `
 		attribute vec4 ssmtRawTangent;
@@ -199,6 +208,8 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uniform sampler2D uMetalMap;
 		uniform sampler2D uBaseCurveLut;
 		uniform sampler2D uRampCurveLut;
+		uniform float uFrame;
+		uniform vec3 uElementColor;
 		uniform float uHasDiffuseMap;
 		uniform float uHasNormalMap;
 		uniform float uHasLightMap;
@@ -244,13 +255,30 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		}
 
 		void main() {
-			vec4 diffuseSample = vec4(uFallbackColor, 1.0);
+			vec4 diffuseSample = vec4(uFallbackColor, 0.0);
+			float diffuseAlpha = 0.0;
 			if (uDiffuseCount > 0.5) {
 				diffuseSample.rgb = vec3(0.0);
-				if (uDiffuseCount > 0.0) diffuseSample.rgb += texture2D(uDiffuseMap0, vUv).rgb;
-				if (uDiffuseCount > 1.0) diffuseSample.rgb += texture2D(uDiffuseMap1, vUv).rgb;
-				if (uDiffuseCount > 2.0) diffuseSample.rgb += texture2D(uDiffuseMap2, vUv).rgb;
-				if (uDiffuseCount > 3.0) diffuseSample.rgb += texture2D(uDiffuseMap3, vUv).rgb;
+				if (uDiffuseCount > 0.0) {
+					vec4 layer = texture2D(uDiffuseMap0, vUv);
+					diffuseSample.rgb += layer.rgb;
+					diffuseAlpha = max(diffuseAlpha, layer.a);
+				}
+				if (uDiffuseCount > 1.0) {
+					vec4 layer = texture2D(uDiffuseMap1, vUv);
+					diffuseSample.rgb += layer.rgb;
+					diffuseAlpha = max(diffuseAlpha, layer.a);
+				}
+				if (uDiffuseCount > 2.0) {
+					vec4 layer = texture2D(uDiffuseMap2, vUv);
+					diffuseSample.rgb += layer.rgb;
+					diffuseAlpha = max(diffuseAlpha, layer.a);
+				}
+				if (uDiffuseCount > 3.0) {
+					vec4 layer = texture2D(uDiffuseMap3, vUv);
+					diffuseSample.rgb += layer.rgb;
+					diffuseAlpha = max(diffuseAlpha, layer.a);
+				}
 			}
 			vec4 normalSample = vec4(0.5, 0.5, 1.0, 1.0);
 			if (uHasNormalMap > 0.5) normalSample = texture2D(uNormalMap, vUv);
@@ -270,9 +298,13 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 				geometricNormal
 			);
 			vec3 lightDirection = safeNormalize(uLightDir, vec3(0.0, 0.64278761, 0.76604444));
-			float ndotl = clamp(dot(surfaceNormal, lightDirection), 0.0, 1.0);
+			float ndotl = dot(surfaceNormal, lightDirection);
 			float lightGain = clamp(lightSample.g * 2.2, 0.0, 1.0);
-			float halfLambert = pow(ndotl * 0.5 + 0.5, 2.0) * (lightGain + 0.01);
+			// The URP reference keeps the signed N.L term and forms the toon
+			// shadow with a shifted smoothstep. Clamping N.L first makes the
+			// back side start at 0.25, which washes out the entire character.
+			float shadow = smoothstep(0.0, 1.08, ndotl + 0.55);
+			float halfLambert = clamp(shadow * clamp(lightGain + 0.01, 0.0, 1.0), 0.0, 1.0);
 			float rampX = clamp(halfLambert * 2.0, 0.0, 1.0);
 			float fullyLit = 0.0;
 			if (rampX > 0.998) fullyLit = 1.0;
@@ -286,13 +318,27 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 			if (dot(gradedBase, gradedBase) < 0.000001 && dot(baseLinear, baseLinear) > 0.000001) gradedBase = baseLinear;
 			if (dot(gradedRamp, gradedRamp) < 0.000001 && dot(rampLinear, rampLinear) > 0.000001) gradedRamp = rampLinear;
 			gradedBase *= 1.8;
-			gradedRamp *= 0.97;
-			vec3 bodyRamp = mix(gradedRamp, vec3(0.85, 0.77519834, 0.765), fullyLit);
-			// Metal/MatCap is intentionally not part of the v12 Body/Clothes
-			// diffuse pass yet. Keep the uniforms and texture plumbing available
-			// for the next profile without allowing an incomplete branch to alter
-			// the non-metal result.
-			vec3 finalColor = gradedBase * bodyRamp;
+			vec3 bodyRamp = mix(gradedRamp, vec3(0.9294118, 0.89411765, 0.8901961), fullyLit);
+
+			vec3 nonmetalColor = gradedBase * bodyRamp;
+			float metalMask = step(0.55, lightSample.r);
+			vec3 viewDirection = safeNormalize(cameraPosition - vWorldPosition, vec3(0.0, 0.0, 1.0));
+			vec3 reflectedLight = reflect(-lightDirection, surfaceNormal);
+			float glossyValue = pow(max(dot(reflectedLight, viewDirection), 0.0), 4.0);
+			float maskedSpecular = glossyValue * metalMask * clamp(lightSample.b, 0.0, 1.0);
+			float specularLevel = mix(0.02, 0.5, clamp(maskedSpecular, 0.0, 1.0));
+			vec3 cameraNormal = safeNormalize(mat3(viewMatrix) * geometricNormal, vec3(0.0, 0.0, 1.0));
+			vec2 matcapUv = cameraNormal.xy * 0.5 + 0.5;
+			vec3 metalSample = vec3(0.75);
+			if (uHasMetalMap > 0.5) metalSample = texture2D(uMetalMap, matcapUv).rgb;
+			float matcapValue = dot(metalSample, vec3(0.2126, 0.7152, 0.0722));
+			float matcapLevel = mix(0.1, 1.0, clamp(matcapValue, 0.0, 1.0));
+			vec3 metalColor = baseLinear * (specularLevel * matcapLevel * 20.0);
+			vec3 ordinaryColor = mix(nonmetalColor, metalColor, metalMask);
+
+			float pulse = mix(1.0, 5.0, 0.5 + 0.5 * cos(uFrame / 50.0));
+			vec3 specialEmission = gradedBase * uElementColor * pulse;
+			vec3 finalColor = mix(ordinaryColor, specialEmission, step(0.5, diffuseAlpha));
 			if (uNeedsReview > 0.5) finalColor = mix(finalColor, vec3(1.0, 0.05, 0.05), 0.5);
 			gl_FragColor = vec4(finalColor, 1.0);
 			#include <colorspace_fragment>

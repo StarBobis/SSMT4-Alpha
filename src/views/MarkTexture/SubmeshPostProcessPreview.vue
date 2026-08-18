@@ -1016,6 +1016,9 @@ const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) 
 };
 
 const renderPreview = () => {
+	if (isGIMIBodyPipeline()) {
+		gimiShaderController.setFrame(performance.now() * 0.06);
+	}
 	if (renderer && scene && camera) {
 		renderer.render(scene, camera);
 	}

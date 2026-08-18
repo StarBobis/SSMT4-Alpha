@@ -252,7 +252,7 @@ export const useAppStateStore = defineStore('appState', () => {
       if (appSettings.CurrentGameName) {
         const current = gamesList.find(g => g.name === appSettings.CurrentGameName)
         if (current) {
-          await selectGame(current)
+          await selectGame(current, { persist: false })
         } else {
           appSettings.CurrentGameName = 'Default'
           appSettings.bgType = BGType.Image
@@ -269,9 +269,15 @@ export const useAppStateStore = defineStore('appState', () => {
     }
   }
 
-  async function selectGame(game: GameInfo) {
+  async function selectGame(game: GameInfo, options: { persist?: boolean } = {}) {
     await ResourceManager.ensureGameConfigExists(game.name)
     switchToGame(game)
+
+    // A game determines all subsequent per-game paths. Persist the switch
+    // synchronously so closing the app cannot restore the previous game.
+    if (options.persist !== false) {
+      await saveSettingsNow()
+    }
   }
 
   function switchToGame(game: GameInfo) {

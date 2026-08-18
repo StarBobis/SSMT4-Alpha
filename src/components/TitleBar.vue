@@ -44,7 +44,7 @@ const switchTitlebarGame = async (gameName: string) => {
     isSwitchingGame.value = true;
     try {
         const latestWorkspace = await findLatestWorkspaceForGame(gameName);
-        await AppStateManager.selectGame(game);
+        await AppStateManager.selectGame(game, { persist: false });
         // Commit the matching workspace in the same Vue update batch as the game
         // switch. Never expose "old game + new workspace" to active pages.
         appSettings.CurrentWorkSpace = latestWorkspace;
