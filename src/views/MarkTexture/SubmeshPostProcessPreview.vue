@@ -10,6 +10,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { TAARenderPass } from 'three/examples/jsm/postprocessing/TAARenderPass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { moveDirectoryToRecycleBin } from '../../utils/RecycleBin';
 import { AppStateManager } from '../../store/AppStateManager';
 import {
@@ -73,6 +77,7 @@ type SubMeshJson = {
 };
 
 type LightingMode = 'half-lambert' | 'unlit' | 'pbr' | 'gimi-body';
+type AntiAliasingMode = 'none' | 'fxaa' | 'smaa' | 'taa';
 type GIMIElement = 'anemo' | 'geo' | 'electro' | 'dendro' | 'cryo' | 'hydro' | 'pyro' | 'none';
 
 type ElementSource = {
@@ -139,6 +144,7 @@ const PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY = 'ssmt4:post-processing-preview:gi
 const PREVIEW_GIMI_LIGHT_ORBIT_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-light-orbit';
 const PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-emission-strength';
 const PREVIEW_GIMI_BLOOM_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-bloom';
+const PREVIEW_ANTI_ALIASING_STORAGE_KEY = 'ssmt4:post-processing-preview:anti-aliasing';
 const PREVIEW_OUTLINE_STORAGE_KEY = 'ssmt4:post-processing-preview:outline';
 const PREVIEW_OUTLINE_WIDTH_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-width';
 const PREVIEW_OUTLINE_COLOR_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-color';
@@ -233,6 +239,7 @@ const gimiLightElevation = ref(restoredGIMILightOrbit.elevation);
 const gimiEmissionElement = ref<GIMIElement>('none');
 const gimiEmissionStrength = ref(Math.max(0, Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY) || '0.15') || 0));
 const gimiBloomEnabled = ref(localStorage.getItem(PREVIEW_GIMI_BLOOM_STORAGE_KEY) !== 'false');
+const antiAliasingMode = ref<AntiAliasingMode>((localStorage.getItem(PREVIEW_ANTI_ALIASING_STORAGE_KEY) as AntiAliasingMode) || 'smaa');
 // This controls the tangent-space normal's tilt, not mesh vertex displacement.
 // Keeping 1.0 as the default applies a normal map without exaggerating it.
 const normalStrength = ref(1);
@@ -277,6 +284,10 @@ let composer: EffectComposer | undefined;
 let zoomComposer: EffectComposer | undefined;
 let bloomPass: UnrealBloomPass | undefined;
 let zoomBloomPass: UnrealBloomPass | undefined;
+let fxaaPass: ShaderPass | undefined;
+let zoomFxaaPass: ShaderPass | undefined;
+let taaPass: TAARenderPass | undefined;
+let zoomTaaPass: TAARenderPass | undefined;
 let gimiEmissionAnimationFrame: number | undefined;
 let scene: THREE.Scene | undefined;
 let camera: THREE.PerspectiveCamera | undefined;
@@ -1144,12 +1155,32 @@ const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) 
 	});
 };
 
-const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): { composer: EffectComposer; bloomPass: UnrealBloomPass } | undefined => {
+type PreviewPostProcessor = {
+	composer: EffectComposer;
+	bloomPass: UnrealBloomPass;
+	fxaaPass?: ShaderPass;
+	taaPass?: TAARenderPass;
+};
+
+const updateFXAAResolution = (pass: ShaderPass | undefined, width: number, height: number, pixelRatio: number): void => {
+	const resolution = pass?.uniforms.resolution?.value as THREE.Vector2 | undefined;
+	if (resolution) resolution.set(1 / Math.max(1, width * pixelRatio), 1 / Math.max(1, height * pixelRatio));
+};
+
+const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): PreviewPostProcessor | undefined => {
 	if (!scene || !camera) return undefined;
 	const isZoomRenderer = targetRenderer === zoomRenderer;
 	const nextComposer = new EffectComposer(targetRenderer);
 	nextComposer.setPixelRatio(targetRenderer.getPixelRatio());
-	nextComposer.addPass(new RenderPass(scene, camera));
+	let nextTaaPass: TAARenderPass | undefined;
+	if (antiAliasingMode.value === 'taa') {
+		nextTaaPass = new TAARenderPass(scene, camera);
+		nextTaaPass.accumulate = true;
+		nextTaaPass.sampleLevel = 0;
+		nextComposer.addPass(nextTaaPass);
+	} else {
+		nextComposer.addPass(new RenderPass(scene, camera));
+	}
 	// UnrealBloomPass radius is more aggressive than Blender Glare's Size.
 	// The embedded preview therefore uses a compact halo; the enlarged preview
 	// retains a stronger, broader result at its higher effective resolution.
@@ -1164,15 +1195,47 @@ const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): { composer: E
 	const bloomTint = new THREE.Color('#ff857b');
 	for (const tint of nextBloomPass.bloomTintColors) tint.set(bloomTint.r, bloomTint.g, bloomTint.b);
 	nextComposer.addPass(nextBloomPass);
-	return { composer: nextComposer, bloomPass: nextBloomPass };
+	let nextFxaaPass: ShaderPass | undefined;
+	if (antiAliasingMode.value === 'fxaa') {
+		nextFxaaPass = new ShaderPass(FXAAShader);
+		nextComposer.addPass(nextFxaaPass);
+	} else if (antiAliasingMode.value === 'smaa') {
+		nextComposer.addPass(new SMAAPass());
+	}
+	return { composer: nextComposer, bloomPass: nextBloomPass, fxaaPass: nextFxaaPass, taaPass: nextTaaPass };
 };
 
 const disposeBloomComposer = (targetComposer: EffectComposer | undefined, targetBloomPass: UnrealBloomPass | undefined): void => {
+	for (const pass of targetComposer?.passes ?? []) {
+		if (pass !== targetBloomPass) pass.dispose?.();
+	}
 	targetBloomPass?.dispose();
 	targetComposer?.dispose();
 };
 
+const recreatePostProcessors = (): void => {
+	if (renderer) {
+		disposeBloomComposer(composer, bloomPass);
+		const mainBloom = createBloomComposer(renderer);
+		composer = mainBloom?.composer;
+		bloomPass = mainBloom?.bloomPass;
+		fxaaPass = mainBloom?.fxaaPass;
+		taaPass = mainBloom?.taaPass;
+		resizePreview();
+	}
+	if (zoomRenderer) {
+		disposeBloomComposer(zoomComposer, zoomBloomPass);
+		const zoomBloom = createBloomComposer(zoomRenderer);
+		zoomComposer = zoomBloom?.composer;
+		zoomBloomPass = zoomBloom?.bloomPass;
+		zoomFxaaPass = zoomBloom?.fxaaPass;
+		zoomTaaPass = zoomBloom?.taaPass;
+		resizeZoomPreview();
+	}
+};
+
 const useGIMIBloom = () => isGIMIBodyPipeline() && gimiBloomEnabled.value;
+const usePostProcessing = () => useGIMIBloom() || antiAliasingMode.value !== 'none';
 
 const stopGIMIEmissionAnimation = (): void => {
 	if (gimiEmissionAnimationFrame !== undefined) cancelAnimationFrame(gimiEmissionAnimationFrame);
@@ -1198,11 +1261,15 @@ const renderPreview = () => {
 		gimiShaderController.setFrame(performance.now() * 0.06);
 	}
 	if (renderer && scene && camera) {
-		if (useGIMIBloom() && composer) composer.render();
+		if (bloomPass) bloomPass.enabled = useGIMIBloom();
+		if (taaPass) taaPass.accumulate = antiAliasingMode.value === 'taa' && !isGIMIBodyPipeline();
+		if (usePostProcessing() && composer) composer.render();
 		else renderer.render(scene, camera);
 	}
 	if (zoomRenderer && scene && camera) {
-		if (useGIMIBloom() && zoomComposer) zoomComposer.render();
+		if (zoomBloomPass) zoomBloomPass.enabled = useGIMIBloom();
+		if (zoomTaaPass) zoomTaaPass.accumulate = antiAliasingMode.value === 'taa' && !isGIMIBodyPipeline();
+		if (usePostProcessing() && zoomComposer) zoomComposer.render();
 		else zoomRenderer.render(scene, camera);
 	}
 };
@@ -1217,6 +1284,7 @@ const resizePreview = () => {
 	}
 	renderer.setSize(width, height, false);
 	composer?.setSize(width, height);
+	updateFXAAResolution(fxaaPass, width, height, renderer.getPixelRatio());
 	camera.aspect = width / height;
 	camera.updateProjectionMatrix();
 	renderPreview();
@@ -1232,6 +1300,7 @@ const resizeZoomPreview = () => {
 	}
 	zoomRenderer.setSize(width, height, false);
 	zoomComposer?.setSize(width, height);
+	updateFXAAResolution(zoomFxaaPass, width, height, zoomRenderer.getPixelRatio());
 	camera.aspect = width / height;
 	camera.updateProjectionMatrix();
 	renderPreview();
@@ -1323,6 +1392,8 @@ const initializeZoomRenderer = () => {
 	const zoomBloom = createBloomComposer(zoomRenderer);
 	zoomComposer = zoomBloom?.composer;
 	zoomBloomPass = zoomBloom?.bloomPass;
+	zoomFxaaPass = zoomBloom?.fxaaPass;
+	zoomTaaPass = zoomBloom?.taaPass;
 	disposeZoomPointerControls = createModelPointerControls(zoomRenderer.domElement, closeZoomPreview);
 	if (camera) {
 		zoomControls = new OrbitControls(camera, zoomRenderer.domElement);
@@ -1365,6 +1436,8 @@ const disposeZoomRenderer = () => {
 	disposeBloomComposer(zoomComposer, zoomBloomPass);
 	zoomComposer = undefined;
 	zoomBloomPass = undefined;
+	zoomFxaaPass = undefined;
+	zoomTaaPass = undefined;
 	zoomRenderer?.dispose();
 	zoomRenderer?.domElement.remove();
 	zoomRenderer = undefined;
@@ -2637,6 +2710,8 @@ const initializeRenderer = () => {
 	const mainBloom = createBloomComposer(renderer);
 	composer = mainBloom?.composer;
 	bloomPass = mainBloom?.bloomPass;
+	fxaaPass = mainBloom?.fxaaPass;
+	taaPass = mainBloom?.taaPass;
 	material = createPreviewMaterial();
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = false;
@@ -2680,6 +2755,8 @@ const disposeRenderer = () => {
 	disposeBloomComposer(composer, bloomPass);
 	composer = undefined;
 	bloomPass = undefined;
+	fxaaPass = undefined;
+	taaPass = undefined;
 	renderer?.dispose();
 	renderer?.domElement.remove();
 	renderer = undefined;
@@ -2756,6 +2833,12 @@ watch(gimiEmissionStrength, strength => {
 
 watch(gimiBloomEnabled, enabled => {
 	localStorage.setItem(PREVIEW_GIMI_BLOOM_STORAGE_KEY, String(enabled));
+	renderPreview();
+});
+
+watch(antiAliasingMode, mode => {
+	localStorage.setItem(PREVIEW_ANTI_ALIASING_STORAGE_KEY, mode);
+	recreatePostProcessors();
 	renderPreview();
 });
 
@@ -2958,6 +3041,15 @@ onActivated(async () => {
 						<el-option :label="t('markTexture.preview.halfLambert')" value="half-lambert" />
 						<el-option :label="t('markTexture.preview.pbr')" value="pbr" />
 						<el-option :label="t('markTexture.preview.unlit')" value="unlit" />
+					</el-select>
+				</label>
+				<label>
+					<span>Anti-Aliasing</span>
+					<el-select v-model="antiAliasingMode" size="small">
+						<el-option label="SMAA" value="smaa" />
+						<el-option label="TAA" value="taa" />
+						<el-option label="FXAA" value="fxaa" />
+						<el-option label="Off" value="none" />
 					</el-select>
 				</label>
 				<template v-if="lightingMode === 'gimi-body'">
