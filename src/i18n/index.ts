@@ -15,6 +15,11 @@ import zht from './locales/zht.json'
 
 type SettingsWithLocale = Pick<AppSettings, 'locale'>
 
+const fallbackLocale = {
+  [SSMTLocale.zht]: [SSMTLocale.zhs, SSMTLocale.en],
+  default: [SSMTLocale.en],
+}
+
 const normalizeLocale = (locale?: string): SSMTLocale => {
   const supportedLocale = Object.values(SSMTLocale).find(item => item === locale)
   if (supportedLocale) return supportedLocale
@@ -24,7 +29,7 @@ const normalizeLocale = (locale?: string): SSMTLocale => {
 export const i18n = createI18n({
   legacy: false,
   locale: SSMTLocale.en,
-  fallbackLocale: SSMTLocale.en,
+  fallbackLocale,
   messages: {
     [SSMTLocale.de]: de,
     [SSMTLocale.en]: en,
