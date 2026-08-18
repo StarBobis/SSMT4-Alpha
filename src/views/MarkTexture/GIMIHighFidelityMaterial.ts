@@ -102,10 +102,14 @@ export class GIMITextureSet {
 export class GIMIShaderController {
 	private readonly materials = new Set<THREE.ShaderMaterial>();
 	private readonly lightDirection = new THREE.Vector3(0, Math.cos(THREE.MathUtils.degToRad(50)), Math.sin(THREE.MathUtils.degToRad(50)));
+	private readonly elementColor = new THREE.Color('#a8a8a8');
+	private emissionStrength = 1;
 
 	attach(material: THREE.ShaderMaterial): void {
 		this.materials.add(material);
 		material.uniforms.uLightDir.value.copy(this.lightDirection);
+		material.uniforms.uElementColor.value.copy(this.elementColor);
+		material.uniforms.uEmissionStrength.value = this.emissionStrength;
 	}
 
 	detach(material: THREE.ShaderMaterial): void {
@@ -131,6 +135,15 @@ export class GIMIShaderController {
 		if (!Number.isFinite(frame)) return;
 		for (const material of this.materials) {
 			material.uniforms.uFrame.value = frame;
+		}
+	}
+
+	setEmission(elementColor: THREE.ColorRepresentation, strength: number): void {
+		this.elementColor.set(elementColor);
+		this.emissionStrength = Math.max(0, Number.isFinite(strength) ? strength : 0);
+		for (const material of this.materials) {
+			material.uniforms.uElementColor.value.copy(this.elementColor);
+			material.uniforms.uEmissionStrength.value = this.emissionStrength;
 		}
 	}
 
@@ -161,7 +174,8 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uBaseCurveLut: { value: baseCurveLut },
 		 uRampCurveLut: { value: rampCurveLut },
 		uFrame: { value: 0 },
-		uElementColor: { value: new THREE.Color(0.434153, 0.434153, 0.434153) },
+		uElementColor: { value: new THREE.Color('#a8a8a8') },
+		uEmissionStrength: { value: 1 },
 	},
 	vertexShader: `
 		attribute vec4 ssmtRawTangent;
@@ -210,6 +224,7 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uniform sampler2D uRampCurveLut;
 		uniform float uFrame;
 		uniform vec3 uElementColor;
+		uniform float uEmissionStrength;
 		uniform float uHasDiffuseMap;
 		uniform float uHasNormalMap;
 		uniform float uHasLightMap;
@@ -337,8 +352,8 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 			vec3 ordinaryColor = mix(nonmetalColor, metalColor, metalMask);
 
 			float pulse = mix(1.0, 5.0, 0.5 + 0.5 * cos(uFrame / 50.0));
-			vec3 specialEmission = gradedBase * uElementColor * pulse;
-			vec3 finalColor = mix(ordinaryColor, specialEmission, step(0.5, diffuseAlpha));
+			vec3 specialEmission = gradedBase * uElementColor * (diffuseAlpha * uEmissionStrength * pulse);
+			vec3 finalColor = ordinaryColor + specialEmission;
 			if (uNeedsReview > 0.5) finalColor = mix(finalColor, vec3(1.0, 0.05, 0.05), 0.5);
 			gl_FragColor = vec4(finalColor, 1.0);
 			#include <colorspace_fragment>

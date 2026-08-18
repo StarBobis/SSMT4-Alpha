@@ -7,6 +7,9 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { moveDirectoryToRecycleBin } from '../../utils/RecycleBin';
 import { AppStateManager } from '../../store/AppStateManager';
 import {
@@ -70,6 +73,7 @@ type SubMeshJson = {
 };
 
 type LightingMode = 'half-lambert' | 'unlit' | 'pbr' | 'gimi-body';
+type GIMIElement = 'anemo' | 'geo' | 'electro' | 'dendro' | 'cryo' | 'hydro' | 'pyro' | 'none';
 
 type ElementSource = {
 	buffer: SubMeshCategoryBuffer;
@@ -132,6 +136,9 @@ type GIMIDefaultTexturePaths = { rampMap: string; metalMap: string };
 let gimiDefaultTexturePaths: Promise<GIMIDefaultTexturePaths> | undefined;
 const PREVIEW_LIGHTING_MODE_STORAGE_KEY = 'ssmt4:post-processing-preview:lighting-mode';
 const PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-virtual-sun-x';
+const PREVIEW_GIMI_LIGHT_ORBIT_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-light-orbit';
+const PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-emission-strength';
+const PREVIEW_GIMI_BLOOM_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-bloom';
 const PREVIEW_OUTLINE_STORAGE_KEY = 'ssmt4:post-processing-preview:outline';
 const PREVIEW_OUTLINE_WIDTH_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-width';
 const PREVIEW_OUTLINE_COLOR_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-color';
@@ -158,6 +165,27 @@ const PREVIEW_REFERENCE_FRAME_DIAMETER_METERS = 2;
 const PREVIEW_CAMERA_DISTANCE_MULTIPLIER = 1.65;
 const STRUCTURED_BUFFER_TYPES = new Set(['NORMAL', 'BLENDWEIGHT', 'TANGENTFRAME']);
 const REVERSED_WINDING_GAME_PRESETS = new Set(['WWMI', 'NTEMI', 'YYSLS', 'SNOWBREAK']);
+const GIMI_ELEMENT_COLORS: Record<GIMIElement, string> = {
+	anemo: '#3cffc0',
+	geo: '#ffef3c',
+	electro: '#593cff',
+	dendro: '#3cff42',
+	cryo: '#3cfffb',
+	hydro: '#3c7fff',
+	pyro: '#ff3c3c',
+	none: '#a8a8a8',
+};
+const gimiElementOptions: Array<{ value: GIMIElement; label: string }> = [
+	{ value: 'anemo', label: 'Anemo' },
+	{ value: 'geo', label: 'Geo' },
+	{ value: 'electro', label: 'Electro' },
+	{ value: 'dendro', label: 'Dendro' },
+	{ value: 'cryo', label: 'Cryo' },
+	{ value: 'hydro', label: 'Hydro' },
+	{ value: 'pyro', label: 'Pyro' },
+	{ value: 'none', label: 'None' },
+];
+const gimiEmissionElementByWorkspace = new Map<string, GIMIElement>();
 
 const getGIMIDefaultTexturePaths = (): Promise<GIMIDefaultTexturePaths> => {
 	gimiDefaultTexturePaths ??= (async () => {
@@ -181,12 +209,30 @@ const getGIMIDefaultTexturePaths = (): Promise<GIMIDefaultTexturePaths> => {
 	return gimiDefaultTexturePaths;
 };
 
+const restoreGIMILightOrbit = (): { azimuth: number; elevation: number } => {
+	try {
+		const stored = JSON.parse(localStorage.getItem(PREVIEW_GIMI_LIGHT_ORBIT_STORAGE_KEY) || 'null') as Partial<{ azimuth: number; elevation: number }> | null;
+		if (stored && Number.isFinite(stored.azimuth) && Number.isFinite(stored.elevation)) {
+			return { azimuth: stored.azimuth!, elevation: stored.elevation! };
+		}
+	} catch {
+		// Fall back to the former one-axis sun preference.
+	}
+	const legacyX = Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY) || '50');
+	return { azimuth: 0, elevation: 90 - (Number.isFinite(legacyX) ? legacyX : 50) };
+};
+
 const previewHost = ref<HTMLDivElement>();
 const dataTypes = ref<DataTypeItem[]>([]);
 const selectedDataTypeId = ref('');
 const selectedUvLayerId = ref('');
 const lightingMode = ref<LightingMode>(AppStateManager.appSettings.postProcessPreviewLightingMode);
-const gimiVirtualSunX = ref(Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY) || '50'));
+const restoredGIMILightOrbit = restoreGIMILightOrbit();
+const gimiLightAzimuth = ref(restoredGIMILightOrbit.azimuth);
+const gimiLightElevation = ref(restoredGIMILightOrbit.elevation);
+const gimiEmissionElement = ref<GIMIElement>('none');
+const gimiEmissionStrength = ref(Math.max(0, Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY) || '0.15') || 0));
+const gimiBloomEnabled = ref(localStorage.getItem(PREVIEW_GIMI_BLOOM_STORAGE_KEY) !== 'false');
 // This controls the tangent-space normal's tilt, not mesh vertex displacement.
 // Keeping 1.0 as the default applies a normal map without exaggerating it.
 const normalStrength = ref(1);
@@ -227,6 +273,11 @@ let textureLoadToken = 0;
 
 let renderer: THREE.WebGLRenderer | undefined;
 let zoomRenderer: THREE.WebGLRenderer | undefined;
+let composer: EffectComposer | undefined;
+let zoomComposer: EffectComposer | undefined;
+let bloomPass: UnrealBloomPass | undefined;
+let zoomBloomPass: UnrealBloomPass | undefined;
+let gimiEmissionAnimationFrame: number | undefined;
 let scene: THREE.Scene | undefined;
 let camera: THREE.PerspectiveCamera | undefined;
 let controls: OrbitControls | undefined;
@@ -439,6 +490,25 @@ const selectedNormal = computed(() => {
 const selectedLightMap = computed(() => findMarkedTexture('LightMap'));
 const selectedRampMap = computed(() => findMarkedTexture('RampMap'));
 const selectedMetalMap = computed(() => findMarkedTexture('MetalMap'));
+let emissionInferenceToken = 0;
+
+const restoreOrInferGIMIEmissionElement = async (): Promise<void> => {
+	if (!props.workspacePath) return;
+	const workspaceKey = workspaceEmissionStorageKey(props.workspacePath);
+	const stored = gimiEmissionElementByWorkspace.get(props.workspacePath)
+		|| localStorage.getItem(workspaceKey) as GIMIElement | null;
+	if (stored && stored in GIMI_ELEMENT_COLORS) {
+		gimiEmissionElementByWorkspace.set(props.workspacePath, stored);
+		gimiEmissionElement.value = stored;
+		return;
+	}
+	const token = ++emissionInferenceToken;
+	const inferred = await inferGIMIEmissionElement(selectedDiffuses.value.map(item => item.ddsPath));
+	if (token !== emissionInferenceToken || !inferred) return;
+	gimiEmissionElementByWorkspace.set(props.workspacePath, inferred);
+	localStorage.setItem(workspaceKey, inferred);
+	gimiEmissionElement.value = inferred;
+};
 
 const hasPreviewTarget = computed(() => !!props.workspacePath && !!props.subMeshName);
 
@@ -460,6 +530,65 @@ const currentLightingModeLabel = computed(() => {
 	if (lightingMode.value === 'unlit') return t('markTexture.preview.unlit');
 	return t('markTexture.preview.halfLambert');
 });
+
+const gimiLightOrbIndicatorStyle = computed(() => {
+	const azimuth = THREE.MathUtils.degToRad(gimiLightAzimuth.value);
+	const elevation = THREE.MathUtils.degToRad(gimiLightElevation.value);
+	const x = Math.sin(azimuth) * Math.cos(elevation);
+	const y = -Math.sin(elevation);
+	return { left: `${50 + x * 36}%`, top: `${50 + y * 36}%` };
+});
+
+const setGIMILightFromPointer = (event: PointerEvent, control: HTMLElement): void => {
+	const bounds = control.getBoundingClientRect();
+	if (bounds.width <= 0 || bounds.height <= 0) return;
+	let x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+	let y = ((event.clientY - bounds.top) / bounds.height) * 2 - 1;
+	const length = Math.hypot(x, y);
+	if (length > 1) {
+		x /= length;
+		y /= length;
+	}
+	const z = Math.sqrt(Math.max(1 - x * x - y * y, 0));
+	gimiLightAzimuth.value = THREE.MathUtils.radToDeg(Math.atan2(x, z));
+	gimiLightElevation.value = THREE.MathUtils.radToDeg(Math.asin(-y));
+};
+
+let gimiLightDragging = false;
+const onGIMILightOrbPointerDown = (event: PointerEvent) => {
+	const control = event.currentTarget as HTMLElement;
+	gimiLightDragging = true;
+	control.setPointerCapture(event.pointerId);
+	setGIMILightFromPointer(event, control);
+};
+const onGIMILightOrbPointerMove = (event: PointerEvent) => {
+	if (!gimiLightDragging) return;
+	setGIMILightFromPointer(event, event.currentTarget as HTMLElement);
+};
+const onGIMILightOrbPointerUp = (event: PointerEvent) => {
+	gimiLightDragging = false;
+	const control = event.currentTarget as HTMLElement;
+	if (control.hasPointerCapture(event.pointerId)) control.releasePointerCapture(event.pointerId);
+};
+const onGIMILightOrbKeydown = (event: KeyboardEvent) => {
+	const step = event.shiftKey ? 10 : 3;
+	if (event.key === 'ArrowLeft') gimiLightAzimuth.value -= step;
+	else if (event.key === 'ArrowRight') gimiLightAzimuth.value += step;
+	else if (event.key === 'ArrowUp') gimiLightElevation.value = Math.min(89, gimiLightElevation.value + step);
+	else if (event.key === 'ArrowDown') gimiLightElevation.value = Math.max(-89, gimiLightElevation.value - step);
+	else return;
+	event.preventDefault();
+};
+
+const applyGIMILightOrbit = (): void => {
+	const azimuthRadians = THREE.MathUtils.degToRad(gimiLightAzimuth.value);
+	const elevationRadians = THREE.MathUtils.degToRad(gimiLightElevation.value);
+	gimiShaderController.setLightDirection(new THREE.Vector3(
+		Math.sin(azimuthRadians) * Math.cos(elevationRadians),
+		Math.sin(elevationRadians),
+		Math.cos(azimuthRadians) * Math.cos(elevationRadians),
+	));
+};
 
 const restoreLightingModePreference = () => {
 	try {
@@ -1015,15 +1144,66 @@ const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) 
 	});
 };
 
+const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): { composer: EffectComposer; bloomPass: UnrealBloomPass } | undefined => {
+	if (!scene || !camera) return undefined;
+	const isZoomRenderer = targetRenderer === zoomRenderer;
+	const nextComposer = new EffectComposer(targetRenderer);
+	nextComposer.setPixelRatio(targetRenderer.getPixelRatio());
+	nextComposer.addPass(new RenderPass(scene, camera));
+	// UnrealBloomPass radius is more aggressive than Blender Glare's Size.
+	// The embedded preview therefore uses a compact halo; the enlarged preview
+	// retains a stronger, broader result at its higher effective resolution.
+	const nextBloomPass = new UnrealBloomPass(
+		new THREE.Vector2(1, 1),
+		isZoomRenderer ? 0.92 : 0.26,
+		isZoomRenderer ? 0.46 : 0.22,
+		1.0,
+	);
+	const bloomUniforms = nextBloomPass.highPassUniforms as Record<string, { value: number }>;
+	if (bloomUniforms.smoothWidth) bloomUniforms.smoothWidth.value = 1.0;
+	const bloomTint = new THREE.Color('#ff857b');
+	for (const tint of nextBloomPass.bloomTintColors) tint.set(bloomTint.r, bloomTint.g, bloomTint.b);
+	nextComposer.addPass(nextBloomPass);
+	return { composer: nextComposer, bloomPass: nextBloomPass };
+};
+
+const disposeBloomComposer = (targetComposer: EffectComposer | undefined, targetBloomPass: UnrealBloomPass | undefined): void => {
+	targetBloomPass?.dispose();
+	targetComposer?.dispose();
+};
+
+const useGIMIBloom = () => isGIMIBodyPipeline() && gimiBloomEnabled.value;
+
+const stopGIMIEmissionAnimation = (): void => {
+	if (gimiEmissionAnimationFrame !== undefined) cancelAnimationFrame(gimiEmissionAnimationFrame);
+	gimiEmissionAnimationFrame = undefined;
+};
+
+const startGIMIEmissionAnimation = (): void => {
+	stopGIMIEmissionAnimation();
+	if (!renderer || !isGIMIBodyPipeline() || gimiEmissionStrength.value <= 0) return;
+	const animate = () => {
+		if (!renderer || !isGIMIBodyPipeline() || gimiEmissionStrength.value <= 0) {
+			gimiEmissionAnimationFrame = undefined;
+			return;
+		}
+		renderPreview();
+		gimiEmissionAnimationFrame = requestAnimationFrame(animate);
+	};
+	gimiEmissionAnimationFrame = requestAnimationFrame(animate);
+};
+
 const renderPreview = () => {
 	if (isGIMIBodyPipeline()) {
 		gimiShaderController.setFrame(performance.now() * 0.06);
 	}
 	if (renderer && scene && camera) {
-		renderer.render(scene, camera);
+		if (useGIMIBloom() && composer) composer.render();
+		else renderer.render(scene, camera);
 	}
 	if (zoomRenderer && scene && camera) {
-		zoomRenderer.render(scene, camera);
+		if (useGIMIBloom() && zoomComposer) zoomComposer.render();
+		else zoomRenderer.render(scene, camera);
 	}
 };
 
@@ -1036,6 +1216,7 @@ const resizePreview = () => {
 		return;
 	}
 	renderer.setSize(width, height, false);
+	composer?.setSize(width, height);
 	camera.aspect = width / height;
 	camera.updateProjectionMatrix();
 	renderPreview();
@@ -1050,6 +1231,7 @@ const resizeZoomPreview = () => {
 		return;
 	}
 	zoomRenderer.setSize(width, height, false);
+	zoomComposer?.setSize(width, height);
 	camera.aspect = width / height;
 	camera.updateProjectionMatrix();
 	renderPreview();
@@ -1138,6 +1320,9 @@ const initializeZoomRenderer = () => {
 	zoomRenderer.setClearColor(0x000000, 0);
 	zoomRenderer.outputColorSpace = THREE.SRGBColorSpace;
 	zoomPreviewHost.value.appendChild(zoomRenderer.domElement);
+	const zoomBloom = createBloomComposer(zoomRenderer);
+	zoomComposer = zoomBloom?.composer;
+	zoomBloomPass = zoomBloom?.bloomPass;
 	disposeZoomPointerControls = createModelPointerControls(zoomRenderer.domElement, closeZoomPreview);
 	if (camera) {
 		zoomControls = new OrbitControls(camera, zoomRenderer.domElement);
@@ -1177,6 +1362,9 @@ const disposeZoomRenderer = () => {
 	disposeZoomPointerControls = undefined;
 	zoomControls?.dispose();
 	zoomControls = undefined;
+	disposeBloomComposer(zoomComposer, zoomBloomPass);
+	zoomComposer = undefined;
+	zoomBloomPass = undefined;
 	zoomRenderer?.dispose();
 	zoomRenderer?.domElement.remove();
 	zoomRenderer = undefined;
@@ -1405,7 +1593,7 @@ const initializePreviewPointerControls = () => {
 
 const updateMaterialMode = () => {
 	if (isGIMIBodyPipeline()) {
-		gimiShaderController.setVirtualSun(gimiVirtualSunX.value);
+		applyGIMILightOrbit();
 		renderPreview();
 		return;
 	}
@@ -1550,6 +1738,59 @@ const decodeRgbaDds = (bytes: Uint8Array): { width: number; height: number; pixe
 		throw new Error('Incomplete DDS texture');
 	}
 	return { width, height, pixels: bytes.slice(dataOffset, dataOffset + byteLength) };
+};
+
+const workspaceEmissionStorageKey = (workspacePath: string): string => {
+	let hash = 0;
+	for (const character of workspacePath) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+	return `ssmt4:post-processing-preview:gimi-emission-element:${hash >>> 0}`;
+};
+
+const parseHexColor = (color: string): [number, number, number] => [
+	Number.parseInt(color.slice(1, 3), 16),
+	Number.parseInt(color.slice(3, 5), 16),
+	Number.parseInt(color.slice(5, 7), 16),
+];
+
+const inferGIMIEmissionElement = async (ddsPaths: readonly string[]): Promise<GIMIElement | undefined> => {
+	let totalWeight = 0;
+	const summedColor = [0, 0, 0];
+	for (const ddsPath of ddsPaths) {
+		if (!ddsPath) continue;
+		try {
+			const preparedPath = await invoke<string>('prepare_dds_webgl_preview', {
+				sourcePath: ddsPath,
+				maxDimension: 512,
+			});
+			const { pixels } = decodeRgbaDds(await readFile(preparedPath));
+			const pixelCount = pixels.length / 4;
+			const stride = Math.max(1, Math.floor(pixelCount / 32_768));
+			for (let pixel = 0; pixel < pixelCount; pixel += stride) {
+				const offset = pixel * 4;
+				const alpha = pixels[offset + 3] / 255;
+				if (alpha < 0.99) continue;
+				summedColor[0] += pixels[offset];
+				summedColor[1] += pixels[offset + 1];
+				summedColor[2] += pixels[offset + 2];
+				totalWeight += 1;
+			}
+		} catch (error) {
+			console.warn('Failed to infer GIMI emission color', ddsPath, error);
+		}
+	}
+	if (totalWeight === 0) return undefined;
+	const average = summedColor.map(value => value / totalWeight) as [number, number, number];
+	let closest: GIMIElement = 'none';
+	let closestDistance = Number.POSITIVE_INFINITY;
+	for (const [element, color] of Object.entries(GIMI_ELEMENT_COLORS) as Array<[GIMIElement, string]>) {
+		const candidate = parseHexColor(color);
+		const distance = candidate.reduce((sum, channel, index) => sum + Math.pow(channel - average[index], 2), 0);
+		if (distance < closestDistance) {
+			closest = element;
+			closestDistance = distance;
+		}
+	}
+	return closest;
 };
 
 const loadCompressedDdsTexture = async (ddsPath: string, colorTexture: boolean): Promise<THREE.Texture | undefined> => {
@@ -2393,6 +2634,9 @@ const initializeRenderer = () => {
 
 	scene = new THREE.Scene();
 	camera = new THREE.PerspectiveCamera(36, 1, 0.01, 10_000);
+	const mainBloom = createBloomComposer(renderer);
+	composer = mainBloom?.composer;
+	bloomPass = mainBloom?.bloomPass;
 	material = createPreviewMaterial();
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = false;
@@ -2409,6 +2653,7 @@ const initializeRenderer = () => {
 };
 
 const disposeRenderer = () => {
+	stopGIMIEmissionAnimation();
 	resizeObserver?.disconnect();
 	resizeObserver = undefined;
 	disposeZoomRenderer();
@@ -2432,6 +2677,9 @@ const disposeRenderer = () => {
 	disposePreviewMaterial(material);
 	material = undefined;
 	gimiShaderController.dispose();
+	disposeBloomComposer(composer, bloomPass);
+	composer = undefined;
+	bloomPass = undefined;
 	renderer?.dispose();
 	renderer?.domElement.remove();
 	renderer = undefined;
@@ -2481,13 +2729,43 @@ watch(lightingMode, mode => {
 	updateMaterialMode();
 	saveLightingModePreference(mode);
 	schedulePreviewRebuild();
+	startGIMIEmissionAnimation();
 });
 
-watch(gimiVirtualSunX, value => {
-	localStorage.setItem(PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY, String(value));
-	gimiShaderController.setVirtualSun(value);
+watch([gimiLightAzimuth, gimiLightElevation], ([azimuth, elevation]) => {
+	localStorage.setItem(PREVIEW_GIMI_LIGHT_ORBIT_STORAGE_KEY, JSON.stringify({ azimuth, elevation }));
+	applyGIMILightOrbit();
 	renderPreview();
 });
+
+watch(gimiEmissionElement, element => {
+	if (props.workspacePath) {
+		gimiEmissionElementByWorkspace.set(props.workspacePath, element);
+		localStorage.setItem(workspaceEmissionStorageKey(props.workspacePath), element);
+	}
+	gimiShaderController.setEmission(GIMI_ELEMENT_COLORS[element], gimiEmissionStrength.value);
+	renderPreview();
+});
+
+watch(gimiEmissionStrength, strength => {
+	localStorage.setItem(PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY, String(Math.max(0, strength)));
+	gimiShaderController.setEmission(GIMI_ELEMENT_COLORS[gimiEmissionElement.value], strength);
+	renderPreview();
+	startGIMIEmissionAnimation();
+});
+
+watch(gimiBloomEnabled, enabled => {
+	localStorage.setItem(PREVIEW_GIMI_BLOOM_STORAGE_KEY, String(enabled));
+	renderPreview();
+});
+
+watch(
+	() => `${props.workspacePath}|${selectedDiffuses.value.map(item => item.ddsPath).join('|')}`,
+	() => {
+		void restoreOrInferGIMIEmissionElement();
+	},
+	{ immediate: true },
+);
 
 watch([normalStrength, fallbackColor, diffuseAlphaEmissionEnabled, emissionColor, emissionFactor], () => {
 	localStorage.setItem(PREVIEW_EMISSION_STORAGE_KEY, String(diffuseAlphaEmissionEnabled.value));
@@ -2498,10 +2776,14 @@ watch([normalStrength, fallbackColor, diffuseAlphaEmissionEnabled, emissionColor
 
 onMounted(async () => {
 	restoreLightingModePreference();
+	applyGIMILightOrbit();
+	gimiShaderController.setEmission(GIMI_ELEMENT_COLORS[gimiEmissionElement.value], gimiEmissionStrength.value);
 	initializeRenderer();
+	startGIMIEmissionAnimation();
 	await nextTick();
 	schedulePreviewRebuild();
 	void updateMaterialTextures();
+	void restoreOrInferGIMIEmissionElement();
 });
 
 onBeforeUnmount(() => {
@@ -2530,6 +2812,7 @@ onDeactivated(() => {
 	loadToken += 1;
 	previewBuildToken += 1;
 	textureLoadToken += 1;
+	stopGIMIEmissionAnimation();
 	closeZoomPreview();
 	disposeRenderer();
 });
@@ -2537,6 +2820,7 @@ onDeactivated(() => {
 onActivated(async () => {
 	if (renderer) return;
 	initializeRenderer();
+	startGIMIEmissionAnimation();
 	await nextTick();
 	void loadDataTypes();
 	schedulePreviewRebuild();
@@ -2620,6 +2904,22 @@ onActivated(async () => {
 			<div v-if="!hasPreviewTarget" class="preview-empty">{{ t('markTexture.preview.selectSubMesh') }}</div>
 			<div v-else-if="dataTypes.length === 0 && !isLoading" class="preview-empty">{{ t('markTexture.preview.noDataTypes') }}</div>
 			<div v-else-if="previewError" class="preview-empty is-error">{{ previewError }}</div>
+			<div
+				v-if="lightingMode === 'gimi-body'"
+				class="gimi-light-orb"
+				role="slider"
+				tabindex="0"
+				aria-label="GIMI light direction"
+				:title="'GIMI light direction'"
+				@dblclick.stop
+				@pointerdown.stop="onGIMILightOrbPointerDown"
+				@pointermove.stop="onGIMILightOrbPointerMove"
+				@pointerup.stop="onGIMILightOrbPointerUp"
+				@pointercancel.stop="onGIMILightOrbPointerUp"
+				@keydown="onGIMILightOrbKeydown"
+			>
+				<span class="gimi-light-orb-indicator" :style="gimiLightOrbIndicatorStyle" />
+			</div>
 			<div class="preview-overlay-info">
 				<span>{{ selectedDiffuse ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
 				<span>{{ selectedNormal ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
@@ -2661,9 +2961,19 @@ onActivated(async () => {
 					</el-select>
 				</label>
 				<template v-if="lightingMode === 'gimi-body'">
+					<label>
+						<span>God Eye Element</span>
+						<el-select v-model="gimiEmissionElement" size="small">
+							<el-option v-for="option in gimiElementOptions" :key="option.value" :label="option.label" :value="option.value" />
+						</el-select>
+					</label>
 					<label class="displacement-control">
-						<span>Virtual Sun X</span>
-						<el-slider v-model="gimiVirtualSunX" :min="-180" :max="180" :step="0.1" show-input :show-input-controls="false" />
+						<span>God Eye Emission</span>
+						<el-slider v-model="gimiEmissionStrength" :min="0" :max="5" :step="0.01" show-input :show-input-controls="false" />
+					</label>
+					<label class="outline-control">
+						<span>Bloom</span>
+						<el-switch v-model="gimiBloomEnabled" />
 					</label>
 				</template>
 				<template v-else>
@@ -3017,6 +3327,53 @@ onActivated(async () => {
 	width: 100%;
 	height: 100%;
 	touch-action: none;
+}
+
+.gimi-light-orb {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 3;
+	width: 58px;
+	height: 58px;
+	border: 1px solid rgba(240, 247, 255, 0.42);
+	border-radius: 50%;
+	background: rgba(26, 36, 50, 0.22);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10), 0 4px 15px rgba(0, 0, 0, 0.18);
+	backdrop-filter: blur(3px);
+	-webkit-backdrop-filter: blur(3px);
+	cursor: grab;
+	touch-action: none;
+}
+
+.gimi-light-orb:active {
+	cursor: grabbing;
+}
+
+.gimi-light-orb:focus-visible {
+	outline: 2px solid rgba(255, 255, 255, 0.82);
+	outline-offset: 3px;
+}
+
+.gimi-light-orb::after {
+	content: '';
+	position: absolute;
+	inset: 9px;
+	border: 1px solid rgba(255, 255, 255, 0.17);
+	border-radius: 50%;
+	pointer-events: none;
+}
+
+.gimi-light-orb-indicator {
+	position: absolute;
+	width: 9px;
+	height: 9px;
+	border: 1px solid rgba(255, 255, 255, 0.95);
+	border-radius: 50%;
+	background: rgba(255, 226, 185, 0.92);
+	box-shadow: 0 0 10px rgba(255, 194, 124, 0.9);
+	transform: translate(-50%, -50%);
+	pointer-events: none;
 }
 
 .preview-canvas-wrap.is-loading::after {
