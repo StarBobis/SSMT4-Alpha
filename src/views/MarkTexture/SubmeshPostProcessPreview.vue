@@ -13,6 +13,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { TAARenderPass } from 'three/examples/jsm/postprocessing/TAARenderPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { moveDirectoryToRecycleBin } from '../../utils/RecycleBin';
 import { AppStateManager } from '../../store/AppStateManager';
@@ -143,7 +144,9 @@ const PREVIEW_LIGHTING_MODE_STORAGE_KEY = 'ssmt4:post-processing-preview:lightin
 const PREVIEW_GIMI_VIRTUAL_SUN_X_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-virtual-sun-x';
 const PREVIEW_GIMI_LIGHT_ORBIT_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-light-orbit';
 const PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-emission-strength';
+const PREVIEW_GIMI_NORMAL_STRENGTH_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-normal-strength';
 const PREVIEW_GIMI_BLOOM_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-bloom';
+const PREVIEW_GIMI_BLOOM_STRENGTH_STORAGE_KEY = 'ssmt4:post-processing-preview:gimi-bloom-strength';
 const PREVIEW_ANTI_ALIASING_STORAGE_KEY = 'ssmt4:post-processing-preview:anti-aliasing';
 const PREVIEW_OUTLINE_STORAGE_KEY = 'ssmt4:post-processing-preview:outline';
 const PREVIEW_OUTLINE_WIDTH_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-width';
@@ -152,7 +155,7 @@ const PREVIEW_OUTLINE_DIRECTION_STORAGE_KEY = 'ssmt4:post-processing-preview:out
 const PREVIEW_OUTLINE_WEIGHT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-weight';
 const PREVIEW_OUTLINE_VISUALIZATION_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-visualization';
 const PREVIEW_OUTLINE_SKIP_TRANSPARENT_STORAGE_KEY = 'ssmt4:post-processing-preview:outline-skip-transparent';
-const GIMI_BLOOM_STRENGTH = 0.14;
+const GIMI_BLOOM_DEFAULT_STRENGTH = 0.14;
 const GIMI_BLOOM_BASE_RADIUS = 0.28;
 const PREVIEW_OUTLINE_PREFERENCE_VERSION_KEY = 'ssmt4:post-processing-preview:outline-preference-version';
 const PREVIEW_EMISSION_STORAGE_KEY = 'ssmt4:post-processing-preview:diffuse-alpha-emission';
@@ -240,7 +243,15 @@ const gimiLightAzimuth = ref(restoredGIMILightOrbit.azimuth);
 const gimiLightElevation = ref(restoredGIMILightOrbit.elevation);
 const gimiEmissionElement = ref<GIMIElement>('none');
 const gimiEmissionStrength = ref(Math.max(0, Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_EMISSION_STRENGTH_STORAGE_KEY) || '0.15') || 0));
+const storedGIMINormalStrength = Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_NORMAL_STRENGTH_STORAGE_KEY) || '');
+const gimiNormalStrength = ref(Number.isFinite(storedGIMINormalStrength)
+	? THREE.MathUtils.clamp(storedGIMINormalStrength, 0, 1)
+	: 0.55);
 const gimiBloomEnabled = ref(localStorage.getItem(PREVIEW_GIMI_BLOOM_STORAGE_KEY) !== 'false');
+const storedGIMIBloomStrength = Number.parseFloat(localStorage.getItem(PREVIEW_GIMI_BLOOM_STRENGTH_STORAGE_KEY) || '');
+const gimiBloomStrength = ref(Number.isFinite(storedGIMIBloomStrength)
+	? THREE.MathUtils.clamp(storedGIMIBloomStrength, 0, 1)
+	: GIMI_BLOOM_DEFAULT_STRENGTH);
 const antiAliasingMode = ref<AntiAliasingMode>((localStorage.getItem(PREVIEW_ANTI_ALIASING_STORAGE_KEY) as AntiAliasingMode) || 'smaa');
 // This controls the tangent-space normal's tilt, not mesh vertex displacement.
 // Keeping 1.0 as the default applies a normal map without exaggerating it.
@@ -1184,6 +1195,18 @@ const getGIMIBloomRadius = (): number => {
 	return THREE.MathUtils.clamp(GIMI_BLOOM_BASE_RADIUS * framingDistance / currentDistance, 0.08, 0.8);
 };
 
+const getGIMIBloomStrength = (targetRenderer: THREE.WebGLRenderer): number => {
+	if (!renderer || targetRenderer === renderer) return gimiBloomStrength.value;
+	const baseSize = renderer.getDrawingBufferSize(new THREE.Vector2());
+	const targetSize = targetRenderer.getDrawingBufferSize(new THREE.Vector2());
+	const basePixels = Math.max(baseSize.x * baseSize.y, 1);
+	const targetPixels = Math.max(targetSize.x * targetSize.y, 1);
+	// UnrealBloom distributes a fixed HDR energy over its downsampled mips.
+	// Normalize by linear display-size growth so the enlarged preview does not
+	// become perceptually weaker than the embedded preview.
+	return gimiBloomStrength.value * THREE.MathUtils.clamp(Math.sqrt(targetPixels / basePixels), 1, 3);
+};
+
 const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): PreviewPostProcessor | undefined => {
 	if (!scene || !camera) return undefined;
 	const nextComposer = new EffectComposer(targetRenderer);
@@ -1202,7 +1225,7 @@ const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): PreviewPostPr
 	// preview window that happens to render it.
 	const nextBloomPass = new UnrealBloomPass(
 		new THREE.Vector2(1, 1),
-		GIMI_BLOOM_STRENGTH,
+		getGIMIBloomStrength(targetRenderer),
 		getGIMIBloomRadius(),
 		1.0,
 	);
@@ -1218,6 +1241,10 @@ const createBloomComposer = (targetRenderer: THREE.WebGLRenderer): PreviewPostPr
 	} else if (antiAliasingMode.value === 'smaa') {
 		nextComposer.addPass(new SMAAPass());
 	}
+	// Render targets stay in linear space. This final pass performs the same
+	// tone mapping and output color-space conversion as a direct renderer call,
+	// keeping the base material unchanged when bloom strength is zero.
+	nextComposer.addPass(new OutputPass());
 	return { composer: nextComposer, bloomPass: nextBloomPass, fxaaPass: nextFxaaPass, taaPass: nextTaaPass };
 };
 
@@ -1279,6 +1306,7 @@ const renderPreview = () => {
 	if (renderer && scene && camera) {
 		if (bloomPass) {
 			bloomPass.enabled = useGIMIBloom();
+			bloomPass.strength = getGIMIBloomStrength(renderer);
 			bloomPass.radius = getGIMIBloomRadius();
 		}
 		if (taaPass) taaPass.accumulate = antiAliasingMode.value === 'taa' && !isGIMIBodyPipeline();
@@ -1288,6 +1316,7 @@ const renderPreview = () => {
 	if (zoomRenderer && scene && camera) {
 		if (zoomBloomPass) {
 			zoomBloomPass.enabled = useGIMIBloom();
+			zoomBloomPass.strength = getGIMIBloomStrength(zoomRenderer);
 			zoomBloomPass.radius = getGIMIBloomRadius();
 		}
 		if (zoomTaaPass) zoomTaaPass.accumulate = antiAliasingMode.value === 'taa' && !isGIMIBodyPipeline();
@@ -1717,6 +1746,7 @@ const updateMaterialSettings = () => {
 			previewMaterial.uniforms.uEmissionFactor.value = Math.max(0, emissionFactor.value || 0);
 		}
 	}
+	if (isGIMIBodyPipeline()) gimiShaderController.setNormalStrength(gimiNormalStrength.value);
 	if (material) {
 		material.uniforms.uFallbackColor.value.copy(fallbackColor.value);
 	}
@@ -2857,8 +2887,19 @@ watch(gimiEmissionStrength, strength => {
 	startGIMIEmissionAnimation();
 });
 
+watch(gimiNormalStrength, strength => {
+	localStorage.setItem(PREVIEW_GIMI_NORMAL_STRENGTH_STORAGE_KEY, String(THREE.MathUtils.clamp(strength, 0, 1)));
+	gimiShaderController.setNormalStrength(strength);
+	renderPreview();
+});
+
 watch(gimiBloomEnabled, enabled => {
 	localStorage.setItem(PREVIEW_GIMI_BLOOM_STORAGE_KEY, String(enabled));
+	renderPreview();
+});
+
+watch(gimiBloomStrength, strength => {
+	localStorage.setItem(PREVIEW_GIMI_BLOOM_STRENGTH_STORAGE_KEY, String(strength));
 	renderPreview();
 });
 
@@ -2887,6 +2928,7 @@ onMounted(async () => {
 	restoreLightingModePreference();
 	applyGIMILightOrbit();
 	gimiShaderController.setEmission(GIMI_ELEMENT_COLORS[gimiEmissionElement.value], gimiEmissionStrength.value);
+	gimiShaderController.setNormalStrength(gimiNormalStrength.value);
 	initializeRenderer();
 	startGIMIEmissionAnimation();
 	await nextTick();
@@ -3103,9 +3145,25 @@ onActivated(async () => {
 						<span>God Eye Emission</span>
 						<el-slider v-model="gimiEmissionStrength" :min="0" :max="5" :step="0.01" show-input :show-input-controls="false" />
 					</label>
+					<label class="displacement-control">
+						<span>Normal Strength</span>
+						<el-slider v-model="gimiNormalStrength" :min="0" :max="1" :step="0.01" :disabled="!selectedNormal" show-input :show-input-controls="false" />
+					</label>
 					<label class="outline-control">
 						<span>Bloom</span>
 						<el-switch v-model="gimiBloomEnabled" />
+					</label>
+					<label class="displacement-control">
+						<span>Bloom Strength</span>
+						<el-slider
+							v-model="gimiBloomStrength"
+							:min="0"
+							:max="1"
+							:step="0.01"
+							:disabled="!gimiBloomEnabled"
+							show-input
+							:show-input-controls="false"
+						/>
 					</label>
 				</template>
 				<template v-else>
@@ -3203,7 +3261,23 @@ onActivated(async () => {
 				@wheel.prevent
 				@contextmenu.prevent
 			>
-				<div ref="zoomPreviewHost" class="preview-zoom-canvas-wrap" :style="previewZoomDialogStyle" />
+				<div ref="zoomPreviewHost" class="preview-zoom-canvas-wrap" :style="previewZoomDialogStyle">
+					<div
+						v-if="lightingMode === 'gimi-body'"
+						class="gimi-light-orb gimi-light-orb-zoom"
+						role="slider"
+						tabindex="0"
+						aria-label="GIMI light direction"
+						title="GIMI light direction"
+						@pointerdown.stop="onGIMILightOrbPointerDown"
+						@pointermove.stop="onGIMILightOrbPointerMove"
+						@pointerup.stop="onGIMILightOrbPointerUp"
+						@pointercancel.stop="onGIMILightOrbPointerUp"
+						@keydown="onGIMILightOrbKeydown"
+					>
+						<span class="gimi-light-orb-indicator" :style="gimiLightOrbIndicatorStyle" />
+					</div>
+				</div>
 			</div>
 		</Teleport>
 	</section>
@@ -3569,6 +3643,13 @@ onActivated(async () => {
 	box-shadow: 0 0 10px rgba(255, 194, 124, 0.9);
 	transform: translate(-50%, -50%);
 	pointer-events: none;
+}
+
+.gimi-light-orb-zoom {
+	top: 16px;
+	right: 16px;
+	width: 68px;
+	height: 68px;
 }
 
 .preview-canvas-wrap.is-loading::after {
