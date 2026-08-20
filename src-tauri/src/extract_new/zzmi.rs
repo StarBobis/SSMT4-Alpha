@@ -392,6 +392,14 @@ impl ZZMINewExtractor {
             .ordered_gpu_cpu_d3d11_gametype_list
             .iter()
         {
+            if !crate::extract_new::can_match_gametype(
+                pointlist_index,
+                d3d11_game_type.gpu_pre_skinning,
+            ) {
+                crate::extract_log!("未找到PointlistIndex，跳过GPU-PreSkinning数据类型");
+                continue;
+            }
+
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
                 crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
                 continue;
