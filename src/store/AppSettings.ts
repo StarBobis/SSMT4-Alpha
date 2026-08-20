@@ -1,3 +1,9 @@
+import {
+	migrateLegacyXianZunProvider,
+	normalizeXianZunProvider,
+	type XianZunProvider,
+} from './XianZunProviders'
+
 export enum BGType {
 	Image = 'Image',
 	Video = 'Video',
@@ -297,6 +303,8 @@ export class AppSettings {
 	xianzunApiKey: string = ''
 	xianzunApiUrl: string = 'https://api.deepseek.com/v1'
 	xianzunModel: string = 'deepseek-v4-flash'
+	xianzunProviders: XianZunProvider[] = []
+	xianzunActiveProviderId: string = ''
 	xianzunSystemPrompt: string = ''
 	xianzunReasoningEffort: XianZunReasoningEffort = 'auto'
 	xianzunApprovalMode: XianZunApprovalMode = 'manual'
@@ -393,6 +401,26 @@ export class AppSettings {
 					? 'deepseek-v4-pro'
 					: 'deepseek-v4-flash'
 				: savedXianzunModel || this.xianzunModel
+		this.xianzunProviders = Array.isArray(init?.xianzunProviders)
+			? init.xianzunProviders
+				.map(normalizeXianZunProvider)
+				.filter((provider): provider is XianZunProvider => provider !== null)
+			: []
+		if (this.xianzunProviders.length === 0) {
+			this.xianzunProviders = [
+				migrateLegacyXianZunProvider(this.xianzunApiUrl, this.xianzunApiKey, this.xianzunModel),
+			]
+		}
+		this.xianzunActiveProviderId =
+			this.xianzunProviders.some((provider) => provider.id === init?.xianzunActiveProviderId)
+				? init!.xianzunActiveProviderId!
+				: this.xianzunProviders[0].id
+		const activeXianZunProvider = this.xianzunProviders.find(
+			(provider) => provider.id === this.xianzunActiveProviderId
+		)!
+		this.xianzunApiKey = activeXianZunProvider.apiKey
+		this.xianzunApiUrl = activeXianZunProvider.baseUrl
+		this.xianzunModel = activeXianZunProvider.model
 		this.xianzunSystemPrompt = init?.xianzunSystemPrompt ?? this.xianzunSystemPrompt
 		this.xianzunReasoningEffort = normalizeReasoningEffort(init?.xianzunReasoningEffort)
 		this.xianzunApprovalMode = normalizeXianZunApprovalMode(init?.xianzunApprovalMode)
@@ -477,6 +505,8 @@ export class AppSettings {
 			xianzunApiKey: this.xianzunApiKey,
 			xianzunApiUrl: this.xianzunApiUrl,
 			xianzunModel: this.xianzunModel,
+			xianzunProviders: this.xianzunProviders,
+			xianzunActiveProviderId: this.xianzunActiveProviderId,
 			xianzunSystemPrompt: this.xianzunSystemPrompt,
 			xianzunReasoningEffort: this.xianzunReasoningEffort,
 			xianzunApprovalMode: this.xianzunApprovalMode,
