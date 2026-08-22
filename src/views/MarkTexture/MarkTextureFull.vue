@@ -42,6 +42,8 @@ import {
 	readDrawCallIndexesMatchedByPersistedSubMeshMarks,
 	readPersistedSubMeshDrawCallIndexes,
 	updateCurrentSubMeshTextureMarkupStyle,
+	writeSubMeshRoleMetadata,
+	type SubMeshRole,
 } from './MarkTextureFull';
 
 type MarkStyle = 'Hash' | 'Slot' | 'SharedSlot';
@@ -2437,7 +2439,24 @@ const openSubMeshContextMenu = (event: MouseEvent, selectionValue: string): void
 	subMeshContextMenu.value = { subMesh: selectionValue, x: position.x, y: position.y };
 };
 
-const markSubMeshRole = (role: 'face' | 'neck' | 'eye'): void => {
+const persistSubMeshRoleMetadata = async (
+	selectionValue: string,
+	role?: SubMeshRole,
+): Promise<void> => {
+	const selection = parseSubMeshSelection(selectionValue);
+	const source = selection
+		? workspaceSources.value.find(candidate => candidate.tabId === selection.tabId)
+		: undefined;
+	if (!selection || !source) return;
+
+	await writeSubMeshRoleMetadata({
+		workspacePath: source.workspacePath,
+		subMesh: selection.subMeshName,
+		role,
+	});
+};
+
+const markSubMeshRole = async (role: 'face' | 'neck' | 'eye'): Promise<void> => {
 	const selectionValue = subMeshContextMenu.value?.subMesh;
 	if (!selectionValue) return;
 	if (role === 'face') {
@@ -2457,9 +2476,15 @@ const markSubMeshRole = (role: 'face' | 'neck' | 'eye'): void => {
 	}
 	subMeshContextMenu.value = undefined;
 	scheduleSaveSelectionMemory();
+	try {
+		await persistSubMeshRoleMetadata(selectionValue, role === 'face' ? 'Face' : role === 'neck' ? 'Neck' : 'Eye');
+	} catch (error) {
+		debugError('MarkTextureFull', 'failed to persist SubMeshRole metadata', error);
+		ElMessage.error('写入 SubMesh 角色元数据失败');
+	}
 };
 
-const clearSubMeshRole = (): void => {
+const clearSubMeshRole = async (): Promise<void> => {
 	const selectionValue = subMeshContextMenu.value?.subMesh;
 	if (!selectionValue) return;
 	faceSubMeshes.value = faceSubMeshes.value.filter(value => value !== selectionValue);
@@ -2467,6 +2492,12 @@ const clearSubMeshRole = (): void => {
 	eyeSubMeshes.value = eyeSubMeshes.value.filter(value => value !== selectionValue);
 	subMeshContextMenu.value = undefined;
 	scheduleSaveSelectionMemory();
+	try {
+		await persistSubMeshRoleMetadata(selectionValue);
+	} catch (error) {
+		debugError('MarkTextureFull', 'failed to clear SubMeshRole metadata', error);
+		ElMessage.error('清除 SubMesh 角色元数据失败');
+	}
 };
 
 const subMeshRoleLabel = (selectionValue: string): string => {

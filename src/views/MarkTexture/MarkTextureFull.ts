@@ -4,6 +4,7 @@ import { applyTextureMemoryToItems, loadTextureMemoryByPSHash } from '../../comm
 import { SSMTStringUtils } from '../../utils/SSMTStringUtils'
 
 export type MarkStyle = 'Hash' | 'Slot' | 'SharedSlot'
+export type SubMeshRole = 'Face' | 'Neck' | 'Eye'
 
 export type TextureItemForApply = {
 	name: string
@@ -57,6 +58,7 @@ type SubMeshJsonObject = {
 	IndexBufferList?: unknown
 	CategoryBufferList?: unknown
 	TextureMarkUpInfoList?: unknown
+	SubMeshRole?: SubMeshRole
 	[key: string]: unknown
 }
 
@@ -66,6 +68,7 @@ type SubMeshTargetEntry = {
 }
 
 const SUBMESH_TEXTURE_MARKUP_LIST_KEY = 'TextureMarkUpInfoList'
+const SUBMESH_ROLE_KEY = 'SubMeshRole'
 
 export type AppliedSubMeshTextureMark = {
 	markName: string
@@ -248,6 +251,41 @@ const writeMarkupToSubMeshJson = async (
 
 	parsed[SUBMESH_TEXTURE_MARKUP_LIST_KEY] = markupList
 	await writeTextFile(targetJsonPath, JSON.stringify(parsed, null, 2))
+}
+
+/**
+ * Persists the semantic role selected in the post-process page beside the
+ * extracted SubMesh metadata. Blender importers can consume this directly,
+ * without depending on SSMT's page-local MarkTextureConfig.json.
+ */
+export const writeSubMeshRoleMetadata = async (args: {
+	workspacePath: string
+	subMesh: string
+	role?: SubMeshRole
+}): Promise<{ updatedFileCount: number }> => {
+	const { workspacePath, subMesh, role } = args
+	if (!workspacePath || !subMesh) {
+		return { updatedFileCount: 0 }
+	}
+
+	const targetEntries = await getSubMeshTargetEntries(workspacePath, subMesh)
+	let updatedFileCount = 0
+	for (const entry of targetEntries) {
+		const parsed = await readSubMeshJsonFile(entry.jsonPath)
+		if (!parsed) {
+			continue
+		}
+
+		if (role) {
+			parsed[SUBMESH_ROLE_KEY] = role
+		} else {
+			delete parsed[SUBMESH_ROLE_KEY]
+		}
+		await writeTextFile(entry.jsonPath, JSON.stringify(parsed, null, 2))
+		updatedFileCount += 1
+	}
+
+	return { updatedFileCount }
 }
 
 const normalizeMarkupList = (value: unknown): TextureMarkUpInfo[] => {

@@ -112,6 +112,15 @@ pub struct SubMeshJson {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub texture_mark_up_info_list: Vec<SubMeshTextureMarkUpInfo>,
+
+    /// 由后处理页标记的语义角色，供 Blender 插件识别面部、脖颈和眼部 SubMesh。
+    /// 缺失表示该 SubMesh 未被标记。
+    #[serde(
+        rename = "SubMeshRole",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub sub_mesh_role: Option<SubMeshRole>,
 }
 
 impl SubMeshJson {
@@ -207,4 +216,11 @@ pub struct SubMeshTextureMarkUpInfo {
 
     #[serde(rename = "FaceSDFChannel", skip_serializing_if = "Option::is_none")]
     pub face_sdf_channel: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SubMeshRole {
+    Face,
+    Neck,
+    Eye,
 }
