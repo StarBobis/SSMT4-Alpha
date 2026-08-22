@@ -226,7 +226,7 @@ const textureChannelKeys: TextureChannelKey[] = ['R', 'G', 'B', 'A'];
 const presetMarkNameOptions: Record<string, string[]> = {
 	DEFAULT: ['DiffuseMap', 'NormalMap', 'LightMap', 'HighLightMap', 'RampMap', 'MaterialMap', 'StockingMap'],
 	SRMI: ['DiffuseMap', 'NormalMap', 'MaterialMap', 'MaskMap', 'LightMap', 'EmissionMap', 'RampMap'],
-	GIMI: ['DiffuseMap', 'NormalMap', 'FaceSDFMap', 'LightMap', 'HighLightMap', 'MetalMap', 'MaterialMap', 'StockingMap'],
+	GIMI: ['DiffuseMap', 'NormalMap', 'FaceSDFMap', 'FaceShadow', 'LightMap', 'HighLightMap', 'MetalMap', 'MaterialMap', 'StockingMap'],
 	HIMI: ['DiffuseMap', 'NormalMap', 'LightMap', 'FaceMap', 'HairMap', 'MaskMap', 'RampMap'],
 	ZZMI: ['DiffuseMap', 'NormalMap', 'LightMap', 'BodyMaskMap', 'HairLightMap', 'MaterialMap', 'RampMap'],
 	ZZMIDX12: ['DiffuseMap', 'NormalMap', 'LightMap', 'BodyMaskMap', 'HairLightMap', 'MaterialMap', 'RampMap'],
@@ -678,23 +678,36 @@ const previewSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
 			const normalized = markName.trim().toLowerCase();
 			return normalized === 'facesdfmap';
 		};
+		const isFaceShadowMark = (markName: string): boolean => markName.trim().toLowerCase() === 'faceshadow';
+		const isLightMapMark = (markName: string): boolean => {
+			const normalized = markName.trim().toLowerCase();
+			return normalized === 'lightmap' || isFaceShadowMark(normalized);
+		};
 		const findMarkedPreview = (markName: string): string | undefined => {
 			return markedTextures.find(summary => (
 				(isFaceSdfMark(markName)
 					? isFaceSdfMark(summary.markName)
-					: summary.markName.trim().toLowerCase() === markName.toLowerCase()) && !!summary.preview
+					: markName.trim().toLowerCase() === 'lightmap'
+						? isLightMapMark(summary.markName)
+						: summary.markName.trim().toLowerCase() === markName.toLowerCase()) && !!summary.preview
 			))?.preview;
 		};
 		const findMarkedDdsPath = (markName: string): string | undefined => markedTextures.find(summary => (
 			isFaceSdfMark(markName)
 				? isFaceSdfMark(summary.markName)
-				: summary.markName.trim().toLowerCase() === markName.toLowerCase()
+				: markName.trim().toLowerCase() === 'lightmap'
+					? isLightMapMark(summary.markName)
+					: summary.markName.trim().toLowerCase() === markName.toLowerCase()
 		))?.ddsPath;
 		const findMarkedPreviews = (markName: string): string[] => markedTextures
-			.filter(summary => summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.preview)
+		.filter(summary => (markName.trim().toLowerCase() === 'lightmap'
+			? isLightMapMark(summary.markName)
+			: summary.markName.trim().toLowerCase() === markName.toLowerCase()) && !!summary.preview)
 			.map(summary => summary.preview);
 		const findMarkedDdsPaths = (markName: string): string[] => markedTextures
-			.filter(summary => summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.ddsPath)
+		.filter(summary => (markName.trim().toLowerCase() === 'lightmap'
+			? isLightMapMark(summary.markName)
+			: summary.markName.trim().toLowerCase() === markName.toLowerCase()) && !!summary.ddsPath)
 			.map(summary => summary.ddsPath);
 		const diffuseUrls = findMarkedPreviews('DiffuseMap');
 		const diffuseDdsPaths = findMarkedDdsPaths('DiffuseMap');

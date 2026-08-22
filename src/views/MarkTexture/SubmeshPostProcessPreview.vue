@@ -629,7 +629,7 @@ const selectedNormal = computed(() => {
 
 const selectedFaceNormal = computed(() => findMarkedTexture('FaceSDFMap'));
 
-const selectedLightMap = computed(() => findMarkedTexture('LightMap'));
+const selectedLightMap = computed(() => findMarkedTexture('LightMap') || findMarkedTexture('FaceShadow'));
 const selectedRampMap = computed(() => findMarkedTexture('RampMap'));
 const selectedMetalMap = computed(() => findMarkedTexture('MetalMap'));
 const faceNormalChannelIndex = (channel: FaceNormalChannel | undefined): number => {
@@ -985,7 +985,7 @@ const loadDefaultDataTypeForTarget = async (
 	return undefined;
 };
 
-const findMarkedTexture = (markName: 'DiffuseMap' | 'NormalMap' | 'FaceSDFMap' | 'LightMap' | 'RampMap' | 'MetalMap'): PreviewTextureOption | undefined => {
+const findMarkedTexture = (markName: 'DiffuseMap' | 'NormalMap' | 'FaceSDFMap' | 'FaceShadow' | 'LightMap' | 'RampMap' | 'MetalMap'): PreviewTextureOption | undefined => {
 	const normalizedName = markName.toLowerCase();
 	return props.textureOptions.find(item => {
 		if (!item.ddsPath) return false;
