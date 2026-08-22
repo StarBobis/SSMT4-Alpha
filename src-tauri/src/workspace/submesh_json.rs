@@ -204,4 +204,7 @@ pub struct SubMeshTextureMarkUpInfo {
 
     #[serde(rename = "MarkFileName")]
     pub mark_file_name: String,
+
+    #[serde(rename = "FaceSDFChannel", skip_serializing_if = "Option::is_none")]
+    pub face_sdf_channel: Option<String>,
 }

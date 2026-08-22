@@ -64,3 +64,9 @@ uib_wrapper_screenshot.png
 
 # Agent 工具上传与临时工作目录（不提交）
 .dsh/
+
+
+
+
+.tmp-*/
+.tmp-*

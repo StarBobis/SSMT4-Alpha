@@ -3,11 +3,13 @@ import { exists, mkdir, readTextFile, remove, writeTextFile } from '@tauri-apps/
 import { GlobalConfig } from '../store/GlobalConfig'
 
 export type TextureMemoryMarkStyle = 'Hash' | 'Slot' | 'SharedSlot'
+export type TextureMemoryFaceNormalChannel = 'R' | 'G' | 'B' | 'A'
 
 export type TextureMemoryTargetItem = {
 	slot: string
 	markName: string
 	markStyle: TextureMemoryMarkStyle
+	faceNormalChannel?: TextureMemoryFaceNormalChannel
 	render: boolean
 	suffix: string
 }
@@ -16,6 +18,7 @@ export type TextureSlotMemoryItem = {
 	Slot: string
 	MarkName: string
 	MarkStyle: TextureMemoryMarkStyle
+	FaceSDFChannel?: TextureMemoryFaceNormalChannel
 	Render: boolean
 	Suffix: string
 }
@@ -85,6 +88,11 @@ export const applyTextureMemoryToItems = <T extends TextureMemoryTargetItem>(
 			...item,
 			markName: memory.MarkName ?? item.markName,
 			markStyle: nextMarkStyle,
+			faceNormalChannel: memory.FaceSDFChannel === 'G' || memory.FaceSDFChannel === 'B' || memory.FaceSDFChannel === 'A'
+				? memory.FaceSDFChannel
+				: memory.FaceSDFChannel === 'R'
+					? 'R'
+					: item.faceNormalChannel,
 			render: typeof memory.Render === 'boolean' ? memory.Render : item.render,
 			suffix: memory.Suffix || item.suffix,
 		}
@@ -105,6 +113,9 @@ export const saveTextureMemoryByPSHash = async (
 			Slot: item.slot,
 			MarkName: item.markName,
 			MarkStyle: item.markStyle,
+			FaceSDFChannel: item.markName.trim().toLowerCase() === 'facesdfmap'
+				? item.faceNormalChannel
+				: undefined,
 			Render: item.render,
 			Suffix: item.suffix,
 		})),

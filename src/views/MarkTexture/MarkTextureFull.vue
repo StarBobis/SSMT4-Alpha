@@ -13,6 +13,7 @@ import { GlobalConfig } from '../../store/GlobalConfig';
 import { ResourceManager } from '../../store/ResourceManager';
 import { PathHelper } from '../../helper/PathHelper';
 import { SSMTStringUtils } from '../../utils/SSMTStringUtils';
+import { calculateContextMenuPosition } from '../../utils/ContextMenuPosition';
 import { debugError } from '../../utils/debugLog';
 import {
 	applyTextureMemoryToItems,
@@ -68,6 +69,7 @@ type TextureItem = {
 	channelPreviews: TextureChannelPreview[];
 	markName: string;
 	markStyle: MarkStyle;
+	faceNormalChannel: TextureChannelKey;
 };
 
 type PreviewTextureOption = {
@@ -76,6 +78,7 @@ type PreviewTextureOption = {
 	url: string;
 	markName: string;
 	ddsPath: string;
+	faceNormalChannel?: TextureChannelKey;
 };
 
 type PreviewSubMeshTarget = {
@@ -85,12 +88,15 @@ type PreviewSubMeshTarget = {
 	diffuseUrl?: string;
 	diffuseUrls?: string[];
 	normalUrl?: string;
+	faceNormalUrl?: string;
 	lightMapUrl?: string;
 	rampMapUrl?: string;
 	metalMapUrl?: string;
 	diffuseDdsPath?: string;
 	diffuseDdsPaths?: string[];
 	normalDdsPath?: string;
+	faceNormalDdsPath?: string;
+	faceNormalChannel?: TextureChannelKey;
 	lightMapDdsPath?: string;
 	rampMapDdsPath?: string;
 	metalMapDdsPath?: string;
@@ -106,6 +112,7 @@ type SubMeshMarkedTextureSummary = {
 	slot: string;
 	markName: string;
 	markStyle: MarkStyle;
+	faceNormalChannel: TextureChannelKey;
 	status: 'applied' | 'pending';
 	textureHash: string;
 	ddsPath: string;
@@ -120,6 +127,7 @@ type SubMeshDrawerItem = {
 	markCount: number;
 	isSelected: boolean;
 	markedTextures: SubMeshMarkedTextureSummary[];
+	role?: 'face' | 'neck' | 'eye';
 };
 
 type TrianglelistDedupedTextureProperty = {
@@ -135,6 +143,11 @@ type MarkTextureSelectionMemory = {
 	subMesh?: string;
 	drawCall?: string;
 	drawCallBySubMesh?: Record<string, string>;
+	faceSubMesh?: string;
+	faceSubMeshes?: string[];
+	neckSubMesh?: string;
+	eyeSubMeshes?: string[];
+	faceNeckAlignmentEnabled?: boolean;
 };
 
 type MarkTextureGlobalUiConfig = {
@@ -199,6 +212,11 @@ const previewSyncSelectedSubMesh = ref(false);
 const mutedPreviewSubMeshMap = ref<Record<string, boolean>>({});
 const soloPreviewSubMeshMap = ref<Record<string, boolean>>({});
 const previewReviewSubMeshMap = ref<Record<string, boolean>>({});
+const faceSubMeshes = ref<string[]>([]);
+const neckSubMesh = ref('');
+const eyeSubMeshes = ref<string[]>([]);
+const faceNeckAlignmentEnabled = ref(false);
+const subMeshContextMenu = ref<{ subMesh: string; x: number; y: number } | undefined>();
 
 const markStyleOptions: MarkStyle[] = ['Hash', 'Slot', 'SharedSlot'];
 const textureChannelKeys: TextureChannelKey[] = ['R', 'G', 'B', 'A'];
@@ -206,7 +224,7 @@ const textureChannelKeys: TextureChannelKey[] = ['R', 'G', 'B', 'A'];
 const presetMarkNameOptions: Record<string, string[]> = {
 	DEFAULT: ['DiffuseMap', 'NormalMap', 'LightMap', 'HighLightMap', 'RampMap', 'MaterialMap', 'StockingMap'],
 	SRMI: ['DiffuseMap', 'NormalMap', 'MaterialMap', 'MaskMap', 'LightMap', 'EmissionMap', 'RampMap'],
-	GIMI: ['DiffuseMap', 'NormalMap', 'LightMap', 'HighLightMap', 'MetalMap', 'MaterialMap', 'StockingMap'],
+	GIMI: ['DiffuseMap', 'NormalMap', 'FaceSDFMap', 'LightMap', 'HighLightMap', 'MetalMap', 'MaterialMap', 'StockingMap'],
 	HIMI: ['DiffuseMap', 'NormalMap', 'LightMap', 'FaceMap', 'HairMap', 'MaskMap', 'RampMap'],
 	ZZMI: ['DiffuseMap', 'NormalMap', 'LightMap', 'BodyMaskMap', 'HairLightMap', 'MaterialMap', 'RampMap'],
 	ZZMIDX12: ['DiffuseMap', 'NormalMap', 'LightMap', 'BodyMaskMap', 'HairLightMap', 'MaterialMap', 'RampMap'],
@@ -630,6 +648,7 @@ const subMeshDrawerItems = computed<SubMeshDrawerItem[]>(() => {
 			markCount: markedTextures.length,
 			isSelected: selectedSubMesh.value === item.value,
 			markedTextures,
+			role: faceSubMeshes.value.includes(item.value) ? 'face' : neckSubMesh.value === item.value ? 'neck' : eyeSubMeshes.value.includes(item.value) ? 'eye' : undefined,
 		};
 	});
 });
@@ -653,13 +672,21 @@ const previewSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
 			return [];
 		}
 		const markedTextures = subMeshMarkedTextureMap.value[item.value] ?? [];
+		const isFaceSdfMark = (markName: string): boolean => {
+			const normalized = markName.trim().toLowerCase();
+			return normalized === 'facesdfmap';
+		};
 		const findMarkedPreview = (markName: string): string | undefined => {
 			return markedTextures.find(summary => (
-				summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.preview
+				(isFaceSdfMark(markName)
+					? isFaceSdfMark(summary.markName)
+					: summary.markName.trim().toLowerCase() === markName.toLowerCase()) && !!summary.preview
 			))?.preview;
 		};
 		const findMarkedDdsPath = (markName: string): string | undefined => markedTextures.find(summary => (
-			summary.markName.trim().toLowerCase() === markName.toLowerCase()
+			isFaceSdfMark(markName)
+				? isFaceSdfMark(summary.markName)
+				: summary.markName.trim().toLowerCase() === markName.toLowerCase()
 		))?.ddsPath;
 		const findMarkedPreviews = (markName: string): string[] => markedTextures
 			.filter(summary => summary.markName.trim().toLowerCase() === markName.toLowerCase() && !!summary.preview)
@@ -676,12 +703,15 @@ const previewSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
 			diffuseUrl: findMarkedPreview('DiffuseMap'),
 			diffuseUrls,
 			normalUrl: findMarkedPreview('NormalMap'),
+			faceNormalUrl: findMarkedPreview('FaceSDFMap'),
 			lightMapUrl: findMarkedPreview('LightMap'),
 			rampMapUrl: findMarkedPreview('RampMap'),
 			metalMapUrl: findMarkedPreview('MetalMap'),
 			diffuseDdsPath: findMarkedDdsPath('DiffuseMap'),
 			diffuseDdsPaths,
 			normalDdsPath: findMarkedDdsPath('NormalMap'),
+			faceNormalDdsPath: findMarkedDdsPath('FaceSDFMap'),
+			faceNormalChannel: markedTextures.find(summary => isFaceSdfMark(summary.markName))?.faceNormalChannel || 'R',
 			lightMapDdsPath: findMarkedDdsPath('LightMap'),
 			rampMapDdsPath: findMarkedDdsPath('RampMap'),
 			metalMapDdsPath: findMarkedDdsPath('MetalMap'),
@@ -703,6 +733,7 @@ const previewTextureOptions = computed<PreviewTextureOption[]>(() => {
 			url: mark.preview,
 			markName: mark.markName,
 			ddsPath: mark.ddsPath,
+			faceNormalChannel: mark.faceNormalChannel,
 		});
 	}
 
@@ -716,6 +747,7 @@ const previewTextureOptions = computed<PreviewTextureOption[]>(() => {
 			url: item.preview,
 			markName: item.markName,
 			ddsPath: item.ddsPath,
+			faceNormalChannel: item.faceNormalChannel,
 		});
 	}
 
@@ -773,6 +805,16 @@ const loadSelectionMemory = async () => {
 				...nextDrawCallSelectionBySubMesh,
 				...drawCallSelectionBySubMesh.value,
 			};
+		}
+		if (Array.isArray(parsed.faceSubMeshes)) {
+			faceSubMeshes.value = parsed.faceSubMeshes.filter((value): value is string => typeof value === 'string');
+		} else if (typeof parsed.faceSubMesh === 'string') {
+			faceSubMeshes.value = [parsed.faceSubMesh];
+		}
+		if (typeof parsed.neckSubMesh === 'string') neckSubMesh.value = parsed.neckSubMesh;
+		if (Array.isArray(parsed.eyeSubMeshes)) eyeSubMeshes.value = parsed.eyeSubMeshes.filter((value): value is string => typeof value === 'string');
+		if (typeof parsed.faceNeckAlignmentEnabled === 'boolean') {
+			faceNeckAlignmentEnabled.value = parsed.faceNeckAlignmentEnabled;
 		}
 
 	} catch {
@@ -928,6 +970,10 @@ const saveSelectionMemory = async () => {
 			subMesh: selectedSubMesh.value,
 			drawCall: selectedDrawCall.value,
 			drawCallBySubMesh: drawCallSelectionBySubMesh.value,
+			faceSubMeshes: faceSubMeshes.value,
+			neckSubMesh: neckSubMesh.value,
+			eyeSubMeshes: eyeSubMeshes.value,
+			faceNeckAlignmentEnabled: faceNeckAlignmentEnabled.value,
 		};
 		await writeTextFile(configPath, JSON.stringify(payload, null, 2));
 	} catch {
@@ -1408,7 +1454,7 @@ const buildMarkedTextureSummaryForSubMesh = async (
 
 	return mapWithConcurrency(
 		appliedMarks, SUBMESH_TASK_CONCURRENCY, async mark => {
-			const ddsPath = await join(source.workspacePath, 'DedupedTextures', mark.markDedupedFileName);
+			const ddsPath = mark.textureFilePath;
 			const id = [
 				source.tabId,
 				subMeshName,
@@ -1434,6 +1480,7 @@ const buildMarkedTextureSummaryForSubMesh = async (
 				slot: mark.markSlot,
 				markName: mark.markName,
 				markStyle: mark.markStyle,
+				faceNormalChannel: mark.faceNormalChannel,
 				status: 'applied',
 				textureHash: mark.markHash,
 				ddsPath,
@@ -1507,6 +1554,7 @@ const buildPendingTextureSummaryForCurrentSubMesh = (): SubMeshMarkedTextureSumm
 			slot: item.slot,
 			markName: item.markName,
 			markStyle: item.markStyle,
+			faceNormalChannel: item.faceNormalChannel,
 			status: 'pending' as const,
 			textureHash: SSMTStringUtils.getFileHashFromFileName(item.name),
 			ddsPath: item.ddsPath,
@@ -1544,23 +1592,53 @@ const syncPendingTextureSummaryForCurrentSubMesh = () => {
 
 	const existing = subMeshMarkedTextureMap.value[selectedSubMesh.value] ?? [];
 	const applied = existing.filter(summary => summary.status === 'applied');
-	const appliedKeys = new Set(
-		applied.flatMap(summary => [
-			`${summary.markName}::deduped::${summary.dedupedFileName}`.toLowerCase(),
-			`${summary.markName}::hash::${summary.textureHash}`.toLowerCase(),
-			`${summary.markName}::slot::${summary.slot}`.toLowerCase(),
+	const normalizedMarkName = (markName: string): string => {
+		const normalized = markName.trim().toLowerCase();
+		return normalized;
+	};
+	const summaryIdentity = (summary: Pick<SubMeshMarkedTextureSummary, 'dedupedFileName' | 'textureHash' | 'slot'>): string => {
+		const dedupedKey = summary.dedupedFileName.trim().toLowerCase();
+		const hashKey = summary.textureHash.trim().toLowerCase();
+		const slotKey = summary.slot.trim().toLowerCase();
+		return dedupedKey
+			? `deduped::${dedupedKey}`
+			: hashKey
+				? `hash::${hashKey}`
+				: slotKey
+					? `slot::${slotKey}`
+					: '';
+	};
+	const pending = buildPendingTextureSummaryForCurrentSubMesh();
+	const pendingByMarkIdentity = new Map(
+		pending.map(summary => [
+			`${normalizedMarkName(summary.markName)}::${summaryIdentity(summary)}`,
+			summary,
 		])
 	);
-	const pending = buildPendingTextureSummaryForCurrentSubMesh().filter(summary => {
-		const dedupedKey = `${summary.markName}::deduped::${summary.dedupedFileName}`.toLowerCase();
-		const hashKey = `${summary.markName}::hash::${summary.textureHash}`.toLowerCase();
-		const slotKey = `${summary.markName}::slot::${summary.slot}`.toLowerCase();
-		return !appliedKeys.has(dedupedKey) && !appliedKeys.has(hashKey) && !appliedKeys.has(slotKey);
+	// A channel edit changes no texture identity, so it used to be discarded
+	// when an already-applied summary won the dedupe. Keep the persisted summary
+	// as the source of truth for the file, but mirror the live edit for preview.
+	const syncedApplied = applied.map(summary => {
+		const key = `${normalizedMarkName(summary.markName)}::${summaryIdentity(summary)}`;
+		const live = pendingByMarkIdentity.get(key);
+		const isFaceShadow = normalizedMarkName(summary.markName) === 'facesdfmap';
+		return live && isFaceShadow
+			? { ...summary, faceNormalChannel: live.faceNormalChannel }
+			: summary;
+	});
+	const appliedKeys = new Set(
+		syncedApplied.flatMap(summary => [
+			`${normalizedMarkName(summary.markName)}::${summaryIdentity(summary)}`,
+		])
+	);
+	const pendingOnly = pending.filter(summary => {
+		const key = `${normalizedMarkName(summary.markName)}::${summaryIdentity(summary)}`;
+		return !appliedKeys.has(key);
 	});
 
 	subMeshMarkedTextureMap.value = {
 		...subMeshMarkedTextureMap.value,
-		[selectedSubMesh.value]: dedupeTextureSummaryByIdentity([...applied, ...pending]),
+		[selectedSubMesh.value]: dedupeTextureSummaryByIdentity([...syncedApplied, ...pendingOnly]),
 	};
 };
 
@@ -1670,6 +1748,11 @@ const handleTextureMarkNameChanged = (markName: string) => {
 	handleTextureMarkChanged();
 };
 
+const isFaceNormalMap = (item: TextureItem): boolean => {
+	const name = item.markName.trim().toLowerCase();
+	return name === 'facesdfmap';
+};
+
 const handleClearTextureMarkName = (item: TextureItem) => {
 	item.markName = '';
 	handleTextureMarkChanged();
@@ -1715,6 +1798,7 @@ const openMarkedTexturePreview = (summary: SubMeshMarkedTextureSummary) => {
 		channelPreviews: createEmptyChannelPreviews(),
 		markName: summary.markName,
 		markStyle: summary.markStyle,
+		faceNormalChannel: summary.faceNormalChannel,
 	});
 };
 
@@ -2106,6 +2190,7 @@ const resetCurrentTextureListMarks = () => {
 		...item,
 		markName: '',
 		markStyle: defaultMarkStyle,
+		faceNormalChannel: 'R',
 	}));
 };
 
@@ -2120,6 +2205,7 @@ const scheduleSaveTextureMemory = () => {
 		slot: item.slot,
 		markName: item.markName,
 		markStyle: item.markStyle,
+		faceNormalChannel: item.faceNormalChannel,
 		render: item.render,
 		suffix: item.suffix,
 	}));
@@ -2206,6 +2292,7 @@ const loadTextureListByDrawCall = async (drawCallSelectionValue: string) => {
 					channelPreviews,
 					markName: '',
 					markStyle: defaultMarkStyle,
+					faceNormalChannel: 'R',
 				};
 			}
 		);
@@ -2336,6 +2423,57 @@ const switchDrawCallByWheel = (event: WheelEvent) => {
 const selectSubMeshFromDrawer = (selectionValue: string) => {
 	rememberCurrentDrawCallSelection();
 	selectedSubMesh.value = selectionValue;
+};
+
+const openSubMeshContextMenu = (event: MouseEvent, selectionValue: string): void => {
+	event.preventDefault();
+	event.stopPropagation();
+	const position = calculateContextMenuPosition({
+		clientX: event.clientX,
+		clientY: event.clientY,
+		menuWidth: 210,
+		menuHeight: 172,
+	});
+	subMeshContextMenu.value = { subMesh: selectionValue, x: position.x, y: position.y };
+};
+
+const markSubMeshRole = (role: 'face' | 'neck' | 'eye'): void => {
+	const selectionValue = subMeshContextMenu.value?.subMesh;
+	if (!selectionValue) return;
+	if (role === 'face') {
+		if (!faceSubMeshes.value.includes(selectionValue)) {
+			faceSubMeshes.value = [...faceSubMeshes.value, selectionValue];
+		}
+		if (neckSubMesh.value === selectionValue) neckSubMesh.value = '';
+		eyeSubMeshes.value = eyeSubMeshes.value.filter(value => value !== selectionValue);
+	} else if (role === 'eye') {
+		if (!eyeSubMeshes.value.includes(selectionValue)) eyeSubMeshes.value = [...eyeSubMeshes.value, selectionValue];
+		faceSubMeshes.value = faceSubMeshes.value.filter(value => value !== selectionValue);
+		if (neckSubMesh.value === selectionValue) neckSubMesh.value = '';
+	} else {
+		neckSubMesh.value = selectionValue;
+		faceSubMeshes.value = faceSubMeshes.value.filter(value => value !== selectionValue);
+		eyeSubMeshes.value = eyeSubMeshes.value.filter(value => value !== selectionValue);
+	}
+	subMeshContextMenu.value = undefined;
+	scheduleSaveSelectionMemory();
+};
+
+const clearSubMeshRole = (): void => {
+	const selectionValue = subMeshContextMenu.value?.subMesh;
+	if (!selectionValue) return;
+	faceSubMeshes.value = faceSubMeshes.value.filter(value => value !== selectionValue);
+	if (neckSubMesh.value === selectionValue) neckSubMesh.value = '';
+	eyeSubMeshes.value = eyeSubMeshes.value.filter(value => value !== selectionValue);
+	subMeshContextMenu.value = undefined;
+	scheduleSaveSelectionMemory();
+};
+
+const subMeshRoleLabel = (selectionValue: string): string => {
+	if (faceSubMeshes.value.includes(selectionValue)) return 'Face';
+	if (neckSubMesh.value === selectionValue) return 'Neck';
+	if (eyeSubMeshes.value.includes(selectionValue)) return 'Eye';
+	return 'Unmarked';
 };
 
 const togglePreviewSubMeshMuted = (selectionValue: string) => {
@@ -2938,7 +3076,7 @@ watch(
 );
 
 watch(
-	() => textureList.value.map(item => `${item.id}:${item.markName}:${item.markStyle}`).join('|'),
+	() => textureList.value.map(item => `${item.id}:${item.markName}:${item.markStyle}:${item.faceNormalChannel}`).join('|'),
 	() => {
 		syncPendingTextureSummaryForCurrentSubMesh();
 	}
@@ -2946,6 +3084,13 @@ watch(
 
 watch(
 	() => [selectedSubMesh.value, selectedDrawCall.value],
+	() => {
+		scheduleSaveSelectionMemory();
+	}
+);
+
+watch(
+	() => [faceSubMeshes.value.join('|'), neckSubMesh.value, eyeSubMeshes.value.join('|'), faceNeckAlignmentEnabled.value],
 	() => {
 		scheduleSaveSelectionMemory();
 	}
@@ -2989,8 +3134,10 @@ watch(activeChannelPreviewItem, (item) => {
 										type="button"
 										:title="subMesh.label"
 										@click="selectSubMeshFromDrawer(subMesh.value)"
+										@contextmenu="openSubMeshContextMenu($event, subMesh.value)"
 									>
 										<span class="submesh-label">{{ subMesh.label }}</span>
+										<span v-if="subMesh.role" class="submesh-role-badge">{{ subMesh.role === 'face' ? 'F' : subMesh.role === 'neck' ? 'N' : 'E' }}</span>
 										<span class="submesh-count">{{ subMesh.markCount }}</span>
 									</button>
 								</div>
@@ -3114,9 +3261,10 @@ watch(activeChannelPreviewItem, (item) => {
 
 									<div class="meta-row select-row">
 										<span class="label">{{ t('markTexture.ui.markName') }}</span>
-										<div class="mark-name-select-wrap">
+						<div class="mark-name-select-wrap">
 											<el-select
 												v-model="item.markName"
+												class="mark-name-main-select"
 												@change="handleTextureMarkNameChanged(item.markName)"
 												filterable
 												allow-create
@@ -3167,8 +3315,23 @@ watch(activeChannelPreviewItem, (item) => {
 												<button type="button" title="LightMap" aria-label="LightMap" @click.stop="handleQuickTextureMarkName(item, 'LightMap')">L</button>
 												<button type="button" title="NormalMap" aria-label="NormalMap" @click.stop="handleQuickTextureMarkName(item, 'NormalMap')">N</button>
 											</div>
-											<button
-												v-if="item.markName.trim()"
+							<div v-if="isFaceNormalMap(item)" class="face-normal-channel-control">
+								<el-tooltip content="Face SDF channel" placement="top" :show-after="250">
+									<el-select
+										v-model="item.faceNormalChannel"
+													class="face-normal-channel-select"
+													size="small"
+													aria-label="Face SDF channel"
+													popper-class="mark-texture-select-popper face-normal-channel-popper"
+													@change="handleTextureMarkChanged"
+									>
+																		<el-option v-for="channel in textureChannelKeys" :key="channel" :label="channel" :value="channel" />
+																	</el-select>
+																</el-tooltip>
+																<span class="face-normal-channel-value" aria-hidden="true">{{ item.faceNormalChannel }}</span>
+							</div>
+							<button
+								v-if="item.markName.trim()"
 												type="button"
 												class="mark-name-clear-button"
 												:title="t('markTexture.actions.clearTextureMarkName')"
@@ -3391,11 +3554,37 @@ watch(activeChannelPreviewItem, (item) => {
 							:sub-mesh-name="getSelectedSubMeshName()"
 							:visible-sub-mesh-targets="previewSubMeshTargets"
 							:texture-options="previewTextureOptions"
+							:face-sub-mesh-ids="faceSubMeshes"
+							:neck-sub-mesh-id="neckSubMesh"
+							:eye-sub-mesh-ids="eyeSubMeshes"
+							:face-neck-alignment-enabled="faceNeckAlignmentEnabled"
 							@data-type-changed="refreshSubMeshMarkedTextureSummary(selectedSubMesh)"
 							@review-targets-changed="updatePreviewReviewSubMeshes"
+							@face-neck-alignment-enabled-changed="faceNeckAlignmentEnabled = $event"
 						/>
 					</div>
 				</div>
+				<Teleport to="body">
+					<div v-if="subMeshContextMenu" class="submesh-context-menu-layer" @pointerdown.self="subMeshContextMenu = undefined">
+						<div
+							class="submesh-context-menu"
+							:style="{ left: `${subMeshContextMenu.x}px`, top: `${subMeshContextMenu.y}px` }"
+						>
+							<div class="submesh-context-menu-heading">Submesh role</div>
+							<div class="submesh-context-menu-status">Current: {{ subMeshRoleLabel(subMeshContextMenu.subMesh) }}</div>
+							<button type="button" :class="{ 'is-active': faceSubMeshes.includes(subMeshContextMenu.subMesh) }" @click="markSubMeshRole('face')">
+								<span>标记为面部</span><span v-if="faceSubMeshes.includes(subMeshContextMenu.subMesh)" class="menu-check">✓</span>
+							</button>
+							<button type="button" :class="{ 'is-active': neckSubMesh === subMeshContextMenu.subMesh }" @click="markSubMeshRole('neck')">
+								<span>标记为含脖颈部</span><span v-if="neckSubMesh === subMeshContextMenu.subMesh" class="menu-check">✓</span>
+							</button>
+							<button type="button" :class="{ 'is-active': eyeSubMeshes.includes(subMeshContextMenu.subMesh) }" @click="markSubMeshRole('eye')">
+								<span>标记为眼部</span><span v-if="eyeSubMeshes.includes(subMeshContextMenu.subMesh)" class="menu-check">✓</span>
+							</button>
+							<button type="button" class="is-clear" @click="clearSubMeshRole">取消标记</button>
+						</div>
+					</div>
+				</Teleport>
 			</aside>
 		</div>
 	</div>
@@ -3532,7 +3721,7 @@ watch(activeChannelPreviewItem, (item) => {
 	min-height: 38px;
 	min-width: 0;
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr) auto auto;
 	align-items: center;
 	gap: 8px;
 	padding: 0 9px;
@@ -3554,6 +3743,20 @@ watch(activeChannelPreviewItem, (item) => {
 	font-weight: 600;
 }
 
+.submesh-role-badge {
+	min-width: 18px;
+	height: 18px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid rgba(255, 214, 135, 0.42);
+	border-radius: 4px;
+	color: rgba(255, 225, 169, 0.96);
+	background: rgba(198, 132, 45, 0.12);
+	font-size: 10px;
+	font-weight: 800;
+}
+
 .submesh-count {
 	min-width: 24px;
 	height: 20px;
@@ -3567,6 +3770,71 @@ watch(activeChannelPreviewItem, (item) => {
 	color: rgba(232, 236, 245, 0.78);
 	font-size: 11px;
 	font-weight: 700;
+}
+
+.submesh-context-menu-layer {
+	position: fixed;
+	inset: 0;
+	z-index: 1000100;
+}
+
+.submesh-context-menu {
+	position: fixed;
+	width: 224px;
+	padding: 7px;
+	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.26);
+	border-radius: 6px;
+	background: rgba(20, 26, 35, 0.98);
+	box-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
+}
+
+.submesh-context-menu-heading {
+	padding: 2px 9px 1px;
+	color: rgba(245, 248, 255, 0.9);
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.submesh-context-menu-status {
+	padding: 0 9px 6px;
+	color: rgba(220, 227, 240, 0.52);
+	font-size: 10px;
+}
+
+.submesh-context-menu button {
+	width: 100%;
+	min-height: 32px;
+	border: 0;
+	border-radius: 4px;
+	padding: 0 10px;
+	background: transparent;
+	color: rgba(242, 246, 252, 0.9);
+	font: inherit;
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.submesh-context-menu button:hover {
+	background: rgba(var(--theme-surface-tint-rgb), 0.14);
+	color: #fff;
+}
+
+.submesh-context-menu button.is-active {
+	background: rgba(var(--theme-surface-tint-rgb), 0.16);
+	color: #fff;
+}
+
+.submesh-context-menu button.is-clear {
+	margin-top: 3px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 0 0 4px 4px;
+	color: rgba(255, 185, 185, 0.86);
+}
+
+.menu-check {
+	color: rgb(117, 214, 187);
+	font-weight: 800;
 }
 
 .submesh-marked-list {
@@ -4207,18 +4475,77 @@ watch(activeChannelPreviewItem, (item) => {
 	min-width: 0;
 }
 
+.left-card :deep(.meta-row.select-row .mark-name-select-wrap .mark-name-main-select) {
+	flex: 1 1 0;
+	width: 0;
+	min-width: 0;
+}
+
 .mark-name-select-wrap {
 	position: relative;
 	display: flex;
 	align-items: center;
+	flex-wrap: nowrap;
 	gap: 8px;
 	width: 100%;
 	min-width: 0;
 }
 
-.mark-name-select-wrap :deep(.el-select) {
-	flex: 1 1 auto;
+.mark-name-select-wrap :deep(.mark-name-main-select) {
+	flex: 1 1 0;
+	width: 0;
 	min-width: 0;
+}
+
+.mark-name-select-wrap :deep(.mark-name-main-select .el-select__wrapper) {
+	width: 100%;
+	min-width: 0;
+}
+
+.face-normal-channel-control {
+	display: flex;
+	flex: 0 0 86px;
+	width: 86px;
+	min-width: 86px;
+	align-items: center;
+}
+
+.face-normal-channel-control :deep(.el-tooltip__trigger) {
+	display: flex;
+	width: 100%;
+}
+
+.face-normal-channel-control :deep(.face-normal-channel-select) {
+	flex: 1 1 auto;
+	width: 100%;
+	min-width: 0;
+}
+
+.face-normal-channel-control :deep(.face-normal-channel-select .el-select__wrapper) {
+	width: 100%;
+	min-height: 32px;
+	height: 32px;
+	padding: 0 8px;
+	box-sizing: border-box;
+}
+
+/* Element Plus may hide the selected label while its internal filter input is
+ * active. The visible value belongs to the control, so keep a stable display
+ * layer above that implementation detail. */
+.face-normal-channel-value {
+	position: absolute;
+	left: 9px;
+	top: 50%;
+	z-index: 2;
+	transform: translateY(-50%);
+	color: rgba(255, 255, 255, 0.9);
+	font-size: 12px;
+	line-height: 1;
+	pointer-events: none;
+}
+
+.face-normal-channel-control {
+	position: relative;
 }
 
 .mark-name-quick-actions {

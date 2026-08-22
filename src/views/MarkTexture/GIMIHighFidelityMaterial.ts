@@ -2,93 +2,74 @@ import * as THREE from 'three';
 import gimiFragmentShader from './shaders/gimi-high-fidelity.frag.glsl?raw';
 import gimiVertexShader from './shaders/gimi-high-fidelity.vert.glsl?raw';
 
-export type GIMITextureKind = 'diffuse' | 'normal' | 'lightMap' | 'rampMap' | 'metalMap';
+export type GIMITextureKind = 'diffuse' | 'normal' | 'faceSdf' | 'lightMap' | 'rampMap' | 'metalMap';
+// Keep the authored layer count used by the preview data. The target WebGL
+// implementations expose more than the eight-unit minimum; retaining four
+// layers avoids silently dropping marked DiffuseMaps.
 export const GIMI_MAX_DIFFUSE_LAYERS = 4;
 const diffuseLayerUniformNames = ['uDiffuseMap0', 'uDiffuseMap1', 'uDiffuseMap2', 'uDiffuseMap3'] as const;
 
+type GIMITextureSampling = 'authored-data' | 'continuous';
+
 type GIMITextureUniforms = {
-	map: 'uDiffuseMap' | 'uNormalMap' | 'uLightMap' | 'uRampMap' | 'uMetalMap';
-	hasMap: 'uHasDiffuseMap' | 'uHasNormalMap' | 'uHasLightMap' | 'uHasRampMap' | 'uHasMetalMap';
+	map: 'uDiffuseMap' | 'uNormalMap' | 'uFaceSdfMap' | 'uLightMap' | 'uRampMap' | 'uMetalMap';
+	hasMap: 'uHasDiffuseMap' | 'uHasNormalMap' | 'uHasFaceSdfMap' | 'uHasLightMap' | 'uHasRampMap' | 'uHasMetalMap';
 };
 
 const textureUniforms: Record<GIMITextureKind, GIMITextureUniforms> = {
 	diffuse: { map: 'uDiffuseMap', hasMap: 'uHasDiffuseMap' },
 	normal: { map: 'uNormalMap', hasMap: 'uHasNormalMap' },
+	faceSdf: { map: 'uFaceSdfMap', hasMap: 'uHasFaceSdfMap' },
 	lightMap: { map: 'uLightMap', hasMap: 'uHasLightMap' },
 	rampMap: { map: 'uRampMap', hasMap: 'uHasRampMap' },
 	metalMap: { map: 'uMetalMap', hasMap: 'uHasMetalMap' },
 };
 
-const CURVE_LUT_SIZE = 512;
 const EPSILON = 0.00001;
 
-const saturate = (value: number): number => Math.min(Math.max(value, 0), 1);
-
-/**
- * Blender's CurveMapping is a piecewise cubic curve.  The v12 material only
- * adds one combined-channel point, so this monotone Hermite bake has exactly
- * the same three knots as the source graph and is sampled in GLSL as a LUT.
- */
-const sampleCombinedCurve = (x: number, pointX: number, pointY: number): number => {
-	const leftSlope = pointY / Math.max(pointX, EPSILON);
-	const middleSlope = 1;
-	const rightSlope = (1 - pointY) / Math.max(1 - pointX, EPSILON);
-	const x0 = x <= pointX ? 0 : pointX;
-	const y0 = x <= pointX ? 0 : pointY;
-	const x1 = x <= pointX ? pointX : 1;
-	const y1 = x <= pointX ? pointY : 1;
-	const t = saturate((x - x0) / Math.max(x1 - x0, EPSILON));
-	const t2 = t * t;
-	const t3 = t2 * t;
-	const m0 = x <= pointX ? leftSlope : middleSlope;
-	const m1 = x <= pointX ? middleSlope : rightSlope;
-	const span = x1 - x0;
-	return saturate(
-		(2 * t3 - 3 * t2 + 1) * y0
-			+ (t3 - 2 * t2 + t) * span * m0
-			+ (-2 * t3 + 3 * t2) * y1
-			+ (t3 - t2) * span * m1
-	);
-};
-
-const createCombinedCurveLut = (pointX: number, pointY: number): THREE.DataTexture => {
-	const pixels = new Uint8Array(CURVE_LUT_SIZE * 4);
-	for (let index = 0; index < CURVE_LUT_SIZE; index += 1) {
-		const value = Math.round(sampleCombinedCurve(index / (CURVE_LUT_SIZE - 1), pointX, pointY) * 255);
-		const offset = index * 4;
-		pixels[offset] = value;
-		pixels[offset + 1] = value;
-		pixels[offset + 2] = value;
-		pixels[offset + 3] = 255;
-	}
-	const texture = new THREE.DataTexture(pixels, CURVE_LUT_SIZE, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
-	texture.colorSpace = THREE.NoColorSpace;
-	texture.wrapS = THREE.ClampToEdgeWrapping;
-	texture.wrapT = THREE.ClampToEdgeWrapping;
-	texture.generateMipmaps = false;
-	texture.minFilter = THREE.LinearFilter;
-	texture.magFilter = THREE.LinearFilter;
-	texture.needsUpdate = true;
-	return texture;
-};
-
-const baseCurveLut = createCombinedCurveLut(0.457726, 0.298387);
-const rampCurveLut = createCombinedCurveLut(0.499811, 0.378282);
-
 export class GIMITextureSet {
+	private static configureTextureSampling(
+		texture: THREE.Texture | undefined,
+		sampling: GIMITextureSampling,
+		clampEdges = false,
+	): void {
+		if (!texture) return;
+		// SDF thresholds, ILM material IDs, and diffuse overlay alpha are
+		// discrete authored data. Their values cannot be interpolated safely.
+		// RampMap and MetalMap are continuous colour lookups in the reference
+		// shaders, however, so nearest filtering makes their bands and matcap
+		// response visibly wrong.
+		texture.generateMipmaps = false;
+		texture.minFilter = sampling === 'authored-data' ? THREE.NearestFilter : THREE.LinearFilter;
+		texture.magFilter = sampling === 'authored-data' ? THREE.NearestFilter : THREE.LinearFilter;
+		if (clampEdges) {
+			texture.wrapS = THREE.ClampToEdgeWrapping;
+			texture.wrapT = THREE.ClampToEdgeWrapping;
+		}
+		texture.needsUpdate = true;
+	}
+
 	static apply(material: THREE.ShaderMaterial, kind: GIMITextureKind, texture: THREE.Texture | undefined): void {
 		if (kind === 'diffuse') {
 			this.applyDiffuseLayers(material, texture ? [texture] : []);
 			return;
 		}
 		const names = textureUniforms[kind];
+		const sampling: GIMITextureSampling = kind === 'faceSdf' || kind === 'lightMap'
+			? 'authored-data'
+			: 'continuous';
+		this.configureTextureSampling(texture, sampling, kind !== 'normal');
 		material.uniforms[names.map].value = texture ?? null;
 		material.uniforms[names.hasMap].value = texture ? 1 : 0;
 	}
 
 	static applyDiffuseLayers(material: THREE.ShaderMaterial, textures: readonly THREE.Texture[]): void {
 		for (let index = 0; index < GIMI_MAX_DIFFUSE_LAYERS; index += 1) {
-			material.uniforms[diffuseLayerUniformNames[index]].value = textures[index] ?? null;
+			const texture = textures[index];
+			// Later diffuse layers use straight-alpha coverage. Nearest filtering
+			// prevents resampling from inventing coverage between authored texels.
+			this.configureTextureSampling(texture, 'authored-data');
+			material.uniforms[diffuseLayerUniformNames[index]].value = texture ?? null;
 		}
 		material.uniforms.uDiffuseCount.value = Math.min(textures.length, GIMI_MAX_DIFFUSE_LAYERS);
 	}
@@ -106,7 +87,8 @@ export class GIMIShaderController {
 	private readonly lightDirection = new THREE.Vector3(0, Math.cos(THREE.MathUtils.degToRad(50)), Math.sin(THREE.MathUtils.degToRad(50)));
 	private readonly elementColor = new THREE.Color('#a8a8a8');
 	private emissionStrength = 1;
-	private normalStrength = 0.55;
+	private normalStrength = 1;
+	private metalMaterial = false;
 
 	attach(material: THREE.ShaderMaterial): void {
 		this.materials.add(material);
@@ -114,6 +96,7 @@ export class GIMIShaderController {
 		material.uniforms.uElementColor.value.copy(this.elementColor);
 		material.uniforms.uEmissionStrength.value = this.emissionStrength;
 		material.uniforms.uNormalStrength.value = this.normalStrength;
+		material.uniforms.uMetalMaterial.value = this.metalMaterial ? 1 : 0;
 	}
 
 	detach(material: THREE.ShaderMaterial): void {
@@ -152,9 +135,16 @@ export class GIMIShaderController {
 	}
 
 	setNormalStrength(strength: number): void {
-		this.normalStrength = THREE.MathUtils.clamp(Number.isFinite(strength) ? strength : 0.55, 0, 1);
+		this.normalStrength = THREE.MathUtils.clamp(Number.isFinite(strength) ? strength : 1, 0, 1);
 		for (const material of this.materials) {
 			material.uniforms.uNormalStrength.value = this.normalStrength;
+		}
+	}
+
+	setMetalMaterial(enabled: boolean): void {
+		this.metalMaterial = enabled;
+		for (const material of this.materials) {
+			material.uniforms.uMetalMaterial.value = enabled ? 1 : 0;
 		}
 	}
 
@@ -171,23 +161,79 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uDiffuseMap3: { value: null },
 		uDiffuseCount: { value: 0 },
 		uNormalMap: { value: null },
+		uFaceSdfMap: { value: null },
 		uLightMap: { value: null },
 		uRampMap: { value: null },
 		uMetalMap: { value: null },
 		uHasDiffuseMap: { value: 0 },
 		uHasNormalMap: { value: 0 },
+		uHasFaceSdfMap: { value: 0 },
 		uHasLightMap: { value: 0 },
 		uHasRampMap: { value: 0 },
 		uHasMetalMap: { value: 0 },
 		uFallbackColor: { value: fallbackColor.clone() },
 		uNeedsReview: { value: needsReview ? 1 : 0 },
 		uLightDir: { value: new THREE.Vector3(0, Math.cos(THREE.MathUtils.degToRad(50)), Math.sin(THREE.MathUtils.degToRad(50))) },
-		uBaseCurveLut: { value: baseCurveLut },
-		 uRampCurveLut: { value: rampCurveLut },
 		uFrame: { value: 0 },
 		uElementColor: { value: new THREE.Color('#a8a8a8') },
 		uEmissionStrength: { value: 1 },
-		uNormalStrength: { value: 0.55 },
+		uNormalStrength: { value: 1 },
+		// _MetalMaterial is a material constant in the reference shader. A
+		// MetalMap alone is only its sphere map and must not enable this branch.
+		uMetalMaterial: { value: 0 },
+		uSpecularHighlights: { value: 0 },
+		uFaceSdfChannel: { value: 0 },
+		uIsFaceMesh: { value: 0 },
+		// AvatarGenshinPass uses vertex COLOR.R together with LightMap.G for both
+		// body and face. This stays separate from the face SDF role.
+		uUseVertexColorAo: { value: 0 },
+		// The captured face LightMap.G is a broad face mask rather than the
+		// ILM ShadowAO channel used by the body pass. Keep this explicit so a
+		// face can use directional shading without interpreting that mask as AO.
+		uFaceUseLightMapAo: { value: 0 },
+		uIsEyeMesh: { value: 0 },
+		uFaceSdfSoftness: { value: 0.05 },
+		uFaceSdfOffset: { value: 0 },
+		// Material-level shadow tints from GenshinCelShaderURP. LightMap.A only
+		// chooses the RampMap row and must not choose a second dark-color table.
+		// The captured body material uses white tints and the normal (non-cool)
+		// RampMap half.
+		uDarkShadowColor: { value: new THREE.Vector3(1, 1, 1) },
+		uCoolDarkShadowColor: { value: new THREE.Vector3(1, 1, 1) },
+		uUseCoolShadowColorOrTex: { value: 0 },
+		// The reference face material has its own dark-shadow tint. 0.8490566 is
+		// the captured GenshinCelShader face default; body remains at 1.0.
+		uFaceDarkShadowColor: { value: new THREE.Vector3(0.8490566, 0.8490566, 0.8490566) },
+		uFaceCoolDarkShadowColor: { value: new THREE.Vector3(1, 1, 1) },
+		uFaceUseCoolShadowColorOrTex: { value: 0 },
+		uBrightFac: { value: 0.99 },
+		uBrightAreaShadowFactor: { value: 1 },
+		// _LightAreaColorTint is shared by the reference body and face materials.
+		// It is applied after the ramp lookup, not baked into the RampMap.
+		uLightAreaColorTint: { value: new THREE.Vector3(0.9528302, 0.9528302, 0.9528302) },
+		// Body ramp controls remain independent from the face controls. Defaults
+		// preserve the established GIMI preview order.
+		uRampIndices0: { value: 1 },
+		uRampIndices1: { value: 4 },
+		uRampIndices2: { value: 3 },
+		uRampIndices3: { value: 5 },
+		uRampIndices4: { value: 2 },
+		// Faces use a separate material table. Keep the old face-oriented defaults
+		// available while allowing them to be tuned independently from the body.
+		// The face skin in the captured material uses the second RampMap row for
+		// the A < 0.25 region; keep the remaining regions independently tunable.
+		// These remain independently configurable through the preview controls.
+		uFaceRampIndices0: { value: 2 },
+		uFaceRampIndices1: { value: 4 },
+		uFaceRampIndices2: { value: 3 },
+		uFaceRampIndices3: { value: 5 },
+		uFaceRampIndices4: { value: 4 },
+		// The preview root maps the imported local basis (right +X, forward -Y,
+		// up +Z) through its -90 degree X rotation into this world-space basis.
+		// RotationX(-90): local -Y becomes world +Z, and local +Z becomes world +Y.
+		uFaceForward: { value: new THREE.Vector3(0, 0, 1) },
+		uFaceRight: { value: new THREE.Vector3(1, 0, 0) },
+		uFaceUp: { value: new THREE.Vector3(0, 1, 0) },
 	},
 	vertexShader: gimiVertexShader.replaceAll('__EPSILON__', EPSILON.toFixed(5)),
 	fragmentShader: gimiFragmentShader.replaceAll('__EPSILON__', EPSILON.toFixed(5)),

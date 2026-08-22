@@ -10,6 +10,7 @@ export type TextureItemForApply = {
 	slot: string
 	markName: string
 	markStyle: MarkStyle
+	faceNormalChannel?: 'R' | 'G' | 'B' | 'A'
 	suffix: string
 }
 
@@ -28,6 +29,7 @@ type TextureMarkUpInfo = {
 	MarkType: MarkStyle
 	MarkFileName: string
 	MarkDedupedFileName?: string
+	FaceSDFChannel?: 'R' | 'G' | 'B' | 'A'
 }
 
 const buildTextureIdentityKey = (dedupedFileName: string, markHash: string, markSlot: string): string => {
@@ -72,7 +74,9 @@ export type AppliedSubMeshTextureMark = {
 	markStyle: MarkStyle
 	markFileName: string
 	markDedupedFileName: string
+	faceNormalChannel: 'R' | 'G' | 'B' | 'A'
 	folderPath: string
+	textureFilePath: string
 	jsonPath: string
 }
 
@@ -260,6 +264,11 @@ const normalizeMarkupList = (value: unknown): TextureMarkUpInfo[] => {
 			MarkType: item.MarkType === 'Slot' ? 'Slot' : item.MarkType === 'SharedSlot' ? 'SharedSlot' : 'Hash',
 			MarkFileName: typeof item.MarkFileName === 'string' ? item.MarkFileName : '',
 			MarkDedupedFileName: typeof item.MarkDedupedFileName === 'string' ? item.MarkDedupedFileName : '',
+			FaceSDFChannel: typeof item.MarkName === 'string' && item.MarkName.trim().toLowerCase() === 'facesdfmap'
+				? item.FaceSDFChannel === 'G' || item.FaceSDFChannel === 'B' || item.FaceSDFChannel === 'A'
+					? item.FaceSDFChannel
+					: 'R'
+				: undefined,
 		}))
 }
 
@@ -308,12 +317,27 @@ export const readAppliedSubMeshTextureMarks = async (args: {
 		const normalizedList = dedupeMarkupListByTextureIdentity(
 			normalizeMarkupList(parsed[SUBMESH_TEXTURE_MARKUP_LIST_KEY])
 		)
+		const copiedFileNameCounts = new Map<string, number>()
+		for (const item of normalizedList) {
+			const key = item.MarkFileName.trim().toLowerCase()
+			if (key) copiedFileNameCounts.set(key, (copiedFileNameCounts.get(key) || 0) + 1)
+		}
 		for (const item of normalizedList) {
 			if (!item.MarkName.trim() || !item.MarkFileName.trim()) {
 				continue
 			}
 
-			const textureFilePath = await join(entry.folderPath, item.MarkFileName)
+			const copiedTextureFilePath = await join(entry.folderPath, item.MarkFileName)
+			// Legacy workspaces gave all same-semantic maps one destination name,
+			// so each subsequent copy overwrote the preceding texture. Their
+			// per-texture source remains in DedupedTextures.
+			const copiedFileIsShared = (copiedFileNameCounts.get(item.MarkFileName.trim().toLowerCase()) || 0) > 1
+			const dedupedTextureFilePath = copiedFileIsShared && item.MarkDedupedFileName
+				? await join(workspacePath, 'DedupedTextures', item.MarkDedupedFileName)
+				: ''
+			const textureFilePath = dedupedTextureFilePath && await exists(dedupedTextureFilePath)
+				? dedupedTextureFilePath
+				: copiedTextureFilePath
 			if (!(await exists(textureFilePath))) {
 				continue
 			}
@@ -337,7 +361,9 @@ export const readAppliedSubMeshTextureMarks = async (args: {
 				markStyle: item.MarkType,
 				markFileName: item.MarkFileName,
 				markDedupedFileName: item.MarkDedupedFileName || '',
+				faceNormalChannel: item.FaceSDFChannel || 'R',
 				folderPath: entry.folderPath,
+				textureFilePath,
 				jsonPath: entry.jsonPath,
 			})
 		}
@@ -644,6 +670,11 @@ export const applyTextureMarkForCurrentSubMesh = async (args: {
 
 	const dedupedDict = await readTrianglelistDedupedDict(workspacePath)
 	const markupMap = new Map<string, { markup: TextureMarkUpInfo; sourcePath: string; dedupedFileName: string }>()
+	const markNameCounts = new Map<string, number>()
+	for (const item of textureList) {
+		const markName = item.markName?.trim().toLowerCase()
+		if (markName) markNameCounts.set(markName, (markNameCounts.get(markName) || 0) + 1)
+	}
 	let appliedCount = 0
 
 	for (const item of textureList) {
@@ -662,7 +693,11 @@ export const applyTextureMarkForCurrentSubMesh = async (args: {
 		}
 
 		const textureHash = SSMTStringUtils.getFileHashFromFileName(item.name)
-		const targetFileName = `${subMesh}-${item.markName}${item.suffix || '.dds'}`
+		const normalizedMarkName = item.markName.trim().toLowerCase()
+		const needsUniqueFileName = (markNameCounts.get(normalizedMarkName) || 0) > 1
+		const targetFileName = needsUniqueFileName
+			? `${subMesh}-${item.markName}-${textureHash || item.slot.replace(/[^a-z0-9]+/gi, '_')}${item.suffix || '.dds'}`
+			: `${subMesh}-${item.markName}${item.suffix || '.dds'}`
 		const identityKey = buildTextureIdentityKey(deduped, textureHash, item.slot)
 		if (!identityKey) {
 			continue
@@ -676,6 +711,9 @@ export const applyTextureMarkForCurrentSubMesh = async (args: {
 				MarkType: item.markStyle,
 				MarkFileName: targetFileName,
 				MarkDedupedFileName: deduped,
+				FaceSDFChannel: item.markName.trim().toLowerCase() === 'facesdfmap'
+					? item.faceNormalChannel || 'R'
+					: undefined,
 			},
 			sourcePath,
 			dedupedFileName: deduped,

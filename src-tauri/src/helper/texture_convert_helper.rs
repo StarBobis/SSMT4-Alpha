@@ -127,6 +127,15 @@ impl TextureConvertHelper {
             arguments.push(width.to_string());
             arguments.push("-h".to_string());
             arguments.push(height.to_string());
+            // Authored alpha channels are masks/semantic data, not coverage
+            // to be averaged. Point filtering preserves the source texel
+            // exactly when a preview-sized DDS is required.
+            arguments.push("-if".to_string());
+            arguments.push("POINT".to_string());
+            // Keep straight-alpha color data independent while filtering.
+            // Otherwise transparent texels can bleed black into the RGB
+            // channels and make an overlay disappear after downscaling.
+            arguments.push("-sepalpha".to_string());
         }
 
         arguments.push("-o".to_string());

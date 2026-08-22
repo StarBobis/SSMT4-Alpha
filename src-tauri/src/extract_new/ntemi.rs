@@ -425,6 +425,7 @@ impl NTEMINewExtractor {
                     mark_slot,
                     mark_type: mark_type.to_string(),
                     mark_file_name: tex_filename.clone(),
+                    face_sdf_channel: None,
                 });
             }
 
