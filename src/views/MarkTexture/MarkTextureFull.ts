@@ -58,6 +58,7 @@ type SubMeshJsonObject = {
 	IndexBufferList?: unknown
 	CategoryBufferList?: unknown
 	TextureMarkUpInfoList?: unknown
+	DiffuseMap?: string[]
 	SubMeshRole?: SubMeshRole
 	[key: string]: unknown
 }
@@ -68,6 +69,7 @@ type SubMeshTargetEntry = {
 }
 
 const SUBMESH_TEXTURE_MARKUP_LIST_KEY = 'TextureMarkUpInfoList'
+const SUBMESH_DIFFUSE_MAP_LIST_KEY = 'DiffuseMap'
 const SUBMESH_ROLE_KEY = 'SubMeshRole'
 
 export type AppliedSubMeshTextureMark = {
@@ -240,6 +242,23 @@ const copyTextureToFolder = async (
 	await copyFile(sourcePath, targetPath)
 }
 
+const syncDiffuseMapMetadata = (
+	parsed: SubMeshJsonObject,
+	markupList: TextureMarkUpInfo[]
+): void => {
+	// Entries are relative to this JSON file's parent folder, so Blender can
+	// resolve them without knowing the workspace root.
+	const diffuseMapFiles = markupList
+		.filter(item => item.MarkName.trim().toLowerCase() === 'diffusemap')
+		.map(item => item.MarkFileName.trim())
+		.filter((fileName, index, files) => !!fileName && files.indexOf(fileName) === index)
+	if (diffuseMapFiles.length > 0) {
+		parsed[SUBMESH_DIFFUSE_MAP_LIST_KEY] = diffuseMapFiles
+	} else {
+		delete parsed[SUBMESH_DIFFUSE_MAP_LIST_KEY]
+	}
+}
+
 const writeMarkupToSubMeshJson = async (
 	targetJsonPath: string,
 	markupList: TextureMarkUpInfo[]
@@ -250,6 +269,7 @@ const writeMarkupToSubMeshJson = async (
 	}
 
 	parsed[SUBMESH_TEXTURE_MARKUP_LIST_KEY] = markupList
+	syncDiffuseMapMetadata(parsed, markupList)
 	await writeTextFile(targetJsonPath, JSON.stringify(parsed, null, 2))
 }
 
@@ -797,6 +817,7 @@ export const clearCurrentSubMeshTextureMarkup = async (args: {
 		}
 
 		parsed[SUBMESH_TEXTURE_MARKUP_LIST_KEY] = []
+		syncDiffuseMapMetadata(parsed, [])
 		await writeTextFile(entry.jsonPath, JSON.stringify(parsed, null, 2))
 		clearedFolderCount += 1
 	}
@@ -874,6 +895,7 @@ export const updateCurrentSubMeshTextureMarkupStyle = async (args: {
 		}
 
 		parsed[SUBMESH_TEXTURE_MARKUP_LIST_KEY] = nextList
+		syncDiffuseMapMetadata(parsed, nextList)
 		await writeTextFile(entry.jsonPath, JSON.stringify(parsed, null, 2))
 		updatedFolderCount += 1
 	}

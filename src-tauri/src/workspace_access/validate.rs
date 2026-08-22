@@ -645,6 +645,11 @@ fn validate_json_and_references(path: &Path, root: &Path, errors: &mut Vec<Works
             validate_required_reference(parent, &texture.mark_file_name, root, path, errors);
         }
     }
+    for diffuse_map in submesh.diffuse_map {
+        if !diffuse_map.is_empty() {
+            validate_required_reference(parent, &diffuse_map, root, path, errors);
+        }
+    }
 }
 
 fn validate_category_buffer(
