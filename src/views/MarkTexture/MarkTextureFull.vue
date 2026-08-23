@@ -1946,8 +1946,8 @@ const renderChannelPreview = (canvas: HTMLCanvasElement, image: DecodedDdsPrevie
 	context.bindTexture(context.TEXTURE_2D, texture);
 	context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 	context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
-	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.LINEAR);
-	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MAG_FILTER, context.LINEAR);
+	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.NEAREST);
+	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MAG_FILTER, context.NEAREST);
 	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_S, context.CLAMP_TO_EDGE);
 	context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_T, context.CLAMP_TO_EDGE);
 	context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, sourceWidth, sourceHeight, 0, context.RGBA, context.UNSIGNED_BYTE, image.pixels);
@@ -4226,6 +4226,7 @@ watch(activeChannelPreviewItem, (item) => {
 
 .channel-preview-stage canvas {
 	display: block;
+	image-rendering: pixelated;
 	max-width: 92%;
 	max-height: 92%;
 	object-fit: contain;
@@ -4334,6 +4335,7 @@ watch(activeChannelPreviewItem, (item) => {
 	width: 100%;
 	height: 100%;
 	display: block;
+	image-rendering: pixelated;
 }
 
 .preview-wrap {
@@ -4351,6 +4353,7 @@ watch(activeChannelPreviewItem, (item) => {
 	height: 100%;
 	object-fit: cover;
 	display: block;
+	image-rendering: pixelated;
 	transition: opacity 0.18s ease;
 }
 
@@ -4384,6 +4387,7 @@ watch(activeChannelPreviewItem, (item) => {
 	height: 100%;
 	object-fit: cover;
 	display: block;
+	image-rendering: pixelated;
 	transition: opacity 0.18s ease;
 }
 

@@ -34,14 +34,23 @@ export class GIMITextureSet {
 		clampEdges = false,
 	): void {
 		if (!texture) return;
-		// SDF thresholds, ILM material IDs, and diffuse overlay alpha are
-		// discrete authored data. Their values cannot be interpolated safely.
-		// RampMap and MetalMap are continuous colour lookups in the reference
-		// shaders, however, so nearest filtering makes their bands and matcap
-		// response visibly wrong.
-		texture.generateMipmaps = false;
-		texture.minFilter = sampling === 'authored-data' ? THREE.NearestFilter : THREE.LinearFilter;
-		texture.magFilter = sampling === 'authored-data' ? THREE.NearestFilter : THREE.LinearFilter;
+		// SDF thresholds and ILM material IDs are discrete authored data and
+		// cannot be interpolated safely. Colour/normal textures are continuous:
+		// use trilinear mip sampling (when mipmaps exist or can be generated) so
+		// texture detail is anti-aliased independently from geometry-edge AA.
+		if (sampling === 'authored-data') {
+			texture.generateMipmaps = false;
+			texture.minFilter = THREE.NearestFilter;
+			texture.magFilter = THREE.NearestFilter;
+		} else {
+			const compressed = texture instanceof THREE.CompressedTexture;
+			const hasMipmaps = texture.mipmaps.length > 1;
+			texture.generateMipmaps = !compressed;
+			texture.minFilter = hasMipmaps || !compressed
+				? THREE.LinearMipmapLinearFilter
+				: THREE.LinearFilter;
+			texture.magFilter = THREE.LinearFilter;
+		}
 		if (clampEdges) {
 			texture.wrapS = THREE.ClampToEdgeWrapping;
 			texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -66,9 +75,7 @@ export class GIMITextureSet {
 	static applyDiffuseLayers(material: THREE.ShaderMaterial, textures: readonly THREE.Texture[]): void {
 		for (let index = 0; index < GIMI_MAX_DIFFUSE_LAYERS; index += 1) {
 			const texture = textures[index];
-			// Later diffuse layers use straight-alpha coverage. Nearest filtering
-			// prevents resampling from inventing coverage between authored texels.
-			this.configureTextureSampling(texture, 'authored-data');
+			this.configureTextureSampling(texture, 'continuous');
 			material.uniforms[diffuseLayerUniformNames[index]].value = texture ?? null;
 		}
 		material.uniforms.uDiffuseCount.value = Math.min(textures.length, GIMI_MAX_DIFFUSE_LAYERS);

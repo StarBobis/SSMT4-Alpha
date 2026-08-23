@@ -2083,7 +2083,10 @@ const loadTexture = (url: string, colorTexture: boolean): Promise<THREE.Texture 
 				texture.colorSpace = colorTexture ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 				texture.wrapS = THREE.RepeatWrapping;
 				texture.wrapT = THREE.RepeatWrapping;
-				texture.anisotropy = 1;
+				texture.generateMipmaps = true;
+				texture.minFilter = THREE.LinearMipmapLinearFilter;
+				texture.magFilter = THREE.LinearFilter;
+				texture.anisotropy = renderer?.capabilities.getMaxAnisotropy() ?? 1;
 				resolve(texture);
 			},
 			undefined,
@@ -2258,6 +2261,7 @@ const loadCompressedDdsTexture = async (ddsPath: string, colorTexture: boolean):
 	texture.generateMipmaps = false;
 	texture.minFilter = mipmaps.length > 1 ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
 	texture.magFilter = THREE.LinearFilter;
+	texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 	texture.needsUpdate = true;
 	return texture;
 };
@@ -2283,12 +2287,14 @@ const loadDdsTexture = async (
 		texture.wrapT = THREE.RepeatWrapping;
 		// The geometry owns the V-axis conversion; DDS pixels stay in source order.
 		texture.flipY = false;
-        // Converted preview textures may contain semantic alpha masks. Keep
-        // their texel values discrete; linear filtering would blend unrelated
-        // mask regions and can erase an overlay after sampling.
-        texture.generateMipmaps = false;
-        texture.minFilter = THREE.NearestFilter;
-        texture.magFilter = THREE.NearestFilter;
+		// Texture anti-aliasing is separate from the post-process edge AA. Use
+		// trilinear mip sampling plus anisotropy for stable detail at distance
+		// and oblique viewing angles. Semantic GIMI maps override this to nearest
+		// sampling when they are bound to the material.
+		texture.generateMipmaps = true;
+		texture.minFilter = THREE.LinearMipmapLinearFilter;
+		texture.magFilter = THREE.LinearFilter;
+		texture.anisotropy = renderer?.capabilities.getMaxAnisotropy() ?? 1;
 		texture.needsUpdate = true;
 		return texture;
 	} catch (error) {
