@@ -306,25 +306,6 @@ const restoreGIMIRampIndices = (): number[] => {
 	return [...GIMI_DEFAULT_RAMP_INDICES];
 };
 const gimiRampIndices = ref(restoreGIMIRampIndices());
-const GIMI_DEFAULT_FACE_RAMP_INDICES = [2, 4, 3, 5, 4];
-const GIMI_LEGACY_FACE_RAMP_INDICES = [1, 4, 5, 3, 2];
-const restoreGIMIFaceRampIndices = (): number[] => {
-	try {
-		const parsed = JSON.parse(localStorage.getItem(`${PREVIEW_GIMI_RAMP_INDICES_STORAGE_KEY}:face`) || 'null');
-		if (Array.isArray(parsed) && parsed.length === 5 && parsed.every(value => Number.isFinite(value) && value >= 1 && value <= 5)) {
-			const indices = parsed.map(value => Math.round(value));
-			// Values written by the previous built-in defaults were not a user
-			// choice. Migrate that exact tuple to the reference face material;
-			// preserve every other tuple, including explicit all-1/all-4 tests.
-			if (indices.every((value, index) => value === GIMI_LEGACY_FACE_RAMP_INDICES[index])) {
-				return [...GIMI_DEFAULT_FACE_RAMP_INDICES];
-			}
-			return indices;
-		}
-	} catch { /* use face defaults */ }
-	return [...GIMI_DEFAULT_FACE_RAMP_INDICES];
-};
-const gimiFaceRampIndices = ref(restoreGIMIFaceRampIndices());
 type RampRowOption = { index: number; color: string; rgb: [number, number, number] };
 type RampIndexOption = { index: number; label: string };
 const rampIndexOptions: RampIndexOption[] = [
@@ -656,12 +637,7 @@ const applyFaceNormalMap = (
 	GIMITextureSet.apply(targetMaterial, 'faceSdf', texture);
 	targetMaterial.uniforms.uFaceSdfChannel.value = faceNormalChannelIndex(channel);
 	targetMaterial.uniforms.uIsFaceMesh.value = isFaceMesh ? 1 : 0;
-	// Body uses LightMap.G * vertexColor.R. The captured face LightMap.G is a
-	// broad mask, so face Ramp X intentionally does not consume it by default.
 	targetMaterial.uniforms.uUseVertexColorAo.value = isFaceMesh ? 0 : 1;
-	if (targetMaterial.uniforms.uFaceUseLightMapAo) {
-		targetMaterial.uniforms.uFaceUseLightMapAo.value = isFaceMesh ? 0 : 1;
-	}
 	targetMaterial.uniforms.uIsEyeMesh.value = isEyeMeshTarget(targetId) ? 1 : 0;
 };
 
@@ -671,18 +647,21 @@ const applyMeshSemantic = (targetMaterial: THREE.ShaderMaterial, targetId: strin
 	targetMaterial.uniforms.uIsEyeMesh.value = eye ? 1 : 0;
 	targetMaterial.uniforms.uIsFaceMesh.value = eye ? 0 : (isFaceMeshTarget(targetId) ? 1 : 0);
 	targetMaterial.uniforms.uUseVertexColorAo.value = eye ? 0 : 1;
-	if (targetMaterial.uniforms.uFaceUseLightMapAo) {
-		targetMaterial.uniforms.uFaceUseLightMapAo.value = eye ? 0 : (isFaceMeshTarget(targetId) ? 0 : 1);
-	}
 };
 
 const faceLocalRight = new THREE.Vector3(1, 0, 0);
-const faceLocalForward = new THREE.Vector3(0, -1, 0);
+// Extracted character space follows the conventional humanoid axes: arms
+// spread along X, forward along +Y, and up along +Z. The FaceSDF is sampled
+// across its horizontal X axis; Y is used only to derive the front/back
+// threshold from the virtual sun.
+const faceLocalForward = new THREE.Vector3(0, 1, 0);
 const faceLocalUp = new THREE.Vector3(0, 0, 1);
 
-// Face/neck alignment is intentionally an Object3D transform. Feed its final
-// world-space basis to the SDF pass, rather than editing the face geometry or
-// assuming the preview root's original fixed axes still apply.
+// Face/neck alignment is a preview-only placement transform. It must not
+// rotate the semantic face frame: that alignment can turn character +X into
+// screen vertical, making the light orb's up/down movement control a left/
+// right SDF boundary. Use the preview root so the frame follows user model
+// rotation while keeping character X/Y/Z semantics intact.
 const syncFaceLightFrames = (root: THREE.Object3D | undefined): void => {
 	if (!root) return;
 	root.updateMatrixWorld(true);
@@ -690,9 +669,9 @@ const syncFaceLightFrames = (root: THREE.Object3D | undefined): void => {
 		if (!(object instanceof THREE.Mesh) || !(object.material instanceof THREE.ShaderMaterial)) return;
 		const targetMaterial = object.material;
 		if (!isGIMIMaterial(targetMaterial) || targetMaterial.uniforms.uIsFaceMesh.value < 0.5) return;
-		targetMaterial.uniforms.uFaceRight.value.copy(faceLocalRight).transformDirection(object.matrixWorld);
-		targetMaterial.uniforms.uFaceForward.value.copy(faceLocalForward).transformDirection(object.matrixWorld);
-		targetMaterial.uniforms.uFaceUp.value.copy(faceLocalUp).transformDirection(object.matrixWorld);
+		targetMaterial.uniforms.uFaceRight.value.copy(faceLocalRight).transformDirection(root.matrixWorld);
+		targetMaterial.uniforms.uFaceForward.value.copy(faceLocalForward).transformDirection(root.matrixWorld);
+		targetMaterial.uniforms.uFaceUp.value.copy(faceLocalUp).transformDirection(root.matrixWorld);
 	});
 };
 let emissionInferenceToken = 0;
@@ -1599,10 +1578,6 @@ const applyFaceRampIndex = (): void => {
 			for (let index = 0; index < gimiRampIndices.value.length; index += 1) {
 				const uniform = previewMaterial.uniforms[`uRampIndices${index}`];
 				if (uniform) uniform.value = gimiRampIndices.value[index];
-			}
-			for (let index = 0; index < gimiFaceRampIndices.value.length; index += 1) {
-				const uniform = previewMaterial.uniforms[`uFaceRampIndices${index}`];
-				if (uniform) uniform.value = gimiFaceRampIndices.value[index];
 			}
 		}
 	}
@@ -3315,12 +3290,6 @@ watch(gimiRampIndices, indices => {
 	renderPreview();
 }, { deep: true });
 
-watch(gimiFaceRampIndices, indices => {
-	localStorage.setItem(`${PREVIEW_GIMI_RAMP_INDICES_STORAGE_KEY}:face`, JSON.stringify(indices));
-	applyFaceRampIndex();
-	renderPreview();
-}, { deep: true });
-
 watch(antiAliasingMode, mode => {
 	localStorage.setItem(PREVIEW_ANTI_ALIASING_STORAGE_KEY, mode);
 	recreatePostProcessors();
@@ -3720,22 +3689,6 @@ onActivated(async () => {
 								popper-class="zoom-ramp-popper"
 								:popper-style="{ zIndex: '2147483647' }"
 								@update:model-value="gimiRampIndices[option.index] = $event; applyFaceRampIndex()"
-							>
-								<el-option v-for="row in rampRowOptions" :key="row.index" :value="row.index">
-									<div class="ramp-row-option"><i :style="{ backgroundColor: row.color }" />RampMap row {{ row.index }}</div>
-								</el-option>
-							</el-select>
-						</div>
-						<strong>Face</strong>
-						<div v-for="option in rampIndexOptions" :key="`face-${option.index}`" class="ramp-index-row">
-							<span>{{ option.label }}</span>
-							<el-select
-								:model-value="gimiFaceRampIndices[option.index]"
-								size="small"
-								teleported
-								popper-class="zoom-ramp-popper"
-								:popper-style="{ zIndex: '2147483647' }"
-								@update:model-value="gimiFaceRampIndices[option.index] = $event; applyFaceRampIndex()"
 							>
 								<el-option v-for="row in rampRowOptions" :key="row.index" :value="row.index">
 									<div class="ramp-row-option"><i :style="{ backgroundColor: row.color }" />RampMap row {{ row.index }}</div>

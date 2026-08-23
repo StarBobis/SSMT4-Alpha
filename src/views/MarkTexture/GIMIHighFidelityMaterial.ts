@@ -187,12 +187,7 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		// AvatarGenshinPass uses vertex COLOR.R together with LightMap.G for both
 		// body and face. This stays separate from the face SDF role.
 		uUseVertexColorAo: { value: 0 },
-		// The captured face LightMap.G is a broad face mask rather than the
-		// ILM ShadowAO channel used by the body pass. Keep this explicit so a
-		// face can use directional shading without interpreting that mask as AO.
-		uFaceUseLightMapAo: { value: 0 },
 		uIsEyeMesh: { value: 0 },
-		uFaceSdfSoftness: { value: 0.05 },
 		uFaceSdfOffset: { value: 0 },
 		// Material-level shadow tints from GenshinCelShaderURP. LightMap.A only
 		// chooses the RampMap row and must not choose a second dark-color table.
@@ -201,11 +196,10 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uDarkShadowColor: { value: new THREE.Vector3(1, 1, 1) },
 		uCoolDarkShadowColor: { value: new THREE.Vector3(1, 1, 1) },
 		uUseCoolShadowColorOrTex: { value: 0 },
-		// The reference face material has its own dark-shadow tint. 0.8490566 is
-		// the captured GenshinCelShader face default; body remains at 1.0.
-		uFaceDarkShadowColor: { value: new THREE.Vector3(0.8490566, 0.8490566, 0.8490566) },
-		uFaceCoolDarkShadowColor: { value: new THREE.Vector3(1, 1, 1) },
-		uFaceUseCoolShadowColorOrTex: { value: 0 },
+		// Face is an independent SDF-driven unlit pass. These are its captured
+		// warm light/shadow tints and intentionally do not reference RampMap.
+		uFaceLightTint: { value: new THREE.Vector3(0.85, 0.787525, 0.780263) },
+		uFaceShadowTint: { value: new THREE.Vector3(0.7553715, 0.31918, 0.2698094) },
 		uBrightFac: { value: 0.99 },
 		uBrightAreaShadowFactor: { value: 1 },
 		// _LightAreaColorTint is shared by the reference body and face materials.
@@ -218,16 +212,6 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uRampIndices2: { value: 3 },
 		uRampIndices3: { value: 5 },
 		uRampIndices4: { value: 2 },
-		// Faces use a separate material table. Keep the old face-oriented defaults
-		// available while allowing them to be tuned independently from the body.
-		// The face skin in the captured material uses the second RampMap row for
-		// the A < 0.25 region; keep the remaining regions independently tunable.
-		// These remain independently configurable through the preview controls.
-		uFaceRampIndices0: { value: 2 },
-		uFaceRampIndices1: { value: 4 },
-		uFaceRampIndices2: { value: 3 },
-		uFaceRampIndices3: { value: 5 },
-		uFaceRampIndices4: { value: 4 },
 		// The preview root maps the imported local basis (right +X, forward -Y,
 		// up +Z) through its -90 degree X rotation into this world-space basis.
 		// RotationX(-90): local -Y becomes world +Z, and local +Z becomes world +Y.
