@@ -202,6 +202,11 @@ const PREVIEW_REFERENCE_FRAME_DIAMETER_METERS = 2;
 const PREVIEW_CAMERA_DISTANCE_MULTIPLIER = 1.65;
 const STRUCTURED_BUFFER_TYPES = new Set(['NORMAL', 'BLENDWEIGHT', 'TANGENTFRAME']);
 const REVERSED_WINDING_GAME_PRESETS = new Set(['WWMI', 'NTEMI', 'YYSLS', 'SNOWBREAK']);
+const PREVIEW_POSITION_SCALE_BY_GAME_PRESET = new Map<string, number>([
+	// WWMI vertex positions are authored in centimetres while the preview scene
+	// and its validity threshold use metres.
+	['WWMI', 0.01],
+]);
 const GIMI_ELEMENT_COLORS: Record<GIMIElement, string> = {
 	anemo: '#3cffc0',
 	geo: '#ffef3c',
@@ -1219,6 +1224,14 @@ const applyPluginCoordinateSystem = (values: number[]): [number, number, number]
 	// MeshCreateHelper.set_import_coordinate(): from_forward='-Z', from_up='Y'.
 	// Applied to a DirectX position/direction this is (x, -z, y).
 	return [values[0], -values[2], values[1]];
+};
+
+const applyPreviewPosition = (values: number[], gamePreset?: string): [number, number, number] => {
+	const position = applyPluginCoordinateSystem(values);
+	const scale = PREVIEW_POSITION_SCALE_BY_GAME_PRESET.get(normalizeSemantic(gamePreset)) ?? 1;
+	return scale === 1
+		? position
+		: [position[0] * scale, position[1] * scale, position[2] * scale];
 };
 
 const getBufferData = async (
@@ -2614,7 +2627,7 @@ const createPreviewGeometry = async (
 			if (targetIndex === undefined) {
 				targetIndex = remap.size;
 				remap.set(sourceIndex, targetIndex);
-				const position = applyPluginCoordinateSystem(trianglePositions[vertexOffset]!);
+				const position = applyPreviewPosition(trianglePositions[vertexOffset]!, dataType.json.GamePreset);
 				if (position.some(value => !Number.isFinite(value) || Math.abs(value) > MAX_REASONABLE_PREVIEW_COORDINATE_METERS)) {
 					hasImplausibleCoordinates = true;
 				}
@@ -2760,7 +2773,7 @@ const createPermissivePreviewGeometry = async (
 				}
 				targetIndex = remap.size;
 				remap.set(bufferIndex, targetIndex);
-				positions.push(...applyPluginCoordinateSystem(positionValues));
+				positions.push(...applyPreviewPosition(positionValues, dataType.json.GamePreset));
 				const normalValues = readElementValues(normalData, normalSource, bufferIndex);
 				const tangentValues = readElementValues(tangentData, tangentSource, bufferIndex);
 				const colorValues = readElementValues(colorData, colorSource, bufferIndex);
