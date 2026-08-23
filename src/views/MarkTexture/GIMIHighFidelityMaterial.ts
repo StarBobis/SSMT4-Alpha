@@ -34,10 +34,9 @@ export class GIMITextureSet {
 		clampEdges = false,
 	): void {
 		if (!texture) return;
-		// SDF thresholds and ILM material IDs are discrete authored data and
-		// cannot be interpolated safely. Colour/normal textures are continuous:
-		// use trilinear mip sampling (when mipmaps exist or can be generated) so
-		// texture detail is anti-aliased independently from geometry-edge AA.
+		// Continuous maps use bilinear/trilinear sampling so their texels do not
+		// become visible rectangles under close-up or oblique views. Discrete
+		// authored data remains available for maps that truly require exact IDs.
 		if (sampling === 'authored-data') {
 			texture.generateMipmaps = false;
 			texture.minFilter = THREE.NearestFilter;
@@ -64,9 +63,10 @@ export class GIMITextureSet {
 			return;
 		}
 		const names = textureUniforms[kind];
-		const sampling: GIMITextureSampling = kind === 'faceSdf' || kind === 'lightMap'
-			? 'authored-data'
-			: 'continuous';
+		// Face SDF is a continuous distance field, while the ILM/light map also
+		// contains continuous AO and masks. Their semantic thresholds are handled
+		// in the shader; nearest-neighbour texture sampling visibly exposes texels.
+		const sampling: GIMITextureSampling = 'continuous';
 		this.configureTextureSampling(texture, sampling, kind !== 'normal');
 		material.uniforms[names.map].value = texture ?? null;
 		material.uniforms[names.hasMap].value = texture ? 1 : 0;

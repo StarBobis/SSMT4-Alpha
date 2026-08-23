@@ -183,14 +183,24 @@ void main() {
         vec3 faceLight = safeNormalize(lightDirection - faceUp * dot(lightDirection, faceUp), faceForward);
         float frontDot = dot(faceLight, faceForward);
         float sideDot = dot(faceLight, faceRight);
-        // Face frame orientation is now aligned with the light-orb axes:
-        // mirror the authored one-sided SDF for light arriving from -X.
-        vec2 sdfUv = vec2(sideDot <= 0.0 ? 1.0 - vUv.x : vUv.x, vUv.y);
+        // The authored SDF describes lighting from one side of the face. When
+        // the light moves to the other side, sample the horizontally mirrored
+        // map for the whole face.
+        vec2 sdfUv = vec2(sideDot <= 0.0 ? vUv.x : 1.0 - vUv.x, vUv.y);
         float sdfValue = uHasFaceSdfMap > 0.5
             ? faceSdfChannel(texture2D(uFaceSdfMap, sdfUv), uFaceSdfChannel)
             : 1.0;
-        float threshold = clamp(0.5 - 0.5 * frontDot + uFaceSdfOffset, 0.0, 1.0);
-        float shadowMask = step(sdfValue, threshold);
+        // Map the horizontal light angle across the full authored SDF range:
+        // frontal light => 0, either side of the face => 1. The previous
+        // (1 - frontDot) * 0.5 mapping stopped at 0.5 at the far right/left,
+        // so only low-value details such as the nose shadow ever appeared.
+        float horizontalAngle = acos(clamp(frontDot, 0.0, 1.0));
+        float threshold = clamp(horizontalAngle / (0.5 * 3.141592653589793) + uFaceSdfOffset, 0.0, 1.0);
+        // Filtered SDF values remove texel blocks; derivative-width threshold
+        // coverage then anti-aliases the resulting contour in screen space.
+        float sdfEdge = threshold - sdfValue;
+        float sdfAntialiasWidth = max(fwidth(sdfEdge), 1.0 / 1024.0);
+        float shadowMask = smoothstep(-sdfAntialiasWidth, sdfAntialiasWidth, sdfEdge);
         vec3 toonColor = mix(baseColor * uFaceLightTint, baseColor * uFaceShadowTint, shadowMask);
         float fixedMask = uHasLightMap > 0.5 ? clamp(ilmTex.a, 0.0, 1.0) : 0.0;
         vec3 finalFaceColor = mix(toonColor, baseColor, fixedMask);

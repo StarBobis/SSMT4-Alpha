@@ -659,14 +659,15 @@ const faceLocalRight = new THREE.Vector3(1, 0, 0);
 // spread along X, forward along +Y, and up along +Z. The FaceSDF is sampled
 // across its horizontal X axis; Y is used only to derive the front/back
 // threshold from the virtual sun.
-const faceLocalForward = new THREE.Vector3(0, 1, 0);
+// Imported faces look toward local -Y. After the preview root's -90° X
+// rotation this becomes world +Z, matching the unchanged light-orb centre.
+const faceLocalForward = new THREE.Vector3(0, -1, 0);
 const faceLocalUp = new THREE.Vector3(0, 0, 1);
 
-// Face/neck alignment is a preview-only placement transform. It must not
-// rotate the semantic face frame: that alignment can turn character +X into
-// screen vertical, making the light orb's up/down movement control a left/
-// right SDF boundary. Use the preview root so the frame follows user model
-// rotation while keeping character X/Y/Z semantics intact.
+// The SDF frame follows the rendered character's parent/world transform, but
+// not the face Mesh's local corrective quaternion. That quaternion converts
+// source face geometry into the character frame; applying it again to the
+// already-semantic +X/right axis turns left/right into screen up/down.
 const syncFaceLightFrames = (root: THREE.Object3D | undefined): void => {
 	if (!root) return;
 	root.updateMatrixWorld(true);
@@ -674,9 +675,10 @@ const syncFaceLightFrames = (root: THREE.Object3D | undefined): void => {
 		if (!(object instanceof THREE.Mesh) || !(object.material instanceof THREE.ShaderMaterial)) return;
 		const targetMaterial = object.material;
 		if (!isGIMIMaterial(targetMaterial) || targetMaterial.uniforms.uIsFaceMesh.value < 0.5) return;
-		targetMaterial.uniforms.uFaceRight.value.copy(faceLocalRight).transformDirection(root.matrixWorld);
-		targetMaterial.uniforms.uFaceForward.value.copy(faceLocalForward).transformDirection(root.matrixWorld);
-		targetMaterial.uniforms.uFaceUp.value.copy(faceLocalUp).transformDirection(root.matrixWorld);
+		const semanticFrameMatrix = object.parent?.matrixWorld ?? root.matrixWorld;
+		targetMaterial.uniforms.uFaceRight.value.copy(faceLocalRight).transformDirection(semanticFrameMatrix);
+		targetMaterial.uniforms.uFaceForward.value.copy(faceLocalForward).transformDirection(semanticFrameMatrix);
+		targetMaterial.uniforms.uFaceUp.value.copy(faceLocalUp).transformDirection(semanticFrameMatrix);
 	});
 };
 let emissionInferenceToken = 0;
@@ -772,11 +774,25 @@ const onGIMILightOrbKeydown = (event: KeyboardEvent) => {
 const applyGIMILightOrbit = (): void => {
 	const azimuthRadians = THREE.MathUtils.degToRad(gimiLightAzimuth.value);
 	const elevationRadians = THREE.MathUtils.degToRad(gimiLightElevation.value);
-	gimiShaderController.setLightDirection(new THREE.Vector3(
-		Math.sin(azimuthRadians) * Math.cos(elevationRadians),
-		Math.sin(elevationRadians),
-		Math.cos(azimuthRadians) * Math.cos(elevationRadians),
-	));
+	const orbitX = Math.sin(azimuthRadians) * Math.cos(elevationRadians);
+	const orbitY = Math.sin(elevationRadians);
+	const orbitZ = Math.cos(azimuthRadians) * Math.cos(elevationRadians);
+	if (!camera) {
+		gimiShaderController.setLightDirection(new THREE.Vector3(orbitX, orbitY, orbitZ));
+		return;
+	}
+	// The orb is a screen-space control. Build its world direction from the
+	// camera basis so equal left/right positions remain visually symmetric even
+	// though the preview camera itself views the model from a diagonal vector.
+	camera.updateMatrixWorld();
+	const cameraRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+	const cameraUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+	const cameraFront = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 2).normalize();
+	gimiShaderController.setLightDirection(
+		cameraRight.multiplyScalar(orbitX)
+			.addScaledVector(cameraUp, orbitY)
+			.addScaledVector(cameraFront, orbitZ),
+	);
 };
 
 const restoreLightingModePreference = () => {
