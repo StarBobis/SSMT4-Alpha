@@ -824,6 +824,45 @@ const visibleSubMeshTargets = computed<PreviewSubMeshTarget[]>(() => {
 		: [];
 });
 
+const activePreviewTarget = computed(() => visibleSubMeshTargets.value.find(target => (
+	target.workspacePath === props.workspacePath && target.subMeshName === props.subMeshName
+)));
+
+const hasDiffuseMap = computed(() => (
+	!!activePreviewTarget.value?.diffuseDdsPath
+	|| !!activePreviewTarget.value?.diffuseDdsPaths?.length
+	|| !!activePreviewTarget.value?.diffuseUrl
+	|| !!activePreviewTarget.value?.diffuseUrls?.length
+	|| !!selectedDiffuse.value
+));
+
+const hasNormalMap = computed(() => (
+	!!activePreviewTarget.value?.normalDdsPath
+	|| !!activePreviewTarget.value?.normalUrl
+	|| !!selectedNormal.value
+));
+
+const previewTargetSignature = (target: PreviewSubMeshTarget): string => [
+	target.id,
+	target.workspacePath,
+	target.subMeshName,
+	target.diffuseDdsPath,
+	...(target.diffuseDdsPaths ?? []),
+	target.diffuseUrl,
+	...(target.diffuseUrls ?? []),
+	target.normalDdsPath,
+	target.normalUrl,
+	target.faceNormalDdsPath,
+	target.faceNormalUrl,
+	target.faceNormalChannel,
+	target.lightMapDdsPath,
+	target.lightMapUrl,
+	target.rampMapDdsPath,
+	target.rampMapUrl,
+	target.metalMapDdsPath,
+	target.metalMapUrl,
+].map(value => value ?? '').join('\u001f');
+
 const normalizeSemantic = (semantic: string | undefined): string => {
 	return (semantic || '').trim().toUpperCase();
 };
@@ -1478,6 +1517,11 @@ const renderPreview = () => {
 		gimiShaderController.setFrame(performance.now() * 0.06);
 	}
 	if (renderer && scene && camera) {
+		const size = renderer.getSize(new THREE.Vector2());
+		if (size.x > 0 && size.y > 0) {
+			camera.aspect = size.x / size.y;
+			camera.updateProjectionMatrix();
+		}
 		if (bloomPass) {
 			bloomPass.enabled = useGIMIBloom();
 			bloomPass.strength = getGIMIBloomStrength(renderer);
@@ -1488,6 +1532,11 @@ const renderPreview = () => {
 		else renderer.render(scene, camera);
 	}
 	if (zoomRenderer && scene && camera) {
+		const size = zoomRenderer.getSize(new THREE.Vector2());
+		if (size.x > 0 && size.y > 0) {
+			camera.aspect = size.x / size.y;
+			camera.updateProjectionMatrix();
+		}
 		if (zoomBloomPass) {
 			zoomBloomPass.enabled = useGIMIBloom();
 			zoomBloomPass.strength = getGIMIBloomStrength(zoomRenderer);
@@ -3202,7 +3251,8 @@ watch(
 
 watch(
 	() => visibleSubMeshTargets.value
-		.join('|'),
+		.map(previewTargetSignature)
+		.join('\u001e'),
 	() => {
 		schedulePreviewRebuild();
 	},
@@ -3460,8 +3510,8 @@ onActivated(async () => {
 				<span class="gimi-light-orb-indicator" :style="gimiLightOrbIndicatorStyle" />
 			</div>
 			<div class="preview-overlay-info">
-				<span>{{ selectedDiffuse ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
-				<span>{{ selectedNormal ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
+				<span>{{ hasDiffuseMap ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
+				<span>{{ hasNormalMap ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
 				<span>{{ t('markTexture.preview.renderMode') }} · {{ currentLightingModeLabel }}</span>
 			</div>
 			<button
@@ -3638,8 +3688,8 @@ onActivated(async () => {
 					<el-switch v-model="outlineSkipTransparent" />
 				</label>
 				<div class="preview-settings-map-status">
-					<span>{{ selectedDiffuse ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
-					<span>{{ selectedNormal ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
+					<span>{{ hasDiffuseMap ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
+					<span>{{ hasNormalMap ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
 					<span v-if="lightingMode === 'gimi-body'">{{ selectedLightMap ? 'LightMap' : 'LightMap fallback' }}</span>
 					<span v-if="lightingMode === 'gimi-body'">{{ selectedRampMap ? 'RampMap' : 'RampMap fallback' }}</span>
 				</div>
