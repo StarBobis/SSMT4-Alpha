@@ -75,6 +75,39 @@ const PS_PREAMBLE =
 
 export const fileTools: McpTool[] = [
   {
+    name: 'read_text_file',
+    description:
+      '读取单个文本文件的指定行范围并显示行号。适用于用户拖入的源码、配置、日志和说明文件；默认读取前 400 行，单次最多 2000 行。',
+    category: '文件与代码',
+    risk: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: strProp('文件绝对路径'),
+        startLine: numProp('起始行号(可选,从 1 开始,默认 1)'),
+        endLine: numProp('结束行号(可选,默认起始行后 399 行,最多读取 2000 行)'),
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      const path = String(args.path ?? '').trim()
+      if (!path) return '缺少必需参数:path(文件路径)。'
+      const startLine = Math.max(1, Math.trunc(Number(args.startLine) || 1))
+      const requestedEnd = Math.trunc(Number(args.endLine) || startLine + 399)
+      const endLine = Math.max(startLine, Math.min(requestedEnd, startLine + 1999))
+      const script =
+        PS_PREAMBLE +
+        '$p=B64(\'' + encodeB64(path) + '\');' +
+        `if(-not (Test-Path -LiteralPath $p -PathType Leaf)){Write-Output "NO_FILE: 文件不存在或不是普通文件";exit 0};` +
+        `$start=${startLine};$end=${endLine};$line=0;` +
+        'Get-Content -LiteralPath $p -Encoding UTF8 -ErrorAction Stop|ForEach-Object{' +
+        '$line++;if($line -ge $start -and $line -le $end){Write-Output ("${line}: "+$_)}' +
+        '};' +
+        'Write-Output ("-- lines "+$start+"-"+[Math]::Min($line,$end)+" of "+$line)'
+      return psResult(await execPs(script))
+    },
+  },
+  {
     name: 'write_text_file',
     description:
       '创建或覆盖写入一个文本文件(自动创建父目录,UTF-8 编码)。注意:会直接写盘,需要用户确认;单次内容上限约 20KB,更大的内容请拆分多次或改用 append。',

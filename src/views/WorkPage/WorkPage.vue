@@ -3087,6 +3087,7 @@ onMounted(() => {
   void (async () => {
     try {
       unlistenNativeDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+        if (router.currentRoute.value.path !== '/work') return;
         const payload = event?.payload as { paths?: string[] };
         const firstPath = (payload?.paths?.[0] || '').trim();
         if (!firstPath) {

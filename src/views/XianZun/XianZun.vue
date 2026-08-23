@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatDotRound,
+  CircleClose,
   CopyDocument,
   Delete,
   Document,
@@ -48,6 +49,13 @@ import { useModPresetStore } from '../../store/ModPresetStore'
 import { useModStateStore } from '../../store/ModStateStore'
 import { useGameConfigStore } from '../../store/GameConfig'
 import { consumePendingXianZunPrompt } from '../../store/XianZunPendingPrompt'
+import {
+  XIANZUN_PROVIDER_GROUP_LABELS,
+  XIANZUN_PROVIDER_PRESETS,
+  createXianZunProvider,
+  type XianZunProvider,
+} from '../../store/XianZunProviders'
+import { streamXianZunAnthropic, testXianZunProvider } from '../../store/XianZunAnthropic'
 import Vditor from 'vditor'
 import vditorLutePath from 'vditor/dist/js/lute/lute.min.js?url'
 import mathJaxBundleUrl from 'vditor/dist/js/mathjax/tex-svg-full.js?url'
@@ -164,6 +172,7 @@ interface ChatMessage {
   createdAt: number
   toolEvents?: ToolEvent[]
   hidden?: boolean
+  attachments?: string[]
 }
 
 interface ToolEvent {
@@ -336,6 +345,7 @@ const copyLogs = async () => {
 
 /* ── Install/download progress (Tauri events) ── */
 let unlistenProgress: UnlistenFn[] = []
+let unlistenFileDrop: UnlistenFn | null = null
 
 const updateToolProgress = (payload: InstallProgressEvent) => {
   const game = payload.gameName || payload.game_name || ''
@@ -394,6 +404,31 @@ const router = useRouter()
 const { t } = useI18n()
 const modManager = useModManagerStore()
 const modTagStore = useModTagStore()
+
+const activeProvider = computed<XianZunProvider>(() =>
+  appSettings.xianzunProviders.find((provider) => provider.id === appSettings.xianzunActiveProviderId)
+  ?? appSettings.xianzunProviders[0],
+)
+
+const syncLegacyProviderFields = () => {
+  const provider = activeProvider.value
+  if (!provider) return
+  provider.updatedAt = Date.now()
+  appSettings.xianzunApiKey = provider.apiKey
+  appSettings.xianzunApiUrl = provider.baseUrl
+  appSettings.xianzunModel = provider.model
+}
+
+watch(
+  () => [
+    appSettings.xianzunActiveProviderId,
+    activeProvider.value?.apiKey,
+    activeProvider.value?.baseUrl,
+    activeProvider.value?.model,
+  ],
+  syncLegacyProviderFields,
+  { immediate: true },
+)
 
 const STORAGE_KEY = 'xianzun.messages.v1'
 const STREAM_TEMPERATURE = 0.8
@@ -1096,6 +1131,7 @@ let composerResizeObserver: ResizeObserver | null = null
 const isStreaming = ref(false)
 const settingsOpen = ref(false)
 const testing = ref(false)
+const droppedAttachments = ref<string[]>([])
 const expandedTools = ref<string[]>([])
 const previewImage = ref('')
 const promptDialogOpen = ref(false)
@@ -1230,13 +1266,13 @@ const contextState = computed(() => {
 
 const statusText = computed(() => {
   if (isStreaming.value) return t('xianzun.streaming')
-  if (!appSettings.xianzunApiKey.trim()) return t('xianzun.offline')
+  if (!activeProvider.value?.apiKey.trim()) return t('xianzun.offline')
   return t('xianzun.online')
 })
 
 const statusClass = computed(() => {
   if (isStreaming.value) return 'streaming'
-  if (!appSettings.xianzunApiKey.trim()) return 'offline'
+  if (!activeProvider.value?.apiKey.trim()) return 'offline'
   return 'online'
 })
 
@@ -1587,6 +1623,8 @@ interface StreamChunkResult {
 }
 
 const streamChatCompletion = async (opts: {
+  protocol: 'openai' | 'anthropic'
+  anthropicAuth: 'bearer' | 'x-api-key'
   apiUrl: string
   apiKey: string
   model: string
@@ -1600,6 +1638,20 @@ const streamChatCompletion = async (opts: {
     toolCall?: { index: number; name?: string; argumentsDelta?: string }
   }) => void
 }): Promise<StreamChunkResult> => {
+  if (opts.protocol === 'anthropic') {
+    return streamXianZunAnthropic({
+      baseUrl: opts.apiUrl,
+      apiKey: opts.apiKey,
+      model: opts.model,
+      auth: opts.anthropicAuth,
+      messages: opts.messages,
+      signal: opts.signal,
+      temperature: STREAM_TEMPERATURE,
+      tools: opts.tools,
+      onChunk: opts.onChunk,
+    })
+  }
+
   const base = opts.apiUrl.trim().replace(/\/+$/, '')
   const url = `${base}/chat/completions`
 
@@ -1955,6 +2007,8 @@ const progressSafe = (evt: ToolEvent) =>
 
 interface ApprovalContext {
   mode: XianZunApprovalMode
+  protocol: 'openai' | 'anthropic'
+  anthropicAuth: 'bearer' | 'x-api-key'
   apiUrl: string
   apiKey: string
   model: string
@@ -1993,6 +2047,8 @@ const requestAutoApproval = async (
   ]
   try {
     const raw = await streamChatCompletion({
+      protocol: context.protocol,
+      anthropicAuth: context.anthropicAuth,
       apiUrl: context.apiUrl,
       apiKey: context.apiKey,
       model: context.model,
@@ -2124,7 +2180,12 @@ const executeCommand = async (
 const buildApiMessages = (): ApiMessage[] => {
   const list: ApiMessage[] = []
   for (const msg of messages.value) {
-    if (msg.role === 'user') list.push({ role: 'user', content: msg.content })
+    if (msg.role === 'user') {
+      const attachmentContext = msg.attachments?.length
+        ? `\n\n[用户附加的本地路径]\n${msg.attachments.map((path) => `- ${path}`).join('\n')}\n请使用文件与代码工具检查这些路径；它们可能是文件、目录或压缩包。`
+        : ''
+      list.push({ role: 'user', content: msg.content + attachmentContext })
+    }
     else if (msg.role === 'assistant' && msg.content.trim()) {
       list.push({ role: 'assistant', content: msg.content })
     }
@@ -2135,7 +2196,8 @@ const buildApiMessages = (): ApiMessage[] => {
 const runAgentTurn = async () => {
   if (isStreaming.value) return
 
-  const apiKey = appSettings.xianzunApiKey.trim()
+  const provider = activeProvider.value
+  const apiKey = provider?.apiKey.trim() || ''
   if (!apiKey) {
     messages.value.push({
       id: nextId(),
@@ -2172,12 +2234,14 @@ const runAgentTurn = async () => {
   void scrollToBottom(true)
 
   const toolResultQueue: ApiMessage[] = []
-  const model = appSettings.xianzunModel.trim() || 'deepseek-v4-flash'
+  const model = provider.model.trim() || 'deepseek-v4-flash'
   const reasoningEffort = appSettings.xianzunReasoningEffort || 'auto'
   const maxToolRounds = appSettings.xianzunMaxToolRounds || 20
   const approvalContext: ApprovalContext = {
     mode: appSettings.xianzunApprovalMode,
-    apiUrl: appSettings.xianzunApiUrl,
+    protocol: provider.protocol,
+    anthropicAuth: provider.anthropicAuth,
+    apiUrl: provider.baseUrl,
     apiKey,
     model,
     reasoningEffort,
@@ -2228,7 +2292,9 @@ const runAgentTurn = async () => {
       )
 
       const raw = await streamChatCompletion({
-        apiUrl: appSettings.xianzunApiUrl,
+        protocol: provider.protocol,
+        anthropicAuth: provider.anthropicAuth,
+        apiUrl: provider.baseUrl,
         apiKey,
         model,
         messages: history,
@@ -2466,11 +2532,14 @@ const runAgentTurn = async () => {
 }
 
 const sendMessage = async () => {
-  const text = (vditor?.getValue() ?? draft.value).trim()
-  if (!text || isStreaming.value) return
+  const inputText = (vditor?.getValue() ?? draft.value).trim()
+  if ((!inputText && droppedAttachments.value.length === 0) || isStreaming.value) return
+  const text = inputText || '请检查这些文件，定位问题并直接修复；如果包含功能需求，请结合现有项目完成实现。'
+  const attachments = [...droppedAttachments.value]
   draft.value = ''
+  droppedAttachments.value = []
   vditor?.setValue('')
-  messages.value.push({ id: nextId(), role: 'user', content: text, createdAt: Date.now() })
+  messages.value.push({ id: nextId(), role: 'user', content: text, attachments, createdAt: Date.now() })
   maybeSetConversationTitle(text)
   persist()
   void scrollToBottom(true)
@@ -2500,6 +2569,19 @@ const handlePendingPrompt = () => {
   }
 }
 
+const attachmentName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() || path
+
+const removeDroppedAttachment = (path: string) => {
+  droppedAttachments.value = droppedAttachments.value.filter((item) => item !== path)
+}
+
+const handleDroppedPaths = (paths: string[]) => {
+  const normalized = paths.map((path) => path.trim()).filter(Boolean)
+  if (normalized.length === 0) return
+  droppedAttachments.value = Array.from(new Set([...droppedAttachments.value, ...normalized]))
+  ElMessage.success(`已添加 ${normalized.length} 个文件或目录`)
+}
+
 const clearChat = async () => {
   if (messages.value.length === 0) return
   try {
@@ -2523,26 +2605,58 @@ const clearChat = async () => {
 const testConnection = async () => {
   testing.value = true
   try {
-    const apiKey = appSettings.xianzunApiKey.trim()
-    const base = appSettings.xianzunApiUrl.trim().replace(/\/+$/, '')
+    const provider = activeProvider.value
+    const apiKey = provider?.apiKey.trim() || ''
     if (!apiKey) {
       ElMessage.warning(t('xianzun.missingKey'))
       return
     }
-    const res = await fetch(`${base}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(15000),
+    await testXianZunProvider({
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      apiKey,
+      auth: provider.anthropicAuth,
     })
-    if (res.ok) {
-      ElMessage.success(t('xianzun.connectOk'))
-    } else {
-      ElMessage.error(t('xianzun.connectFail', { error: `HTTP ${res.status}` }))
-    }
+    ElMessage.success(t('xianzun.connectOk'))
   } catch (err) {
     ElMessage.error(t('xianzun.connectFail', { error: errorText(err) }))
   } finally {
     testing.value = false
   }
+}
+
+const selectedProviderPreset = ref('deepseek')
+const providerPresetGroups = computed(() => {
+  const groups = new Map<string, typeof XIANZUN_PROVIDER_PRESETS>()
+  for (const preset of XIANZUN_PROVIDER_PRESETS) {
+    const list = groups.get(preset.group) ?? []
+    list.push(preset)
+    groups.set(preset.group, list)
+  }
+  return Array.from(groups.entries())
+})
+
+const addProvider = () => {
+  const preset = XIANZUN_PROVIDER_PRESETS.find((item) => item.id === selectedProviderPreset.value)
+  if (!preset) return
+  const provider = createXianZunProvider(preset)
+  appSettings.xianzunProviders.push(provider)
+  appSettings.xianzunActiveProviderId = provider.id
+}
+
+const removeActiveProvider = async () => {
+  if (appSettings.xianzunProviders.length <= 1) {
+    ElMessage.warning('至少保留一个供应商')
+    return
+  }
+  await ElMessageBox.confirm(`删除供应商“${activeProvider.value.name}”？`, '删除供应商', {
+    confirmButtonText: t('xianzun.delete'),
+    cancelButtonText: t('xianzun.cancel'),
+    type: 'warning',
+  })
+  const index = appSettings.xianzunProviders.findIndex((provider) => provider.id === activeProvider.value.id)
+  appSettings.xianzunProviders.splice(index, 1)
+  appSettings.xianzunActiveProviderId = appSettings.xianzunProviders[Math.max(0, index - 1)].id
 }
 
 /* ═══════════════════════════════════════════════
@@ -3835,6 +3949,14 @@ onMounted(() => {
   installMessageMathObserver()
   document.addEventListener('click', onGlobalClick)
   void setupProgressListeners()
+  void listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+    if (router.currentRoute.value.path !== '/xianzun') return
+    handleDroppedPaths(event.payload?.paths ?? [])
+  }).then((unlisten) => {
+    unlistenFileDrop = unlisten
+  }).catch((error) => {
+    console.error('Failed to attach Cheese Cat drop listener', error)
+  })
   nextTick(() => {
     initializeVditor()
     handlePendingPrompt()
@@ -3869,6 +3991,8 @@ onUnmounted(() => {
   messageMathObserver?.disconnect()
   messageMathObserver = null
   document.removeEventListener('click', onGlobalClick)
+  unlistenFileDrop?.()
+  unlistenFileDrop = null
   for (const unlisten of unlistenProgress) {
     try {
       unlisten()
@@ -3969,17 +4093,27 @@ onUnmounted(() => {
         </el-tooltip>
 
         <el-select
-          v-model="appSettings.xianzunModel"
+          v-model="appSettings.xianzunActiveProviderId"
+          class="xz-provider-quick-select"
+          :placeholder="'供应商'"
+        >
+          <el-option
+            v-for="provider in appSettings.xianzunProviders"
+            :key="provider.id"
+            :label="provider.name"
+            :value="provider.id"
+          />
+        </el-select>
+
+        <el-select
+          v-model="activeProvider.model"
           class="xz-model-select"
           filterable
           allow-create
           default-first-option
           :placeholder="t('xianzun.model')"
         >
-          <el-option label="deepseek-v4-pro" value="deepseek-v4-pro" />
-          <el-option label="deepseek-v4-flash" value="deepseek-v4-flash" />
-          <el-option label="deepseek-chat" value="deepseek-chat" />
-          <el-option label="deepseek-reasoner" value="deepseek-reasoner" />
+          <el-option v-for="model in activeProvider.models" :key="model" :label="model" :value="model" />
         </el-select>
 
         <el-tooltip :content="t('xianzun.approvalMode')" placement="bottom" :show-after="250">
@@ -4149,6 +4283,12 @@ onUnmounted(() => {
               </template>
               <template v-else-if="msg.role === 'user'">
                 <div class="xz-markdown" v-html="renderMarkdown(msg.content)"></div>
+                <div v-if="msg.attachments?.length" class="xz-message-attachments">
+                  <span v-for="path in msg.attachments" :key="path" class="xz-message-attachment" :title="path">
+                    <el-icon><Document /></el-icon>
+                    <span>{{ attachmentName(path) }}</span>
+                  </span>
+                </div>
               </template>
               <template v-else>
                 <template v-for="(seg, segIdx) in messageSegments(msg)" :key="segIdx">
@@ -4262,6 +4402,15 @@ onUnmounted(() => {
           aria-orientation="horizontal"
           @pointerdown="startComposerResize"
         ></div>
+        <div v-if="droppedAttachments.length" class="xz-attachments" aria-label="附加文件">
+          <span v-for="path in droppedAttachments" :key="path" class="xz-attachment" :title="path">
+            <el-icon><Document /></el-icon>
+            <span class="xz-attachment-name">{{ attachmentName(path) }}</span>
+            <button type="button" title="移除附件" @click="removeDroppedAttachment(path)">
+              <el-icon><CircleClose /></el-icon>
+            </button>
+          </span>
+        </div>
         <div ref="vditorHostRef" class="xz-vditor-host"></div>
       <div class="xz-composer-bar">
           <div class="xz-composer-left">
@@ -4313,7 +4462,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="xz-send"
-            :class="{ stop: isStreaming, disabled: !draft.trim() && !isStreaming }"
+            :class="{ stop: isStreaming, disabled: !draft.trim() && droppedAttachments.length === 0 && !isStreaming }"
             :title="isStreaming ? t('xianzun.stop') : t('xianzun.send')"
             @click="onSendClick"
           >
@@ -4407,13 +4556,73 @@ onUnmounted(() => {
       align-center
     >
       <div class="xz-settings">
-        <p class="xz-settings-note xz-settings-provider-note">
-          {{ t('xianzun.onlyDeepseek') }}
-        </p>
+        <label class="xz-field">
+          <span class="xz-field-label">当前供应商</span>
+          <div class="xz-provider-row">
+            <el-select v-model="appSettings.xianzunActiveProviderId" class="xz-provider-select">
+              <el-option
+                v-for="provider in appSettings.xianzunProviders"
+                :key="provider.id"
+                :label="provider.name"
+                :value="provider.id"
+              />
+            </el-select>
+            <el-button :disabled="appSettings.xianzunProviders.length <= 1" @click="removeActiveProvider">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+        </label>
+
+        <label class="xz-field">
+          <span class="xz-field-label">添加供应商</span>
+          <div class="xz-provider-row">
+            <el-select v-model="selectedProviderPreset" class="xz-provider-select">
+              <el-option-group
+                v-for="[group, presets] in providerPresetGroups"
+                :key="group"
+                :label="XIANZUN_PROVIDER_GROUP_LABELS[group as keyof typeof XIANZUN_PROVIDER_GROUP_LABELS]"
+              >
+                <el-option v-for="preset in presets" :key="preset.id" :label="preset.name" :value="preset.id" />
+              </el-option-group>
+            </el-select>
+            <el-button type="primary" @click="addProvider">
+              <el-icon><Plus /></el-icon>
+              <span>添加</span>
+            </el-button>
+          </div>
+        </label>
+
+        <label class="xz-field">
+          <span class="xz-field-label">供应商名称</span>
+          <el-input v-model="activeProvider.name" />
+        </label>
+
+        <label class="xz-field">
+          <span class="xz-field-label">接口协议</span>
+          <el-segmented
+            v-model="activeProvider.protocol"
+            :options="[
+              { label: 'OpenAI Chat Completions', value: 'openai' },
+              { label: 'Anthropic Messages', value: 'anthropic' },
+            ]"
+          />
+        </label>
+
+        <label v-if="activeProvider.protocol === 'anthropic'" class="xz-field">
+          <span class="xz-field-label">Anthropic 鉴权</span>
+          <el-segmented
+            v-model="activeProvider.anthropicAuth"
+            :options="[
+              { label: 'x-api-key', value: 'x-api-key' },
+              { label: 'Bearer', value: 'bearer' },
+            ]"
+          />
+        </label>
+
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.apiKey') }}</span>
           <el-input
-            v-model="appSettings.xianzunApiKey"
+            v-model="activeProvider.apiKey"
             type="password"
             show-password
             :placeholder="t('xianzun.apiKeyPlaceholder')"
@@ -4422,34 +4631,20 @@ onUnmounted(() => {
 
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.apiUrl') }}</span>
-          <el-select
-            v-model="appSettings.xianzunApiUrl"
-            class="xz-settings-model"
-            filterable
-            allow-create
-            default-first-option
-            :placeholder="'https://api.deepseek.com/v1'"
-          >
-            <el-option :label="t('xianzun.apiUrlV1')" value="https://api.deepseek.com/v1" />
-            <el-option :label="t('xianzun.apiUrlRoot')" value="https://api.deepseek.com" />
-            <el-option :label="t('xianzun.apiUrlBeta')" value="https://api.deepseek.com/beta" />
-          </el-select>
+          <el-input v-model="activeProvider.baseUrl" placeholder="https://api.example.com/v1" />
           <span class="xz-field-hint">{{ t('xianzun.apiUrlHint') }}</span>
         </label>
 
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.model') }}</span>
           <el-select
-            v-model="appSettings.xianzunModel"
+            v-model="activeProvider.model"
             filterable
             allow-create
             default-first-option
             class="xz-settings-model"
           >
-            <el-option label="deepseek-v4-pro" value="deepseek-v4-pro" />
-            <el-option label="deepseek-v4-flash" value="deepseek-v4-flash" />
-            <el-option label="deepseek-chat" value="deepseek-chat" />
-            <el-option label="deepseek-reasoner" value="deepseek-reasoner" />
+            <el-option v-for="model in activeProvider.models" :key="model" :label="model" :value="model" />
           </el-select>
         </label>
 
@@ -4527,6 +4722,18 @@ onUnmounted(() => {
   flex-direction: column;
   box-sizing: border-box;
   color: rgba(var(--theme-text-primary-rgb), 0.96);
+}
+
+.xz-provider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.xz-provider-select {
+  min-width: 0;
+  width: 100%;
 }
 
 /* ── Conversation sidebar ── */
@@ -4842,11 +5049,16 @@ onUnmounted(() => {
   width: 172px;
 }
 
+.xz-provider-quick-select {
+  width: 154px;
+}
+
 .xz-approval-select {
   width: 150px;
 }
 
 .xz-model-select :deep(.el-select__wrapper),
+.xz-provider-quick-select :deep(.el-select__wrapper),
 .xz-approval-select :deep(.el-select__wrapper) {
   min-height: 32px;
   border-radius: 8px;
@@ -4857,6 +5069,7 @@ onUnmounted(() => {
 }
 
 .xz-model-select :deep(.el-select__wrapper:hover),
+.xz-provider-quick-select :deep(.el-select__wrapper:hover),
 .xz-approval-select :deep(.el-select__wrapper:hover) {
   background: rgba(var(--theme-surface-tint-rgb), 0.1);
 }
@@ -5850,6 +6063,51 @@ onUnmounted(() => {
   -webkit-backdrop-filter: var(--t-blur-medium);
   transition: border-color 180ms ease, box-shadow 180ms ease;
   pointer-events: auto;
+}
+
+.xz-attachments,
+.xz-message-attachments {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 6px 8px 0;
+}
+
+.xz-attachment,
+.xz-message-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 260px;
+  padding: 5px 7px;
+  border: 1px solid rgba(var(--theme-text-primary-rgb), 0.14);
+  border-radius: 6px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+  font-size: 12px;
+}
+
+.xz-attachment-name,
+.xz-message-attachment span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xz-attachment button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.xz-message-attachments {
+  padding: 8px 0 0;
+  flex-wrap: wrap;
 }
 
 .xz-composer:focus-within {

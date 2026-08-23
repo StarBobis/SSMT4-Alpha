@@ -1613,7 +1613,7 @@ impl SRMINewExtractor {
 
     pub fn auto_gametype_detect_fee307b98a965c16(
         &self,
-        _pointlist_index: String,
+        pointlist_index: String,
         trianglelist_index_list: Vec<String>,
     ) -> Result<Vec<D3D11GameTypeWrapper>, String> {
         let mut possible_d3d11gametype_wrapper_list: Vec<D3D11GameTypeWrapper> = Vec::new();
@@ -1625,6 +1625,14 @@ impl SRMINewExtractor {
             .ordered_gpu_cpu_d3d11_gametype_list
             .iter()
         {
+            if !crate::extract_new::can_match_gametype(
+                &pointlist_index,
+                d3d11_game_type.gpu_pre_skinning,
+            ) {
+                crate::extract_log!("未找到PointlistIndex，跳过GPU-PreSkinning数据类型");
+                continue;
+            }
+
             let mut d3d11_gametype_wrapper = D3D11GameTypeWrapper::new(d3d11_game_type.clone());
 
             if find_atleast_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
@@ -1666,7 +1674,7 @@ impl SRMINewExtractor {
                     .unwrap_or_default();
 
                 // 如果该分类需要 POINTLIST 但 pointlist_index 未知，跳过整个 GameType
-                if topology == "pointlist" && _pointlist_index.is_empty() {
+                if topology == "pointlist" && pointlist_index.is_empty() {
                     crate::extract_log!(
                         "GameType {} skipped: topology=pointlist but pointlist_index is empty",
                         d3d11_game_type.game_type_name
@@ -1677,7 +1685,7 @@ impl SRMINewExtractor {
 
                 let mut extract_index = &first_trianglelist_index;
                 if topology == "pointlist" {
-                    extract_index = &_pointlist_index;
+                    extract_index = &pointlist_index;
                 }
                 crate::extract_log!("ExtractIndex: {}", extract_index);
 

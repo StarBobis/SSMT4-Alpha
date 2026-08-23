@@ -18,6 +18,7 @@ import { Back, Folder, CircleClose, Top, Right } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { debugLog, debugWarn } from '../../utils/debugLog';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import type { GroupInfo, ModAnalysisResult, ModInfo } from './ModsManagement.types';
 import { useModsManagementModKeys } from './ModsManagement.modKeys';
 import { useModsManagementInstall } from './ModsManagement.install';
@@ -71,6 +72,7 @@ import {
 
 const gamesList = AppStateManager.gamesList;
 const appSettings = AppStateManager.appSettings;
+const router = useRouter();
 const { t } = useI18n();
 
 const isNsfwMod = (mod: ModInfo): boolean => {
@@ -1884,6 +1886,7 @@ onMounted(async () => {
     
     // Listen for file drops
     unlistenDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+        if (router.currentRoute.value.path !== '/mods') return;
         const payload = event.payload;
         if (payload.paths && payload.paths.length > 0) {
             if (payload.paths.length === 1) {
