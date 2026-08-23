@@ -81,10 +81,49 @@ const fixedBackgroundSources: Record<string, FixedBackgroundSource> = {
 
 const PLAY_D3D11_FILE_NAME = 'd3d11.play.dll';
 const DEV_D3D11_FILE_NAME = 'd3d11.dev.dll';
+const IDENTITY_V_DEV_D3D11_FILE_NAME = 'd3d11.identityv.dev.dll';
 const SSICE_A_D3D11_FILE_NAME = 'd3d11.ssice-a.dll';
 const D3DCOMPILER_FILE_NAME = 'd3dcompiler_47.dll';
 const DX12_PRESET = 'ZZMIDX12';
 const DX12_D3D12_FILE_NAME = 'd3d12.dll';
+const IDENTITY_V_PRESET = 'IDENTITYV';
+const IDENTITY_V_MAX_DEV_D3D11_VERSION = [0, 9, 2] as const;
+
+const isIdentityVPreset = (gamePreset?: string | null): boolean => (
+    gamePreset?.trim().toUpperCase() === IDENTITY_V_PRESET
+);
+
+const getD3d11CacheFileName = (mode: D3d11Mode, gamePreset?: string | null): string => (
+    mode === 'dev' && isIdentityVPreset(gamePreset)
+        ? IDENTITY_V_DEV_D3D11_FILE_NAME
+        : D3D11_RELEASE_SOURCES[mode].cacheFileName
+);
+
+const isIdentityVSupportedDevD3d11Version = (version: string): boolean => {
+    const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
+    if (!match) return false;
+
+    const candidate = match.slice(1).map(part => Number.parseInt(part, 10));
+    for (let index = 0; index < IDENTITY_V_MAX_DEV_D3D11_VERSION.length; index += 1) {
+        if (candidate[index] < IDENTITY_V_MAX_DEV_D3D11_VERSION[index]) return true;
+        if (candidate[index] > IDENTITY_V_MAX_DEV_D3D11_VERSION[index]) return false;
+    }
+    return true;
+};
+
+const constrainD3d11ReleasesForGame = (
+    releases: UpdateInfo[],
+    mode: D3d11Mode,
+    gamePreset?: string,
+): UpdateInfo[] => {
+    if (mode !== 'dev' || !isIdentityVPreset(gamePreset)) {
+        return releases;
+    }
+
+    return releases
+        .filter(release => isIdentityVSupportedDevD3d11Version(release.version))
+        .map((release, index) => ({ ...release, is_latest: index === 0 }));
+};
 
 const D3D11_RELEASE_SOURCES: Record<D3d11Mode, D3d11ReleaseSource> = {
     dev: {
@@ -611,9 +650,9 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         return getEffectiveD3d11Mode(config);
     }
 
-    async function resolveD3d11SourcePathByMode(mode: D3d11Mode): Promise<string> {
+    async function resolveD3d11SourcePathByMode(mode: D3d11Mode, gamePreset?: string | null): Promise<string> {
         const resourcesDir = await GlobalConfig.SSMTResourcesFolder();
-        return join(resourcesDir, getD3d11ReleaseSource(mode).cacheFileName);
+        return join(resourcesDir, getD3d11CacheFileName(mode, gamePreset));
     }
 
     function isDx12GamePreset(gamePreset?: string | null): boolean {
@@ -649,7 +688,7 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
 
         const mode = getEffectiveD3d11Mode(config);
         return {
-            sourcePath: await resolveD3d11SourcePathByMode(mode),
+            sourcePath: await resolveD3d11SourcePathByMode(mode, config?.gamePreset),
             targetFileName: 'd3d11.dll',
             label: 'd3d11.dll',
             mode,
@@ -716,7 +755,7 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         const resourcesDir = await GlobalConfig.SSMTResourcesFolder();
         const requiredFiles = isDx12GamePreset(config?.gamePreset)
             ? [await join('DX12', DX12_D3D12_FILE_NAME)]
-            : [getD3d11ReleaseSource(getEffectiveD3d11Mode(config)).cacheFileName];
+            : [getD3d11CacheFileName(getEffectiveD3d11Mode(config), config?.gamePreset)];
         const missingFiles: string[] = [];
 
         for (const fileName of requiredFiles) {
@@ -782,26 +821,28 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         mode: D3d11Mode,
         githubToken?: string,
         includePrerelease = false,
+        gamePreset?: string,
     ): Promise<UpdateInfo> {
-        const source = getD3d11ReleaseSource(mode);
-        return getLatestGithubRelease(
-            source.repo,
-            githubToken,
-            includePrerelease,
-            source.assetMatcher,
-        );
+        const releases = await getD3d11ReleaseList(mode, githubToken, includePrerelease, gamePreset);
+        const release = releases[0];
+        if (!release) {
+            throw new Error(t('resourceManager.messages.releaseNotFoundForCriteria'));
+        }
+        return release;
     }
 
     async function getD3d11ReleaseList(
         mode: D3d11Mode,
         githubToken?: string,
         includePrerelease = false,
+        gamePreset?: string,
     ): Promise<UpdateInfo[]> {
         const source = getD3d11ReleaseSource(mode);
-        return getGithubReleaseList(source.repo, githubToken, {
+        const releases = await getGithubReleaseList(source.repo, githubToken, {
             includePrerelease,
             assetMatcher: source.assetMatcher,
         });
+        return constrainD3d11ReleasesForGame(releases, mode, gamePreset);
     }
 
     /**
@@ -867,7 +908,7 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         return installD3d11Update('dev', downloadUrl);
     }
 
-    async function installD3d11Update(mode: D3d11Mode, downloadUrl: string): Promise<void> {
+    async function installD3d11Update(mode: D3d11Mode, downloadUrl: string, gamePreset?: string): Promise<void> {
         const resourcesDir = await GlobalConfig.SSMTResourcesFolder();
         await SSMTFileUtils.CreateFolderIfNotExists(resourcesDir);
 
@@ -906,7 +947,10 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
                     throw new Error(t('resourceManager.messages.requiredUpdateFileMissing', { fileName: fileRule.sourceFileName }));
                 }
 
-                const targetPath = await join(resourcesDir, fileRule.targetFileName);
+                const targetFileName = fileRule.sourceFileName.toLowerCase() === 'd3d11.dll'
+                    ? getD3d11CacheFileName(mode, gamePreset)
+                    : fileRule.targetFileName;
+                const targetPath = await join(resourcesDir, targetFileName);
                 await copyFileOverwrite(extractedPath, targetPath);
             }
         } finally {
@@ -1137,7 +1181,7 @@ export const ResourceManager = new Proxy({} as Record<string, unknown>, {
     findGameBackgroundPath: (gameName: string, bgType?: BGType) => Promise<string>;
     getEffectiveD3d11Mode: (config?: Pick<GameConfig, 'd3d11Mode' | 'gamePreset'> | null) => D3d11Mode;
     getGameD3d11Mode: (gameName: string) => Promise<D3d11Mode>;
-    resolveD3d11SourcePathByMode: (mode: D3d11Mode) => Promise<string>;
+    resolveD3d11SourcePathByMode: (mode: D3d11Mode, gamePreset?: string | null) => Promise<string>;
     CopyGamesToGlobalConfig: (includeMihoyoGames?: boolean) => Promise<string>;
     resolveBootDllSource: (gamePreset?: string | null) => Promise<{ sourcePath: string; targetFileName: string; label: string }>;
     resolveMigotoDllSource: (config?: Pick<GameConfig, 'd3d11Mode' | 'gamePreset'> | null) => Promise<{ sourcePath: string; targetFileName: string; label: string; mode: D3d11Mode }>;
@@ -1148,11 +1192,11 @@ export const ResourceManager = new Proxy({} as Record<string, unknown>, {
     getXXMILibsLatestRelease: (githubToken?: string, includePrerelease?: boolean) => Promise<UpdateInfo>;
     getAppLatestRelease: (githubToken?: string, includePrerelease?: boolean) => Promise<UpdateInfo>;
     getXXMILibsReleaseList: (githubToken?: string, includePrerelease?: boolean) => Promise<UpdateInfo[]>;
-    getD3d11LatestRelease: (mode: D3d11Mode, githubToken?: string, includePrerelease?: boolean) => Promise<UpdateInfo>;
-    getD3d11ReleaseList: (mode: D3d11Mode, githubToken?: string, includePrerelease?: boolean) => Promise<UpdateInfo[]>;
+    getD3d11LatestRelease: (mode: D3d11Mode, githubToken?: string, includePrerelease?: boolean, gamePreset?: string) => Promise<UpdateInfo>;
+    getD3d11ReleaseList: (mode: D3d11Mode, githubToken?: string, includePrerelease?: boolean, gamePreset?: string) => Promise<UpdateInfo[]>;
     install3DMigotoUpdate: (gameName: string, downloadUrl: string, cacheDir?: string, installDir?: string) => Promise<void>;
     installXXMILibsUpdate: (downloadUrl: string) => Promise<void>;
-    installD3d11Update: (mode: D3d11Mode, downloadUrl: string) => Promise<void>;
+    installD3d11Update: (mode: D3d11Mode, downloadUrl: string, gamePreset?: string) => Promise<void>;
     scanGames: () => Promise<GameInfo[]>;
     setGameVisibility: (gameName: string, visible: boolean) => Promise<void>;
     extensionFromUrl: (url: string, fallback: string) => string;

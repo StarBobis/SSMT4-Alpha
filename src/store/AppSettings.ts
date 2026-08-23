@@ -245,6 +245,8 @@ export class AppSettings {
 	coreReleaseDescription: string = ''
 	coreVersionDev: string = ''
 	coreReleaseDescriptionDev: string = ''
+	coreVersionIdentityVDev: string = ''
+	coreReleaseDescriptionIdentityVDev: string = ''
 	coreVersionPlay: string = ''
 	coreReleaseDescriptionPlay: string = ''
 	coreVersionSsiceA: string = ''
@@ -334,6 +336,8 @@ export class AppSettings {
 		this.coreReleaseDescription = init?.coreReleaseDescription ?? this.coreReleaseDescription
 		this.coreVersionDev = init?.coreVersionDev ?? this.coreVersion
 		this.coreReleaseDescriptionDev = init?.coreReleaseDescriptionDev ?? this.coreReleaseDescription
+		this.coreVersionIdentityVDev = init?.coreVersionIdentityVDev ?? this.coreVersionIdentityVDev
+		this.coreReleaseDescriptionIdentityVDev = init?.coreReleaseDescriptionIdentityVDev ?? this.coreReleaseDescriptionIdentityVDev
 		this.coreVersionPlay = init?.coreVersionPlay ?? this.coreVersionPlay
 		this.coreReleaseDescriptionPlay = init?.coreReleaseDescriptionPlay ?? this.coreReleaseDescriptionPlay
 		this.coreVersionSsiceA = init?.coreVersionSsiceA ?? this.coreVersionSsiceA
@@ -459,6 +463,8 @@ export class AppSettings {
 			coreReleaseDescription: this.coreReleaseDescription,
 			coreVersionDev: this.coreVersionDev,
 			coreReleaseDescriptionDev: this.coreReleaseDescriptionDev,
+			coreVersionIdentityVDev: this.coreVersionIdentityVDev,
+			coreReleaseDescriptionIdentityVDev: this.coreReleaseDescriptionIdentityVDev,
 			coreVersionPlay: this.coreVersionPlay,
 			coreReleaseDescriptionPlay: this.coreReleaseDescriptionPlay,
 			coreVersionSsiceA: this.coreVersionSsiceA,

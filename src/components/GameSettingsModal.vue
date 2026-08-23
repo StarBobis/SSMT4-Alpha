@@ -99,7 +99,13 @@ const tabs = computed(() => [
 const isForcedSsiceADllMode = computed(() => (config.gamePreset || '').trim().toUpperCase() === 'NTEMI');
 const isWWMIPreset = computed(() => (config.gamePreset || '').trim().toUpperCase() === 'WWMI');
 const currentDllMode = computed<D3d11Mode>(() => ResourceManager.getEffectiveD3d11Mode(config));
+const isIdentityVDevMode = (mode: D3d11Mode): boolean => (
+  mode === 'dev' && (config.gamePreset || '').trim().toUpperCase() === 'IDENTITYV'
+);
 const getStoredDllVersion = (mode: D3d11Mode): string => {
+  if (isIdentityVDevMode(mode)) {
+    return (appSettings.coreVersionIdentityVDev || '').trim();
+  }
   if (mode === 'play') {
     return (appSettings.coreVersionPlay || '').trim();
   }
@@ -112,7 +118,10 @@ const getStoredDllVersion = (mode: D3d11Mode): string => {
 };
 
 const setStoredDllVersion = (mode: D3d11Mode, info: UpdateInfo) => {
-  if (mode === 'play') {
+  if (isIdentityVDevMode(mode)) {
+    appSettings.coreVersionIdentityVDev = info.version;
+    appSettings.coreReleaseDescriptionIdentityVDev = info.description;
+  } else if (mode === 'play') {
     appSettings.coreVersionPlay = info.version;
     appSettings.coreReleaseDescriptionPlay = info.description;
   } else if (mode === 'ssice-a') {
@@ -123,8 +132,12 @@ const setStoredDllVersion = (mode: D3d11Mode, info: UpdateInfo) => {
     appSettings.coreReleaseDescriptionDev = info.description;
   }
 
-  appSettings.coreVersion = info.version;
-  appSettings.coreReleaseDescription = info.description;
+  // These legacy fields mirror the shared DLL selection. IdentityV owns a
+  // separate cache and must not change the version seen by other games.
+  if (!isIdentityVDevMode(mode)) {
+    appSettings.coreVersion = info.version;
+    appSettings.coreReleaseDescription = info.description;
+  }
 };
 
 const currentCoreVersion = computed(() => getStoredDllVersion(currentDllMode.value));
@@ -520,6 +533,7 @@ const checkD3D11DllUpdate = async (mode: D3d11Mode = currentDllMode.value): Prom
       mode,
       appSettings.githubToken,
       config.includePrereleaseUpdates ?? appSettings.includePrereleaseUpdates,
+      config.gamePreset,
     );
 
     return await installDllUpdateFromInfo(info, mode);
@@ -545,6 +559,7 @@ const loadDllReleaseList = async (force = false, mode: D3d11Mode = currentDllMod
       mode,
       appSettings.githubToken,
       config.includePrereleaseUpdates ?? appSettings.includePrereleaseUpdates,
+      config.gamePreset,
     );
 
     dllReleaseList.value = releases;
@@ -678,7 +693,7 @@ const installDllUpdateFromInfo = async (info: UpdateInfo, mode: D3d11Mode = curr
 
   try {
     isLoading.value = true;
-    await ResourceManager.installD3d11Update(mode, info.download_url);
+    await ResourceManager.installD3d11Update(mode, info.download_url, config.gamePreset);
     setStoredDllVersion(mode, info);
 
     ElMessage.success(t('gameSettingsModal.messages.dllUpdateSuccess', { version: info.version }));
@@ -924,6 +939,10 @@ const moveExtraDll = (index: number, direction: -1 | 1) => {
 watch(() => props.modelValue, (val) => {
   if (val) {
     activeTab.value = 'basic'; // Reset to first tab
+    // Release candidates are game-specific (IdentityV in particular caps the
+    // Dev DLL at v0.9.2), so never reuse another game's cached list.
+    resetDllReleaseListState();
+    resetPackageReleaseListState();
     void loadConfig();
   } else {
     // When closing, save
@@ -946,6 +965,8 @@ watch(
       return;
     }
 
+    resetDllReleaseListState();
+    resetPackageReleaseListState();
     void loadConfig();
   }
 );
@@ -959,8 +980,12 @@ watch(
     }
 
     if (oldPreset !== undefined) {
+      resetDllReleaseListState();
       resetPackageReleaseListState();
 
+      if (props.modelValue && activeTab.value === 'dllUpdate') {
+        void loadDllReleaseList(true, normalizedMode);
+      }
       if (props.modelValue && activeTab.value === 'packageUpdate') {
         void loadPackageReleaseList(true);
       }

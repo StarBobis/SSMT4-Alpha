@@ -90,7 +90,14 @@ const getD3d11ModeLabel = (mode: D3d11Mode): string => {
   return 'Dev'
 }
 
-const getStoredDllVersion = (mode: D3d11Mode): string => {
+const isIdentityVDevMode = (mode: D3d11Mode, gamePreset?: string): boolean => (
+  mode === 'dev' && (gamePreset || '').trim().toUpperCase() === 'IDENTITYV'
+)
+
+const getStoredDllVersion = (mode: D3d11Mode, gamePreset?: string): string => {
+  if (isIdentityVDevMode(mode, gamePreset)) {
+    return (appSettings.coreVersionIdentityVDev || '').trim()
+  }
   if (mode === 'play') {
     return (appSettings.coreVersionPlay || '').trim()
   }
@@ -102,7 +109,10 @@ const getStoredDllVersion = (mode: D3d11Mode): string => {
   return (appSettings.coreVersionDev || appSettings.coreVersion || '').trim()
 }
 
-const getStoredDllReleaseDescription = (mode: D3d11Mode): string => {
+const getStoredDllReleaseDescription = (mode: D3d11Mode, gamePreset?: string): string => {
+  if (isIdentityVDevMode(mode, gamePreset)) {
+    return (appSettings.coreReleaseDescriptionIdentityVDev || '').trim()
+  }
   if (mode === 'play') {
     return (appSettings.coreReleaseDescriptionPlay || '').trim()
   }
@@ -115,7 +125,7 @@ const getStoredDllReleaseDescription = (mode: D3d11Mode): string => {
 }
 
 const coreVersionText = computed(() => {
-  const coreVersion = getStoredDllVersion(currentD3d11Mode.value)
+  const coreVersion = getStoredDllVersion(currentD3d11Mode.value, currentGameConfig.value.gamePreset)
   if (!coreVersion) {
     return ''
   }
@@ -130,7 +140,7 @@ const packageReleaseDescriptionText = computed(() => {
 })
 
 const coreReleaseDescriptionText = computed(() => {
-  const description = getStoredDllReleaseDescription(currentD3d11Mode.value)
+  const description = getStoredDllReleaseDescription(currentD3d11Mode.value, currentGameConfig.value.gamePreset)
   return description || t('home.versionInfo.noReleaseNotes')
 })
 
@@ -479,9 +489,9 @@ const checkD3D11DllUpdate = async () => {
 
 const precheckStartGameUpdates = async (config: LaunchPrecheckConfig): Promise<StartGameUpdateCheckResult> => {
   const d3d11Mode = ResourceManager.getEffectiveD3d11Mode(config);
-  const currentCoreVersion = getStoredDllVersion(d3d11Mode);
-  const currentPackageVersion = (config.packageVersion || '').trim();
   const gamePreset = (config.gamePreset || '').trim();
+  const currentCoreVersion = getStoredDllVersion(d3d11Mode, gamePreset);
+  const currentPackageVersion = (config.packageVersion || '').trim();
   const shouldCheckDllUpdate = config.allowDllUpdates !== false && config.checkDllUpdateBeforeLaunch !== false;
   const shouldCheckPackageUpdate = config.check3DmigotoPackageUpdateBeforeLaunch !== false;
 
@@ -491,6 +501,7 @@ const precheckStartGameUpdates = async (config: LaunchPrecheckConfig): Promise<S
           d3d11Mode,
           appSettings.githubToken,
           config.includePrereleaseUpdates ?? appSettings.includePrereleaseUpdates,
+          gamePreset,
         ),
         currentCoreVersion,
         UPDATE_CHECK_TIMEOUT_MS,
@@ -565,7 +576,7 @@ const switchD3d11Mode = async (mode: D3d11Mode) => {
       ...currentGameConfig.value,
       d3d11Mode: mode,
     });
-    const sourceDllPath = await ResourceManager.resolveD3d11SourcePathByMode(requestedMode);
+    const sourceDllPath = await ResourceManager.resolveD3d11SourcePathByMode(requestedMode, currentGameConfig.value.gamePreset);
     if (!(await exists(sourceDllPath))) {
       const updated = await settingsModalRef.value?.runDllUpdate(requestedMode);
       if (!updated) {
