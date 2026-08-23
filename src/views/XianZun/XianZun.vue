@@ -4601,6 +4601,7 @@ onUnmounted(() => {
           <span class="xz-field-label">接口协议</span>
           <el-segmented
             v-model="activeProvider.protocol"
+            class="xz-mode-switch"
             :options="[
               { label: 'OpenAI Chat Completions', value: 'openai' },
               { label: 'Anthropic Messages', value: 'anthropic' },
@@ -4612,6 +4613,7 @@ onUnmounted(() => {
           <span class="xz-field-label">Anthropic 鉴权</span>
           <el-segmented
             v-model="activeProvider.anthropicAuth"
+            class="xz-mode-switch"
             :options="[
               { label: 'x-api-key', value: 'x-api-key' },
               { label: 'Bearer', value: 'bearer' },
@@ -4678,6 +4680,7 @@ onUnmounted(() => {
           <span class="xz-field-label">{{ t('xianzun.systemPrompt') }}</span>
           <el-input
             v-model="appSettings.xianzunSystemPrompt"
+            class="xz-settings-textarea"
             type="textarea"
             :rows="4"
             :placeholder="t('xianzun.systemPromptPlaceholder')"
@@ -6742,6 +6745,74 @@ onUnmounted(() => {
 
 .xz-settings-model {
   width: 100%;
+}
+
+.xz-mode-switch {
+  width: 100%;
+  padding: 3px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.xz-mode-switch :deep(.el-segmented__group) {
+  gap: 3px;
+}
+
+.xz-mode-switch :deep(.el-segmented__item) {
+  min-width: 0;
+  min-height: 30px;
+  border-radius: 7px;
+  background: rgba(13, 18, 25, 0.58);
+  color: rgba(var(--theme-text-primary-rgb), 0.72);
+  font-size: 12px;
+  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.xz-mode-switch :deep(.el-segmented__item:hover) {
+  background: rgba(255, 255, 255, 0.075);
+  color: rgba(var(--theme-text-primary-rgb), 0.96);
+}
+
+.xz-mode-switch :deep(.el-segmented__item.is-selected) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.28);
+  color: rgba(var(--theme-text-primary-rgb), 0.98);
+  box-shadow: inset 0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.52);
+}
+
+.xz-mode-switch :deep(.el-segmented__item-selected) {
+  display: none !important;
+}
+
+.xz-settings-textarea :deep(.el-textarea__inner) {
+  min-height: 96px !important;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.15);
+  border-radius: 7px;
+  outline: none;
+  background: rgba(var(--theme-surface-tint-rgb), 0.065);
+  color: rgba(var(--theme-text-primary-rgb), 0.94);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: none;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.xz-settings-textarea :deep(.el-textarea__inner:hover) {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.26);
+  background: rgba(var(--theme-surface-tint-rgb), 0.09);
+}
+
+.xz-settings-textarea :deep(.el-textarea__inner:focus) {
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.62);
+  background: rgba(var(--theme-surface-tint-rgb), 0.09);
+  box-shadow: 0 0 0 3px rgba(var(--theme-surface-tint-rgb), 0.1);
+}
+
+.xz-settings-textarea :deep(.el-textarea__inner::placeholder) {
+  color: rgba(var(--theme-text-secondary-rgb), 0.62);
 }
 
 .xz-settings-note {
