@@ -2178,8 +2178,8 @@ const refreshMods = async (gameName: string, options?: { preserveVisible?: boole
         }
         console.error('Failed to scan mods:', error);
         ElMessage.error(t('modsManagement.messages.scanFailed', { error: String(error) }));
-        mods.value = [];
-        availableGroups.value = [];
+        // Keep the last known-good cards visible. A transient scan failure is
+        // not proof that the user's library is empty.
     }
 };
 
@@ -2374,6 +2374,9 @@ const fetchMods = async () => {
         try {
             await ModManager.refreshLibrary(selectedGame.value);
             await startWatching(selectedGame.value);
+        } catch (error) {
+            console.error('Manual mod library refresh failed:', error);
+            ElMessage.error(t('modsManagement.messages.scanFailed', { error: String(error) }));
         } finally {
             loading.value = false;
         }
@@ -2916,7 +2919,7 @@ const loadGroupModsStreaming = async (gameName: string, groupPath: string, refre
 
     try {
         // Fire the streaming scan (don't await — events arrive during invocation)
-        const result = await invoke<{ mods: ModInfo[]; groups: GroupInfo[] }>('mod_library_stream_scan', {
+        let result = await invoke<{ mods: ModInfo[]; groups: GroupInfo[] }>('mod_library_stream_scan', {
             gameName,
             installDir,
             groupPath: relativePath || 'Root',
@@ -2925,6 +2928,14 @@ const loadGroupModsStreaming = async (gameName: string, groupPath: string, refre
         await chunkReconcile;
 
         if (refreshModsToken !== refreshToken) return streamedChunks;
+
+        // An empty cached root is cheap to verify and too risky to trust: an
+        // earlier transient read failure may have persisted it as a valid
+        // snapshot. A genuinely empty library simply scans empty again.
+        if (result && result.mods.length === 0 && result.groups.length === 0) {
+            result = await ModManager.scanGroup(gameName, groupPath, undefined, { refresh: true });
+            if (refreshModsToken !== refreshToken) return streamedChunks;
+        }
 
         // Finish with the command result so cached and streamed paths converge to
         // the same state even if no group chunk was emitted.
@@ -2939,6 +2950,17 @@ const loadGroupModsStreaming = async (gameName: string, groupPath: string, refre
             return streamedChunks;
         }
         console.error('Stream scan failed:', e);
+        // The streaming command normally prefers SQLite. If that path fails,
+        // force a direct disk refresh so a manual refresh can always escape a
+        // stale or damaged cached snapshot.
+        if (refreshModsToken === refreshToken) {
+            const result = await ModManager.scanGroup(gameName, groupPath, undefined, { refresh: true });
+            if (refreshModsToken !== refreshToken) return streamedChunks;
+            updateAvailableGroups(result.groups);
+            reconcileCurrentSubGroups(result.groups);
+            await appendModsIncrementally(result.mods, groupLoadToken);
+            totalModsCount.value = result.mods.length;
+        }
     } finally {
         unlistenChunk();
     }

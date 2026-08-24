@@ -353,7 +353,10 @@ export const useModManagerStore = defineStore('modManager', () => {
         throw e
       }
       console.error('Scan error', e)
-      return { mods: [], groups: [] }
+      // Never turn an I/O/backend failure into a successful empty scan. Empty
+      // results are cached, so swallowing the error makes subsequent refreshes
+      // keep serving a poisoned snapshot.
+      throw e
     }
   }
 

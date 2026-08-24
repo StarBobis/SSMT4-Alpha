@@ -544,7 +544,17 @@ fn scan_group_from_disk(install_dir: &str, group_path: &str) -> Result<ScanResul
     let mut entry_count = 0u64;
     let mut skipped_count = 0u64;
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        // A transient filesystem error must fail the scan. Silently dropping an
+        // unreadable entry can turn a healthy library into an apparently empty
+        // one, which would then be persisted as a valid SQLite snapshot.
+        let entry = entry.map_err(|error| {
+            format!(
+                "Failed to read an entry in mod directory {}: {}",
+                target.display(),
+                error
+            )
+        })?;
         entry_count += 1;
         let path = entry.path();
         if !path.is_dir() {
@@ -1162,6 +1172,16 @@ pub async fn mod_library_refresh_all(
 ) -> Result<ScanResult, String> {
     log_scan!(">>> COMMAND mod_library_refresh_all  game={}", game_name);
     let t0 = Instant::now();
+    // `open_db` creates `<Mods>/.ssmt`. Check the library root first, otherwise
+    // a temporarily unavailable/wrong install path would be created as a new,
+    // empty library and overwrite the last known-good index.
+    let root = mods_root(&install_dir);
+    if !root.is_dir() {
+        return Err(format!(
+            "Mod library directory is unavailable: {}",
+            root.display()
+        ));
+    }
     let mut conn = open_db(&install_dir)?;
     conn.execute(
         "DELETE FROM mods WHERE game = ?1",
