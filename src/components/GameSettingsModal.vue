@@ -8,7 +8,7 @@ import { AppStateManager } from '../store/AppStateManager';
 import { ResourceManager, type UpdateInfo } from '../store/ResourceManager';
 import { PathHelper } from '../helper/PathHelper';
 import { GlobalConfig } from '../store/GlobalConfig';
-import { AUTO_UPDATE_SUPPORTED_PRESET_SET, GAME_PRESET_OPTIONS, getGithubRepoByGamePreset } from '../store/GamePreset';
+import { AUTO_UPDATE_SUPPORTED_PRESET_SET, getGamePresetOptions, getGithubRepoByGamePreset } from '../store/GamePreset';
 import { GameConfig, GameConfigManager, type D3d11Mode, type LaunchProgramConfig } from '../store/GameConfig';
 import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
@@ -181,7 +181,7 @@ const launchModeOptions = computed(() => [
   { value: 'shell' as const, label: t('gameSettingsModal.fields.launchModeShell') },
 ]);
 
-const presetOptions = computed(() => GAME_PRESET_OPTIONS);
+const presetOptions = computed(() => getGamePresetOptions(appSettings.locale));
 const huntingModeOptions = computed(() => [
   { value: '0', label: t('gameSettingsModal.options.huntingMode.off') },
   { value: '1', label: t('gameSettingsModal.options.huntingMode.on') },

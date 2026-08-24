@@ -7,6 +7,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { getAlwaysOnTop, setAlwaysOnTop } from '../store/WindowPinStore';
 import { AppStateManager } from '../store/AppStateManager';
+import { getGamePresetDisplayName } from '../store/GamePreset';
 
 const appWindow = getCurrentWindow();
 const router = useRouter();
@@ -423,14 +424,14 @@ const togglePin = async () => {
           <el-option
             v-for="game in titlebarGames"
             :key="game.name"
-            :label="game.name"
+            :label="getGamePresetDisplayName(game.name, appSettings.locale)"
             :value="game.name"
           >
             <div class="titlebar-game-option">
               <span class="titlebar-game-option-icon">
                 <img v-if="game.iconPath" :src="game.iconPath" alt="" />
               </span>
-              <span>{{ game.name }}</span>
+              <span>{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</span>
             </div>
           </el-option>
         </el-select>

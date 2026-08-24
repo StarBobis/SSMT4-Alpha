@@ -10,6 +10,7 @@ import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
 import type { D3d11Mode, HuntingMode } from './store/GameConfig';
 import UIBuilderHost from "./views/UIBuilder/UIBuilderHost.vue";
+import { getGamePresetDisplayName } from './store/GamePreset';
 
 const route = useRoute();
 const appSettings = AppStateManager.appSettings;
@@ -304,7 +305,7 @@ onUnmounted(() => {
             </div>
             <div v-else-if="currentFirstRunStep === 'games'">
               <div class="first-run-game-grid">
-                <button v-for="game in orderedFirstRunGames" :key="game.name" type="button" :class="{ 'is-selected': selectedFirstRunGames.includes(game.name) }" @click="toggleFirstRunGame(game.name)"><img :src="game.iconPath" alt="" @error="useFirstRunGameIconFallback" /><span>{{ game.name }}</span><i v-if="selectedFirstRunGames.includes(game.name)" class="first-run-check"></i></button>
+                <button v-for="game in orderedFirstRunGames" :key="game.name" type="button" :class="{ 'is-selected': selectedFirstRunGames.includes(game.name) }" @click="toggleFirstRunGame(game.name)"><img :src="game.iconPath" alt="" @error="useFirstRunGameIconFallback" /><span>{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</span><i v-if="selectedFirstRunGames.includes(game.name)" class="first-run-check"></i></button>
               </div>
               <div class="first-run-game-summary">
                 <span>{{ t('firstRun.selectedCount', { count: selectedFirstRunGames.length }) }}</span>

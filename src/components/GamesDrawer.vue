@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { AppStateManager, type GameInfo } from '../store/AppStateManager';
 import { debugLog } from '../utils/debugLog';
+import { getGamePresetDisplayName } from '../store/GamePreset';
 
 const isDrawerOpen = AppStateManager.isDrawerOpen;
 const gamesList = AppStateManager.gamesList;
@@ -111,7 +112,7 @@ onUnmounted(() => {
                         >
                             <div class="game-icon-wrapper">
                                 <img :src="game.iconPath" class="game-icon" alt="icon" />
-                                <div class="game-label">{{ game.name }}</div>
+                                <div class="game-label">{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</div>
                             </div>
                         </div>
                     </div>

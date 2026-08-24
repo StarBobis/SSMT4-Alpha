@@ -8,7 +8,7 @@ import { ElMessageBox, ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { open } from '@tauri-apps/plugin-dialog';
 import { calculateContextMenuPosition } from '../../utils/ContextMenuPosition';
-import { GAME_PRESET_OPTIONS } from '../../store/GamePreset';
+import { getGamePresetDisplayName, getGamePresetOptions } from '../../store/GamePreset';
 
 const gamesList = AppStateManager.gamesList;
 const appSettings = AppStateManager.appSettings;
@@ -41,7 +41,7 @@ const newConfigName = ref('');
 const newConfigPreset = ref('');
 const newIconPath = ref('');
 const newIconPreview = ref('');
-const presetOptions = computed(() => GAME_PRESET_OPTIONS);
+const presetOptions = computed(() => getGamePresetOptions(appSettings.locale));
 
 const handleContextMenu = (e: MouseEvent, game: GameInfo) => {
   e.preventDefault();
@@ -649,7 +649,7 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                     :class="{ active: appSettings.CurrentGameName === game.name }"
                     :style="cardStyles[game.name]"
                     :aria-pressed="appSettings.CurrentGameName === game.name"
-                    :title="game.name"
+                    :title="getGamePresetDisplayName(game.name, appSettings.locale)"
                     @click="handleGameSelect(game, $event)"
                     @dblclick.stop="handleGameDoubleClick(game, $event)"
                     @keydown.enter.stop.prevent="handleGameDoubleClick(game)"
@@ -664,7 +664,7 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                             @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'"
                         />
                     </div>
-                    <span class="game-label">{{ game.name }}</span>
+                    <span class="game-label">{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</span>
                 </button>
         </div>
 
