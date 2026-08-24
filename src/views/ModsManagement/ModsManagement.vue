@@ -686,6 +686,14 @@ const floating3DPreviewPage = ref<HTMLElement>();
 // Hiding the floating page must not destroy its renderer and decoded model.
 // Reopening the same Mod can then reuse the complete resident scene.
 const closeFloating3DPreview = () => { floating3DPreviewOpen.value = false; };
+const dismissFloating3DPreview = () => {
+    floating3DPreviewOpen.value = false;
+    floating3DPreviewMod.value = undefined;
+    // The preview and its zoom view are teleported to <body>. Destroy cached
+    // instances when leaving the route so nested overlays and WebGL canvases
+    // cannot outlive the Mods page.
+    floating3DPreviewCache.value = [];
+};
 const openFloating3DPreview = (mod: ModInfo) => {
     const cacheKey = mod.path.toLowerCase();
     floating3DPreviewCache.value = [
@@ -2235,6 +2243,7 @@ const rescanAfterReactivation = async () => {
 onDeactivated(() => {
     isModsPageActive.value = false;
     needsReactivationRescan = true;
+    dismissFloating3DPreview();
 });
 
 onActivated(() => {
@@ -3153,6 +3162,15 @@ const filteredMods = computed(() => {
 
     return [...result].sort(buildSortComparator());
 });
+
+watch(
+    () => router.currentRoute.value.path,
+    (path) => {
+        // Run before KeepAlive pauses this component. Teleported descendants
+        // otherwise remain visible after the route's own DOM is deactivated.
+        if (path !== '/mods') dismissFloating3DPreview();
+    },
+);
 
 const emptyModsDescription = computed(() => {
     const query = searchQuery.value.trim();
