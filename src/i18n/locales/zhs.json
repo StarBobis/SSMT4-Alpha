@@ -1,4 +1,11 @@
 {
+  "gameNames": {
+    "GIMI": "原神", "HIMI": "崩坏3", "SRMI": "崩坏：星穹铁道", "ZZMI": "绝区零",
+    "ZZMIDX12": "绝区零（DirectX 12）", "WWMI": "鸣潮", "EFMI": "明日方舟：终末地", "NTEMI": "异环",
+    "GF2": "少女前线2：追放", "IdentityV": "第五人格", "AILIMIT": "无限机兵",
+    "DOAV": "死或生：沙滩排球 维纳斯假期", "SnowBreak": "尘白禁区", "YYSLS": "燕云十六声",
+    "APMI": "蓝色星原：旅谣", "Naraka": "永劫无间", "NarakaM": "永劫无间手游"
+  },
   "home": {
     "versionInfo": {
       "coreTitle": "Core 更新说明",

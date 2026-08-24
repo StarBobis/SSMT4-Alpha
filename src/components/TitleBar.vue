@@ -424,14 +424,14 @@ const togglePin = async () => {
           <el-option
             v-for="game in titlebarGames"
             :key="game.name"
-            :label="getGamePresetDisplayName(game.name, appSettings.locale)"
+            :label="getGamePresetDisplayName(game.name, t)"
             :value="game.name"
           >
             <div class="titlebar-game-option">
               <span class="titlebar-game-option-icon">
                 <img v-if="game.iconPath" :src="game.iconPath" alt="" />
               </span>
-              <span>{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</span>
+              <span>{{ getGamePresetDisplayName(game.name, t) }}</span>
             </div>
           </el-option>
         </el-select>

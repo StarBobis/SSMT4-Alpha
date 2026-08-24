@@ -176,7 +176,7 @@ const handleCheckAndInstallAppUpdate = async () => {
 
 const hasVersionInfo = computed(() => Boolean(packageVersionText.value || coreVersionText.value || appVersionText.value || currentDllModeText.value))
 
-const getSidebarGameTooltip = (gameName: string) => `${getGamePresetDisplayName(gameName, appSettings.locale)} · ${t('home.tooltips.sidebarGame')}`
+const getSidebarGameTooltip = (gameName: string) => `${getGamePresetDisplayName(gameName, t)} · ${t('home.tooltips.sidebarGame')}`
 
 
 // Computed property to get sidebar games (filtered and reverse order)
@@ -676,7 +676,7 @@ watch(
             @contextmenu.prevent="handleContextMenu($event, game)"
             @mousedown.prevent="handleSidebarMouseDown(game.name, $event)"
           >
-            <img :src="game.iconPath" :alt="getGamePresetDisplayName(game.name, appSettings.locale)" loading="lazy" draggable="false"
+            <img :src="game.iconPath" :alt="getGamePresetDisplayName(game.name, t)" loading="lazy" draggable="false"
               @load="(e) => (e.target as HTMLImageElement).style.opacity = '1'"
               @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'" />
           </div>

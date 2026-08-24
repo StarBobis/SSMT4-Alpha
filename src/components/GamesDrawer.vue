@@ -3,9 +3,11 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { AppStateManager, type GameInfo } from '../store/AppStateManager';
 import { debugLog } from '../utils/debugLog';
 import { getGamePresetDisplayName } from '../store/GamePreset';
+import { useI18n } from 'vue-i18n';
 
 const isDrawerOpen = AppStateManager.isDrawerOpen;
 const gamesList = AppStateManager.gamesList;
+const { t } = useI18n();
 const appSettings = AppStateManager.appSettings;
 const selectGame = AppStateManager.selectGame.bind(AppStateManager);
 
@@ -112,7 +114,7 @@ onUnmounted(() => {
                         >
                             <div class="game-icon-wrapper">
                                 <img :src="game.iconPath" class="game-icon" alt="icon" />
-                                <div class="game-label">{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</div>
+                                <div class="game-label">{{ getGamePresetDisplayName(game.name, t) }}</div>
                             </div>
                         </div>
                     </div>

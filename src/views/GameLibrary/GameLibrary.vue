@@ -41,7 +41,7 @@ const newConfigName = ref('');
 const newConfigPreset = ref('');
 const newIconPath = ref('');
 const newIconPreview = ref('');
-const presetOptions = computed(() => getGamePresetOptions(appSettings.locale));
+const presetOptions = computed(() => getGamePresetOptions(t));
 
 const handleContextMenu = (e: MouseEvent, game: GameInfo) => {
   e.preventDefault();
@@ -649,7 +649,7 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                     :class="{ active: appSettings.CurrentGameName === game.name }"
                     :style="cardStyles[game.name]"
                     :aria-pressed="appSettings.CurrentGameName === game.name"
-                    :title="getGamePresetDisplayName(game.name, appSettings.locale)"
+                    :title="getGamePresetDisplayName(game.name, t)"
                     @click="handleGameSelect(game, $event)"
                     @dblclick.stop="handleGameDoubleClick(game, $event)"
                     @keydown.enter.stop.prevent="handleGameDoubleClick(game)"
@@ -664,7 +664,7 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                             @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'"
                         />
                     </div>
-                    <span class="game-label">{{ getGamePresetDisplayName(game.name, appSettings.locale) }}</span>
+                    <span class="game-label">{{ getGamePresetDisplayName(game.name, t) }}</span>
                 </button>
         </div>
 

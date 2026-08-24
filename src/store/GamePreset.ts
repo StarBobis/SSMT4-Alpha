@@ -20,7 +20,7 @@ export const GAME_PRESET_VALUES = [
 
 export type GamePreset = (typeof GAME_PRESET_VALUES)[number]
 
-/** Player-facing names. Preset codes remain the only persisted/API values. */
+/** English fallback only. Player-facing UI names live in i18n locale files. */
 export const GAME_PRESET_DISPLAY_NAME_EN: Readonly<Record<GamePreset, string>> = {
   GIMI: 'Genshin Impact', HIMI: 'Honkai Impact 3rd', SRMI: 'Honkai: Star Rail',
   ZZMI: 'Zenless Zone Zero', ZZMIDX12: 'Zenless Zone Zero (DirectX 12)',
@@ -31,32 +31,12 @@ export const GAME_PRESET_DISPLAY_NAME_EN: Readonly<Record<GamePreset, string>> =
   NarakaM: 'NARAKA: BLADEPOINT Mobile',
 }
 
-export const GAME_PRESET_DISPLAY_NAME_ZHS: Readonly<Record<GamePreset, string>> = {
-  GIMI: '原神', HIMI: '崩坏3', SRMI: '崩坏：星穹铁道', ZZMI: '绝区零',
-  ZZMIDX12: '绝区零（DirectX 12）', WWMI: '鸣潮', EFMI: '明日方舟：终末地',
-  NTEMI: '异环', GF2: '少女前线2：追放', IdentityV: '第五人格', AILIMIT: '无限机兵',
-  DOAV: '死或生：沙滩排球 维纳斯假期', SnowBreak: '尘白禁区', YYSLS: '燕云十六声',
-  APMI: '蓝色星原：旅谣', Naraka: '永劫无间', NarakaM: '永劫无间手游',
-}
+export type GamePresetTranslator = (key: string) => string
 
-export const GAME_PRESET_DISPLAY_NAME_ZHT: Readonly<Record<GamePreset, string>> = {
-  GIMI: '原神', HIMI: '崩壞3', SRMI: '崩壞：星穹鐵道', ZZMI: '絕區零',
-  ZZMIDX12: '絕區零（DirectX 12）', WWMI: '鳴潮', EFMI: '明日方舟：終末地',
-  NTEMI: '異環', GF2: '少女前線2：追放', IdentityV: '第五人格', AILIMIT: '無限機兵',
-  DOAV: '生死格鬥：沙灘排球 維納斯假期', SnowBreak: '塵白禁區', YYSLS: '燕雲十六聲',
-  APMI: '藍色星原：旅謠', Naraka: '永劫無間', NarakaM: '永劫無間手遊',
-}
-
-export function getGamePresetDisplayName(value: string | null | undefined, locale = 'en'): string {
+export function getGamePresetDisplayName(value: string | null | undefined, translate?: GamePresetTranslator): string {
   const normalized = (value || '').trim()
   if (!GAME_PRESET_SET.has(normalized)) return normalized
-  const normalizedLocale = locale.toLowerCase()
-  const names = normalizedLocale === 'zhs' || normalizedLocale.startsWith('zh-cn')
-    ? GAME_PRESET_DISPLAY_NAME_ZHS
-    : normalizedLocale === 'zht' || normalizedLocale.startsWith('zh-tw') || normalizedLocale.startsWith('zh-hk')
-      ? GAME_PRESET_DISPLAY_NAME_ZHT
-      : GAME_PRESET_DISPLAY_NAME_EN
-  return names[normalized as GamePreset]
+  return translate?.(`gameNames.${normalized}`) || GAME_PRESET_DISPLAY_NAME_EN[normalized as GamePreset]
 }
 
 const GAME_PRESET_SET: ReadonlySet<string> = new Set(GAME_PRESET_VALUES)
@@ -71,14 +51,14 @@ export const MIHOYO_GAME_PRESET_VALUES = [
 
 const MIHOYO_GAME_PRESET_SET: ReadonlySet<string> = new Set(MIHOYO_GAME_PRESET_VALUES)
 
-export const getGamePresetOptions = (locale = 'en'): ReadonlyArray<{ label: string; value: GamePreset }> =>
+export const getGamePresetOptions = (translate?: GamePresetTranslator): ReadonlyArray<{ label: string; value: GamePreset }> =>
   GAME_PRESET_VALUES.map(preset => ({
-    label: getGamePresetDisplayName(preset, locale),
+    label: getGamePresetDisplayName(preset, translate),
     value: preset,
   }))
 
-/** @deprecated Use getGamePresetOptions(locale) in player-facing UI. */
-export const GAME_PRESET_OPTIONS = getGamePresetOptions('en')
+/** @deprecated Use getGamePresetOptions(t) in player-facing UI. */
+export const GAME_PRESET_OPTIONS = getGamePresetOptions()
 
 export function isMihoyoGamePreset(gamePreset: unknown): boolean {
   const normalizedPreset = typeof gamePreset === 'string' ? gamePreset.trim().toUpperCase() : ''

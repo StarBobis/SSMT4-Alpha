@@ -1,4 +1,12 @@
 {
+  "gameNames": {
+    "GIMI": "原神", "HIMI": "崩壊3rd", "SRMI": "崩壊：スターレイル",
+    "ZZMI": "ゼンレスゾーンゼロ", "ZZMIDX12": "ゼンレスゾーンゼロ（DirectX 12）", "WWMI": "鳴潮",
+    "EFMI": "アークナイツ：エンドフィールド", "NTEMI": "Neverness to Everness", "GF2": "ドールズフロントライン2：エクシリウム",
+    "IdentityV": "Identity V 第五人格", "AILIMIT": "AI LIMIT 無限機兵", "DOAV": "DEAD OR ALIVE Xtreme Venus Vacation",
+    "SnowBreak": "スノウブレイク：禁域降臨", "YYSLS": "Where Winds Meet", "APMI": "アズールプロミリア",
+    "Naraka": "NARAKA: BLADEPOINT", "NarakaM": "NARAKA: BLADEPOINT Mobile"
+  },
   "home": {
     "versionInfo": {
       "coreTitle": "Core リリースノート",

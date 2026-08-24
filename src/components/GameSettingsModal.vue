@@ -181,7 +181,7 @@ const launchModeOptions = computed(() => [
   { value: 'shell' as const, label: t('gameSettingsModal.fields.launchModeShell') },
 ]);
 
-const presetOptions = computed(() => getGamePresetOptions(appSettings.locale));
+const presetOptions = computed(() => getGamePresetOptions(t));
 const huntingModeOptions = computed(() => [
   { value: '0', label: t('gameSettingsModal.options.huntingMode.off') },
   { value: '1', label: t('gameSettingsModal.options.huntingMode.on') },
