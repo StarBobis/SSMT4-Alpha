@@ -3856,8 +3856,9 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
 }
 
 .workspace-tabs-shell :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
-  background-color: rgba(var(--theme-surface-tint-rgb), 0.80) !important;
-  border-color: rgba(var(--theme-surface-tint-rgb), 0.95) !important;
+  background-color: #2563eb !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18), 0 0 10px rgba(37, 99, 235, 0.28) !important;
 }
 
 .workspace-tabs-shell :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
