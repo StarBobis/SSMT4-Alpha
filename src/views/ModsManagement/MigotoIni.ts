@@ -30,6 +30,8 @@ export interface ModResourceEntry {
   stride: string
   /** All key=value pairs from this section (lowercased keys) */
   allProps: Record<string, string>
+  bodyLines?: string[]
+  order?: number
 }
 
 /** Full INI analysis including parsed resources */
@@ -67,6 +69,10 @@ export interface TextureOverrideEntry {
   drawCalls: { type: string; value: string }[]
   /** Other key=value pairs */
   allProps: Record<string, string>
+  /** Original command stream. Order is semantically significant in 3DMigoto. */
+  bodyLines: string[]
+  namespace: string
+  order: number
 }
 
 /** Variable definition extracted from INI */
@@ -83,6 +89,9 @@ export interface CommandListEntry {
   sectionName: string
   sourceIni: string
   sourceIniPath: string
+  bodyLines: string[]
+  namespace: string
+  order: number
   /** Each block: condition stack → replaces */
   blocks: {
     conditions: string[]
@@ -103,12 +112,15 @@ interface VariableCandidate {
 /** Auto-grouped DrawIB group (按 DrawIB 自动归组，供按键与预设功能使用) */
 export interface DrawIBGroup {
   groupKey: string
+  drawHash?: string
+  matchFirstIndex?: string
   groupType?: 'mainHash' | 'vb' | 'vertexLimitRaise' | 'slotCheck'
   groupTags?: Array<'hashStyleTexture'>
   variants?: DrawIBGroupVariant[]
   sectionNames: string[]
   ibFile: string
   ibFormat: string
+  ibSourceIniPath?: string
   ibResourceId?: string
   vbFiles: {
     slot: string
@@ -117,10 +129,13 @@ export interface DrawIBGroup {
     resourceId?: string
     absolutePath?: string
     sourceLabel?: string
+    stride?: string
+    format?: string
+    sourceIniPath?: string
     unresolved?: boolean
     drawCalls?: { type: string; value: string; conditions: string[] }[]
   }[]
-  textureFiles: { slot: string; resourceName: string; filename: string; resourceId?: string; unresolved?: boolean }[]
+  textureFiles: { slot: string; resourceName: string; filename: string; resourceId?: string; sourceIniPath?: string; sourceLabel?: string; unresolved?: boolean }[]
   /** Raw conditional blocks from all TextureOverrides in this group (for variable filtering) */
   allBlocks: ConditionalBlock[]
 }
@@ -649,7 +664,7 @@ const attachConstantBindingsToModKeys = (modKeyList: ModKeyInfo[], constantBindi
   return modKeyList
 }
 
-const parseResourceSection = (section: IniSectionRange, sourceIni: string, sourceIniPath: string): ModResourceEntry => {
+const parseResourceSection = (section: IniSectionRange, sourceIni: string, sourceIniPath: string, namespace = '', order = 0): ModResourceEntry => {
   const allProps: Record<string, string> = {}
   let filename = ''
   let type = ''
@@ -681,7 +696,10 @@ const parseResourceSection = (section: IniSectionRange, sourceIni: string, sourc
     }
   }
 
-  return { sectionName: section.sectionName, sourceIni, sourceIniPath, filename, type, format, stride, allProps }
+  const prefix = section.sectionName.match(/^(Resource)/i)?.[0] || 'Resource'
+  const suffix = section.sectionName.slice(prefix.length)
+  const canonicalName = namespace ? `${prefix}\\${namespace}\\${suffix}` : section.sectionName
+  return { sectionName: section.sectionName, sourceIni, sourceIniPath, filename, type, format, stride, allProps, bodyLines: [...section.bodyLines], namespace, canonicalName, resourceId: `${sourceIniPath.toLowerCase()}::${section.sectionName.toLowerCase()}`, order }
 }
 
 const isSlotKey = (key: string) => {
@@ -776,7 +794,7 @@ const parseConditionalBlocks = (bodyLines: string[]): ConditionalBlock[] => {
   return blocks
 }
 
-const parseTextureOverrideSection = (section: IniSectionRange, sourceIni: string, sourceIniPath: string): TextureOverrideEntry => {
+const parseTextureOverrideSection = (section: IniSectionRange, sourceIni: string, sourceIniPath: string, namespace: string, order: number): TextureOverrideEntry => {
   const allProps: Record<string, string> = {}
   let hash = ''
   let matchFirstIndex = ''
@@ -802,10 +820,10 @@ const parseTextureOverrideSection = (section: IniSectionRange, sourceIni: string
     else if (kl === 'match_priority') matchPriority = value
   })
 
-  return { sectionName: section.sectionName, sourceIni, sourceIniPath, hash, matchFirstIndex, handling, matchPriority, blocks, replaces: allReplaces, drawCalls: allDrawCalls, allProps }
+  return { sectionName: section.sectionName, sourceIni, sourceIniPath, hash, matchFirstIndex, handling, matchPriority, blocks, replaces: allReplaces, drawCalls: allDrawCalls, allProps, bodyLines: [...section.bodyLines], namespace, order }
 }
 
-const parseCommandListSection = (section: IniSectionRange, sourceIni: string, sourceIniPath: string): CommandListEntry => {
+const parseCommandListSection = (section: IniSectionRange, sourceIni: string, sourceIniPath: string, namespace: string, order: number): CommandListEntry => {
   const blocks: CommandListEntry["blocks"] = []
   // Each condition is a single expression string, kept as a separate stack entry so
   // evalCondition works unchanged. if-frame = { baseDepth, siblingConditions }.
@@ -888,7 +906,7 @@ const parseCommandListSection = (section: IniSectionRange, sourceIni: string, so
   })
   flushBlock()
 
-  return { sectionName: section.sectionName, sourceIni, sourceIniPath, blocks: blocks.filter(b => b.replaces.length > 0 || b.drawCalls.length > 0 || (b.runs?.length || 0) > 0) }
+  return { sectionName: section.sectionName, sourceIni, sourceIniPath, bodyLines: [...section.bodyLines], namespace, order, blocks: blocks.filter(b => b.replaces.length > 0 || b.drawCalls.length > 0 || (b.runs?.length || 0) > 0) }
 }
 
 const VARIABLE_NAME_PATTERN = /\$\\[^=!<>\s&|,+\-*/%^()[\]{};#]+\\[A-Za-z_][A-Za-z0-9_.]*|\$[A-Za-z_][A-Za-z0-9_.]*/g
@@ -1124,7 +1142,12 @@ export const filterActiveBlocks = (blocks: ConditionalBlock[], varStates: Record
 /** Group TextureOverrides by IB hash, resolving CommandList references where needed */
 export const groupDrawIBs = (textureOverrides: TextureOverrideEntry[], resources: ModResourceEntry[], commandLists: CommandListEntry[]): DrawIBGroup[] => {
   const resourceMap = new Map<string, ModResourceEntry>()
-  resources.forEach(r => { resourceMap.set(r.sectionName, r) })
+  resources.forEach(r => {
+    resourceMap.set(r.sectionName, r)
+    resourceMap.set(r.sectionName.toLowerCase(), r)
+    if (r.canonicalName) resourceMap.set(r.canonicalName.toLowerCase(), r)
+  })
+  const findResource = (name: string): ModResourceEntry | undefined => resourceMap.get(name) || resourceMap.get(name.toLowerCase())
   const commandMap = new Map<string, CommandListEntry>()
   const addCommandAlias = (alias: string, commandList: CommandListEntry) => {
     const normalized = alias.trim().toLowerCase()
@@ -1189,21 +1212,43 @@ export const groupDrawIBs = (textureOverrides: TextureOverrideEntry[], resources
     }
   })
 
-  // Group by IB hash
+  // Generated mods normally use different hashes for their Position/Blend/
+  // Texcoord overrides and DrawIB override. Anchor each group at an explicit
+  // IB binding, then attach resource overrides from the same INI.
   const groups = new Map<string, TextureOverrideEntry[]>()
-  resolvedTOs.forEach(to => {
-    if (!to.hash) return
-    const key = to.hash
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(to)
+  const ibAnchors = resolvedTOs.filter(to => to.replaces.some(replace => replace.slot === 'ib'))
+  ibAnchors.forEach((anchor, index) => {
+    const related = resolvedTOs.filter(candidate => candidate.sourceIniPath === anchor.sourceIniPath && (
+      candidate === anchor || candidate.replaces.some(replace => (
+        replace.slot.startsWith('vb') || /^(?:ps|vs|gs|cs)-t\d+$/i.test(replace.slot) || replace.slot === 'this'
+      ))
+    ))
+    groups.set(`${anchor.sourceIniPath}::${anchor.hash || anchor.sectionName}::${index}`, related)
   })
+  if (groups.size === 0) {
+    resolvedTOs.forEach(to => {
+      if (!to.hash) return
+      const key = `${to.sourceIniPath}::${to.hash}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(to)
+    })
+  }
 
   const result: DrawIBGroup[] = []
-  groups.forEach((tos, hash) => {
+  groups.forEach((tos, mapKey) => {
+    const anchor = tos.find(to => to.replaces.some(replace => replace.slot === 'ib'))
     const allSectionNames = tos.map(t => t.sectionName)
     // Find IB resource
     const ibReplace = tos.flatMap(t => t.replaces).find(r => r.slot === 'ib')
-    const ibRes = ibReplace ? resourceMap.get(ibReplace.resourceName) : undefined
+    const ibRes = ibReplace ? findResource(ibReplace.resourceName) : undefined
+    const normalizedResourceStem = (name: string, suffix: RegExp) => name.replace(/^resource/i, '').replace(suffix, '').toLowerCase()
+    const ibStem = normalizedResourceStem(ibRes?.sectionName || ibReplace?.resourceName || '', /(?:ib|_index)$/i)
+    const drawHash = anchor?.hash || ''
+    const commonPrefixLength = (left: string, right: string) => {
+      let index = 0
+      while (index < left.length && index < right.length && left[index] === right[index]) index += 1
+      return index
+    }
 
     // Find VB resources (dedup by resourceName)
     const vbSeen = new Set<string>()
@@ -1211,27 +1256,65 @@ export const groupDrawIBs = (textureOverrides: TextureOverrideEntry[], resources
     tos.flatMap(t => t.replaces).forEach(r => {
       if (r.slot.startsWith('vb') && !vbSeen.has(r.resourceName)) {
         vbSeen.add(r.resourceName)
-        const res = resourceMap.get(r.resourceName)
-        vbFiles.push({ slot: r.slot, resourceName: r.resourceName, filename: res?.filename || r.resourceName })
+        const res = findResource(r.resourceName)
+        vbFiles.push({
+          slot: r.slot,
+          resourceName: r.resourceName,
+          filename: res?.filename || r.resourceName,
+          stride: res?.stride,
+          format: res?.format,
+          sourceIniPath: res?.sourceIniPath,
+        })
       }
     })
+    if (!vbFiles.some(vb => /position/i.test(`${vb.resourceName} ${vb.filename}`))) {
+      const inferredPosition = resources
+        .filter(resource => resource.sourceIniPath === anchor?.sourceIniPath && /position/i.test(resource.sectionName) && !!resource.filename)
+        .sort((left, right) => {
+          const leftHashScore = drawHash && `${left.sectionName} ${left.filename}`.toLowerCase().includes(drawHash.toLowerCase()) ? 1000 : 0
+          const rightHashScore = drawHash && `${right.sectionName} ${right.filename}`.toLowerCase().includes(drawHash.toLowerCase()) ? 1000 : 0
+          return rightHashScore + commonPrefixLength(ibStem, normalizedResourceStem(right.sectionName, /position.*$/i))
+            - leftHashScore - commonPrefixLength(ibStem, normalizedResourceStem(left.sectionName, /position.*$/i))
+        })[0]
+      const positionMatchesHash = !!(inferredPosition && drawHash && `${inferredPosition.sectionName} ${inferredPosition.filename}`.toLowerCase().includes(drawHash.toLowerCase()))
+      if (inferredPosition && (positionMatchesHash || commonPrefixLength(ibStem, normalizedResourceStem(inferredPosition.sectionName, /position.*$/i)) >= 4)) {
+        vbFiles.unshift({
+          slot: 'vb0',
+          resourceName: inferredPosition.sectionName,
+          filename: inferredPosition.filename,
+          stride: inferredPosition.stride,
+          format: inferredPosition.format,
+          sourceIniPath: inferredPosition.sourceIniPath,
+        })
+      }
+    }
 
     // Find texture resources
     const texSeen = new Set<string>()
     const textureFiles: DrawIBGroup['textureFiles'] = []
-    tos.flatMap(t => t.replaces).forEach(r => {
-      if ((r.slot.startsWith('ps-t') || r.slot.startsWith('vs-t') || r.slot.startsWith('gs-t') || r.slot.startsWith('cs-t')) && !texSeen.has(r.resourceName)) {
+    tos.forEach(textureOverride => textureOverride.replaces.forEach(r => {
+      const shaderSlot = r.slot.startsWith('ps-t') || r.slot.startsWith('vs-t') || r.slot.startsWith('gs-t') || r.slot.startsWith('cs-t')
+      const namedTexture = r.slot === 'this' && /diffuse|albedo|base.?color|normal|light.?map|ilm|texture/i.test(textureOverride.sectionName)
+      if ((shaderSlot || namedTexture) && !texSeen.has(r.resourceName)) {
         texSeen.add(r.resourceName)
-        const res = resourceMap.get(r.resourceName)
-        textureFiles.push({ slot: r.slot, resourceName: r.resourceName, filename: res?.filename || r.resourceName })
+        const res = findResource(r.resourceName)
+        textureFiles.push({
+          slot: r.slot === 'this' ? `hash:${textureOverride.hash || '?'}` : r.slot,
+          resourceName: r.resourceName,
+          filename: res?.filename || r.resourceName,
+          sourceIniPath: res?.sourceIniPath,
+          sourceLabel: textureOverride.sectionName,
+        })
       }
-    })
-
+    }))
     result.push({
-      groupKey: hash,
+      groupKey: mapKey,
+      drawHash,
+      matchFirstIndex: anchor?.matchFirstIndex,
       sectionNames: allSectionNames,
       ibFile: ibRes?.filename || ibReplace?.resourceName || '',
       ibFormat: ibRes?.format || '',
+      ibSourceIniPath: ibRes?.sourceIniPath,
       vbFiles,
       textureFiles,
       allBlocks: tos.flatMap(t => t.blocks),
@@ -1249,15 +1332,22 @@ const parseIniContent = (content: string, sourceIni: string, sourceIniPath: stri
   const textureOverrides: TextureOverrideEntry[] = []
   const commandLists: CommandListEntry[] = []
   const sections = parseIniSections(content)
+  const firstSectionOffset = content.search(/^\s*\[/m)
+  const preamble = firstSectionOffset >= 0 ? content.slice(0, firstSectionOffset) : content
+  const declaredNamespace = preamble.split(/\r?\n/).map(line => parseAssignment(stripInlineComment(line.trim())))
+    .find(item => item?.key.toLowerCase() === 'namespace')?.value.trim()
+  // 3DMigoto gives recursively loaded INIs a path namespace unless the INI
+  // explicitly replaces it with `namespace = ...` in its preamble.
+  const namespace = declaredNamespace ?? sourceIniPath.replace(/\//g, '\\')
 
-  sections.forEach((section) => {
+  sections.forEach((section, sectionOrder) => {
     if (section.sectionNameLower === 'constants') {
       constantBindings.push(...parseConstantsSection(section, sourceIni, sourceIniPath))
       return
     }
 
     if (section.sectionNameLower.startsWith('resource')) {
-      const res = parseResourceSection(section, sourceIni, sourceIniPath)
+      const res = parseResourceSection(section, sourceIni, sourceIniPath, namespace, sectionOrder)
       resources.push(res)
       if (res.filename) {
         const fileNameLower = getLowerFileName(res.filename)
@@ -1267,12 +1357,12 @@ const parseIniContent = (content: string, sourceIni: string, sourceIniPath: stri
     }
 
     if (section.sectionNameLower.startsWith('textureoverride')) {
-      textureOverrides.push(parseTextureOverrideSection(section, sourceIni, sourceIniPath))
+      textureOverrides.push(parseTextureOverrideSection(section, sourceIni, sourceIniPath, namespace, sectionOrder))
       return
     }
 
     if (section.sectionNameLower.startsWith('commandlist') || section.sectionNameLower.startsWith('customshader')) {
-      commandLists.push(parseCommandListSection(section, sourceIni, sourceIniPath))
+      commandLists.push(parseCommandListSection(section, sourceIni, sourceIniPath, namespace, sectionOrder))
       return
     }
 

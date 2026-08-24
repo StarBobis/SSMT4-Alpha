@@ -44,6 +44,7 @@ uniform vec3 uFaceForward;
 uniform vec3 uFaceRight;
 uniform vec3 uFaceUp;
 varying vec2 vUv;
+varying vec2 vUv1;
 varying vec3 vWorldPosition;
 varying vec3 vWorldNormal;
 varying vec3 vWorldTangent;
@@ -168,7 +169,7 @@ void main() {
     // and appears uniformly bright.  Keep authored values untouched when a
     // map exists; only the missing-map fallback is neutralized.
     vec4 ilmTex = vec4(0.0, 1.0, 0.0, 0.0);
-    if (uHasLightMap > 0.5) ilmTex = texture2D(uLightMap, vUv);
+    if (uHasLightMap > 0.5) ilmTex = texture2D(uLightMap, vUv1);
 
     float isFace = step(0.5, uIsFaceMesh);
     vec3 baseColor = srgbToLinear(mainTex.rgb);

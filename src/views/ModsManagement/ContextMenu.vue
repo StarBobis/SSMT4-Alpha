@@ -20,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   'open-mod-folder': [path: string];
+  'open-3d-preview': [mod: ModInfo];
   'move-mod-to-group': [mod: ModInfo, groupId: string];
   'create-new-group': [];
   'rename-mod': [mod: ModInfo];
@@ -105,7 +106,11 @@ watch(() => props.visible, (newVal) => {
     :style="{ top: internalY + 'px', left: internalX + 'px' }"
     @click.stop
   >
-    <div v-if="target" class="menu-content">
+      <div v-if="target" class="menu-content">
+      <div class="menu-item" @click="emit('close'); emit('open-3d-preview', target as ModInfo)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5v9L12 20l-8-4.5v-9Z"/><path d="m4.5 6.5 7.5 4 7.5-4M12 10.5V20"/></svg>
+        <span>3D 预览</span>
+      </div>
       <div class="menu-item" @click="emit('close'); emit('open-mod-folder', (target as ModInfo).path)">
         <el-icon><Folder /></el-icon>
         <span>{{ t('modsManagement.ui.openFolder') }}</span>

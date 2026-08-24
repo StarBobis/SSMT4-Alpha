@@ -34,6 +34,7 @@ import GroupContextMenu from './GroupContextMenu.vue';
 import GameBananaCategoryIconDialog from './GameBananaCategoryIconDialog.vue';
 import InstallModDialog from './InstallModDialog.vue';
 import ModCard from './ModCard.vue';
+import Mod3DPreview from './Mod3DPreview.vue';
 import ModPresetPopover from './ModPresetPopover.vue';
 import { getModDynamicStyle, getPreviewFileNameLower } from './ModsManagement.preview';
 import { clipboardImageToPngBytes } from './ModsManagement.clipboardPreview';
@@ -677,6 +678,24 @@ const currentSubGroups = ref<GroupInfo[]>([]);
 const availableGroups = ref<GroupInfo[]>([]);
 const selectedGame = ref('');
 const searchQuery = ref('');
+const floating3DPreviewMod = ref<ModInfo>();
+const floating3DPreviewOpen = ref(false);
+const floating3DPreviewCache = ref<ModInfo[]>([]);
+const floating3DPreviewPage = ref<HTMLElement>();
+
+// Hiding the floating page must not destroy its renderer and decoded model.
+// Reopening the same Mod can then reuse the complete resident scene.
+const closeFloating3DPreview = () => { floating3DPreviewOpen.value = false; };
+const openFloating3DPreview = (mod: ModInfo) => {
+    const cacheKey = mod.path.toLowerCase();
+    floating3DPreviewCache.value = [
+        ...floating3DPreviewCache.value.filter(item => item.path.toLowerCase() !== cacheKey),
+        mod,
+    ].slice(-10);
+    floating3DPreviewMod.value = mod;
+    floating3DPreviewOpen.value = true;
+    void nextTick(() => floating3DPreviewPage.value?.focus());
+};
 const searchMatchedModPaths = ref<Set<string>>(new Set());
 const searchLoading = ref(false);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -4182,6 +4201,28 @@ const {
       @restore="restoreInlineKeysFromDialog"
     />
 
+    <Teleport to="body">
+      <Transition name="mod-3d-floating-fade">
+        <div v-if="floating3DPreviewMod" v-show="floating3DPreviewOpen" class="mod-3d-floating-overlay" @click.self="closeFloating3DPreview">
+          <section ref="floating3DPreviewPage" class="mod-3d-floating-page" role="dialog" aria-modal="true" tabindex="-1" @keydown.esc="closeFloating3DPreview">
+            <header class="mod-3d-floating-header">
+              <div>
+                <strong>3D 预览</strong>
+                <span>{{ floating3DPreviewMod.name }}</span>
+              </div>
+              <button type="button" title="关闭" @click="closeFloating3DPreview">×</button>
+            </header>
+            <Mod3DPreview
+              v-for="cachedMod in floating3DPreviewCache"
+              v-show="cachedMod.path.toLowerCase() === floating3DPreviewMod.path.toLowerCase()"
+              :key="cachedMod.path.toLowerCase()"
+              :mod="cachedMod"
+            />
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Custom Context Menu -->
     <ContextMenu
       :visible="contextMenu.visible"
@@ -4194,6 +4235,7 @@ const {
       :has-mod-keys="contextMenu.target ? getModKeyItems(contextMenu.target.id).length > 0 : false"
       :has-inline-key-backup="contextMenu.target ? !!inlineKeyBackupState[contextMenu.target.id] : false"
       @close="closeContextMenu"
+      @open-3d-preview="(mod: ModInfo) => { closeContextMenu(); openFloating3DPreview(mod); }"
       @open-mod-folder="(path: string) => { closeContextMenu(); openModFolder(path); }"
       @move-mod-to-group="(mod: ModInfo, groupId: string) => { closeContextMenu(); moveModToGroup(mod, groupId); }"
       @create-new-group="closeContextMenu(); createNewGroup()"
@@ -5204,6 +5246,10 @@ const {
 }
 .mod-list-row:hover {
     background: rgba(255,255,255,0.05);
+}
+.mod-list-row.is-selected {
+    background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+    box-shadow: inset 3px 0 color-mix(in srgb, var(--theme-accent) 82%, white 8%);
 }
 .mod-list-row.is-disabled {
     opacity: 0.55;
@@ -6742,4 +6788,82 @@ const {
     flex: 1;
     min-width: 0;
 }
+</style>
+
+<style>
+.mod-3d-floating-overlay {
+    position: fixed;
+    top: 32px;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2147482000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(3, 6, 12, 0.72);
+    backdrop-filter: blur(4px);
+}
+
+.mod-3d-floating-page {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(1380px, calc(100vw - 40px));
+    height: min(900px, calc(100vh - 72px));
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    outline: none;
+    background: rgba(10, 14, 22, 0.97);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.58);
+}
+
+.mod-3d-floating-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 0 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mod-3d-floating-header > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.mod-3d-floating-header strong { color: rgba(245, 248, 255, 0.94); font-size: 14px; }
+.mod-3d-floating-header span { overflow: hidden; color: rgba(220, 229, 245, 0.58); text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.mod-3d-floating-header button { width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: rgba(255,255,255,.05); color: #eef4ff; font-size: 20px; cursor: pointer; }
+
+.mod-3d-floating-page > .mod-3d-preview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 12px;
+    height: 100%;
+    min-height: 0;
+    padding: 12px;
+}
+
+.mod-3d-floating-page > .mod-3d-preview > .mod-3d-preview__head { grid-column: 1 / -1; }
+.mod-3d-floating-page > .mod-3d-preview > .mod-3d-preview__viewport { min-height: 0; }
+.mod-3d-floating-page > .mod-3d-preview > .mod-3d-preview__controls {
+    align-self: stretch;
+    align-content: start;
+    grid-auto-rows: max-content;
+    min-height: 0;
+    max-height: none;
+    padding: 0 5px 8px 2px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.mod-3d-floating-fade-enter-active,
+.mod-3d-floating-fade-leave-active { transition: opacity .16s ease; }
+.mod-3d-floating-fade-enter-active .mod-3d-floating-page,
+.mod-3d-floating-fade-leave-active .mod-3d-floating-page { transition: transform .16s ease, opacity .16s ease; }
+.mod-3d-floating-fade-enter-from,
+.mod-3d-floating-fade-leave-to { opacity: 0; }
+.mod-3d-floating-fade-enter-from .mod-3d-floating-page,
+.mod-3d-floating-fade-leave-to .mod-3d-floating-page { opacity: 0; transform: translateY(10px) scale(.985); }
 </style>

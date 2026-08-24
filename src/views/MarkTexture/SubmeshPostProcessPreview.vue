@@ -2686,6 +2686,9 @@ const createPreviewGeometry = async (
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+	// Post-processing has one explicitly selected UV stream. Mirror it to uv1
+	// so the shared GIMI shader keeps its authored LightMap UV contract.
+	geometry.setAttribute('uv1', new THREE.Float32BufferAttribute(uvs, 2));
 	geometry.setAttribute('ssmtRawTangent', new THREE.Float32BufferAttribute(rawTangents, 4));
 	geometry.setAttribute('ssmtRawColor', new THREE.Float32BufferAttribute(rawColors, 4));
 	geometry.setAttribute('ssmtRawNormalW', new THREE.Float32BufferAttribute(rawNormalW, 1));
@@ -2826,6 +2829,7 @@ const createPermissivePreviewGeometry = async (
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+	geometry.setAttribute('uv1', new THREE.Float32BufferAttribute(uvs, 2));
 	geometry.setAttribute('ssmtRawTangent', new THREE.Float32BufferAttribute(rawTangents, 4));
 	geometry.setAttribute('ssmtRawColor', new THREE.Float32BufferAttribute(rawColors, 4));
 	geometry.setAttribute('ssmtRawNormalW', new THREE.Float32BufferAttribute(rawNormalW, 1));

@@ -558,6 +558,15 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   transform: scale(1.12);
 }
 
+.mod-card.is-selected {
+  border-color: color-mix(in srgb, var(--theme-accent) 72%, white 12%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent) 30%, transparent), var(--card-shadow);
+}
+
+.mod-card.is-selected::before {
+  opacity: 1;
+}
+
 .image-wrapper.is-nsfw-blurred.can-hover-reveal:hover .zoom-image {
   filter: blur(0) saturate(1);
   transform: scale(1.04);

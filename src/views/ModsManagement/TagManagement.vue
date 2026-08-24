@@ -284,6 +284,7 @@ watch([() => props.tagManagementDialog.editingId, () => props.tagManagementDialo
             <span class="tag-empty-hint">{{ t('modsManagement.ui.tagFilterIdleHint') }}</span>
           </div>
         </div>
+
       </div>
   </div>
 

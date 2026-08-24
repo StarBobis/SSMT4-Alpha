@@ -1,6 +1,8 @@
 attribute vec4 ssmtRawTangent;
 attribute vec4 ssmtRawColor;
+attribute vec2 uv1;
 varying vec2 vUv;
+varying vec2 vUv1;
 varying vec3 vWorldPosition;
 varying vec3 vWorldNormal;
 varying vec3 vWorldTangent;
@@ -21,6 +23,7 @@ vec3 fallbackTangent(vec3 normal) {
 
 void main() {
     vUv = uv;
+    vUv1 = uv1;
     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
     // uLightDir and the tangent are both in world space. normalMatrix instead
     // transforms into view space here, which made the toon band drift with the
