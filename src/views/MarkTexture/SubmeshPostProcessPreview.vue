@@ -217,16 +217,10 @@ const GIMI_ELEMENT_COLORS: Record<GIMIElement, string> = {
 	pyro: '#ff3c3c',
 	none: '#a8a8a8',
 };
-const gimiElementOptions: Array<{ value: GIMIElement; label: string }> = [
-	{ value: 'anemo', label: 'Anemo' },
-	{ value: 'geo', label: 'Geo' },
-	{ value: 'electro', label: 'Electro' },
-	{ value: 'dendro', label: 'Dendro' },
-	{ value: 'cryo', label: 'Cryo' },
-	{ value: 'hydro', label: 'Hydro' },
-	{ value: 'pyro', label: 'Pyro' },
-	{ value: 'none', label: 'None' },
-];
+const gimiElementOptions = computed<Array<{ value: GIMIElement; label: string }>>(() =>
+	(['anemo', 'geo', 'electro', 'dendro', 'cryo', 'hydro', 'pyro', 'none'] as GIMIElement[])
+		.map(value => ({ value, label: t(`markTexture.preview.elements.${value}`) }))
+);
 const gimiEmissionElementByWorkspace = new Map<string, GIMIElement>();
 
 const getGIMIDefaultTexturePaths = (): Promise<GIMIDefaultTexturePaths> => {
@@ -716,7 +710,7 @@ const selectedUvLayerLabel = computed(() => {
 });
 
 const currentLightingModeLabel = computed(() => {
-	if (lightingMode.value === 'gimi-body') return 'GIMI Body/Clothes';
+	if (lightingMode.value === 'gimi-body') return t('markTexture.preview.gimiBody');
 	if (lightingMode.value === 'pbr') return t('markTexture.preview.pbr');
 	if (lightingMode.value === 'unlit') return t('markTexture.preview.unlit');
 	return t('markTexture.preview.halfLambert');
@@ -3537,8 +3531,8 @@ onActivated(async () => {
 				class="gimi-light-orb"
 				role="slider"
 				tabindex="0"
-				aria-label="GIMI light direction"
-				:title="'GIMI light direction'"
+				:aria-label="t('markTexture.preview.lightDirection')"
+				:title="t('markTexture.preview.lightDirection')"
 				@dblclick.stop
 				@pointerdown.stop="onGIMILightOrbPointerDown"
 				@pointermove.stop="onGIMILightOrbPointerMove"
@@ -3585,8 +3579,8 @@ onActivated(async () => {
 					<button
 						class="preview-settings-close"
 						type="button"
-						title="Close"
-						aria-label="Close"
+						:title="t('common.close')"
+						:aria-label="t('common.close')"
 						@click="previewSettingsOpen = false"
 					>
 						×
@@ -3595,23 +3589,23 @@ onActivated(async () => {
 				<label>
 					<span>{{ t('markTexture.preview.renderMode') }}</span>
 					<el-select v-model="lightingMode" size="small">
-						<el-option label="GIMI Body/Clothes" value="gimi-body" />
+						<el-option :label="t('markTexture.preview.gimiBody')" value="gimi-body" />
 						<el-option :label="t('markTexture.preview.halfLambert')" value="half-lambert" />
 						<el-option :label="t('markTexture.preview.pbr')" value="pbr" />
 						<el-option :label="t('markTexture.preview.unlit')" value="unlit" />
 					</el-select>
 				</label>
 				<label>
-					<span>Anti-Aliasing</span>
+					<span>{{ t('markTexture.preview.antiAliasing') }}</span>
 					<el-select v-model="antiAliasingMode" size="small">
 						<el-option label="SMAA" value="smaa" />
 						<el-option label="TAA" value="taa" />
 						<el-option label="FXAA" value="fxaa" />
-						<el-option label="Off" value="none" />
+						<el-option :label="t('markTexture.preview.off')" value="none" />
 					</el-select>
 				</label>
 				<label class="outline-control">
-					<span>Face / Neck Alignment</span>
+					<span>{{ t('markTexture.preview.faceNeckAlignment') }}</span>
 					<el-switch
 						:model-value="faceNeckAlignmentEnabled"
 						:disabled="!faceSubMeshIds?.length || !neckSubMeshId"
@@ -3620,25 +3614,25 @@ onActivated(async () => {
 				</label>
 				<template v-if="lightingMode === 'gimi-body'">
 					<label>
-						<span>God Eye Element</span>
+						<span>{{ t('markTexture.preview.visionElement') }}</span>
 						<el-select v-model="gimiEmissionElement" size="small">
 							<el-option v-for="option in gimiElementOptions" :key="option.value" :label="option.label" :value="option.value" />
 						</el-select>
 					</label>
 					<label class="displacement-control">
-						<span>God Eye Emission</span>
+						<span>{{ t('markTexture.preview.visionEmission') }}</span>
 						<el-slider v-model="gimiEmissionStrength" :min="0" :max="5" :step="0.01" show-input :show-input-controls="false" />
 					</label>
 					<label class="displacement-control">
-						<span>Normal Strength</span>
+						<span>{{ t('markTexture.preview.normalStrength') }}</span>
 						<el-slider v-model="gimiNormalStrength" :min="0" :max="1" :step="0.01" :disabled="!selectedNormal" show-input :show-input-controls="false" />
 					</label>
 					<label class="outline-control">
-						<span>Bloom</span>
+						<span>{{ t('markTexture.preview.bloom') }}</span>
 						<el-switch v-model="gimiBloomEnabled" />
 					</label>
 					<label class="displacement-control">
-						<span>Bloom Strength</span>
+						<span>{{ t('markTexture.preview.bloomStrength') }}</span>
 						<el-slider
 							v-model="gimiBloomStrengthSlider"
 							:min="0"
@@ -3729,8 +3723,8 @@ onActivated(async () => {
 				<div class="preview-settings-map-status">
 					<span>{{ hasDiffuseMap ? t('markTexture.preview.usingDiffuseMap') : t('markTexture.preview.diffuseFallback') }}</span>
 					<span>{{ hasNormalMap ? t('markTexture.preview.usingNormalMap') : t('markTexture.preview.normalFallback') }}</span>
-					<span v-if="lightingMode === 'gimi-body'">{{ selectedLightMap ? 'LightMap' : 'LightMap fallback' }}</span>
-					<span v-if="lightingMode === 'gimi-body'">{{ selectedRampMap ? 'RampMap' : 'RampMap fallback' }}</span>
+					<span v-if="lightingMode === 'gimi-body'">{{ selectedLightMap ? t('markTexture.preview.usingLightMap') : t('markTexture.preview.lightMapFallback') }}</span>
+					<span v-if="lightingMode === 'gimi-body'">{{ selectedRampMap ? t('markTexture.preview.usingRampMap') : t('markTexture.preview.rampMapFallback') }}</span>
 				</div>
 					</section>
 				</div>
@@ -3751,8 +3745,8 @@ onActivated(async () => {
 						class="gimi-light-orb gimi-light-orb-zoom"
 						role="slider"
 						tabindex="0"
-						aria-label="GIMI light direction"
-						title="GIMI light direction"
+						:aria-label="t('markTexture.preview.lightDirection')"
+						:title="t('markTexture.preview.lightDirection')"
 						@pointerdown.stop="onGIMILightOrbPointerDown"
 						@pointermove.stop="onGIMILightOrbPointerMove"
 						@pointerup.stop="onGIMILightOrbPointerUp"
@@ -3767,8 +3761,8 @@ onActivated(async () => {
 						@click.stop
 						@pointerdown.stop
 					>
-						<span>RampMap row mapping</span>
-						<strong>Body</strong>
+						<span>{{ t('markTexture.preview.rampRowMapping') }}</span>
+						<strong>{{ t('markTexture.preview.body') }}</strong>
 						<div v-for="option in rampIndexOptions" :key="option.index" class="ramp-index-row">
 							<span>{{ option.label }}</span>
 							<el-select
@@ -3780,7 +3774,7 @@ onActivated(async () => {
 								@update:model-value="gimiRampIndices[option.index] = $event; applyFaceRampIndex()"
 							>
 								<el-option v-for="row in rampRowOptions" :key="row.index" :value="row.index">
-									<div class="ramp-row-option"><i :style="{ backgroundColor: row.color }" />RampMap row {{ row.index }}</div>
+									<div class="ramp-row-option"><i :style="{ backgroundColor: row.color }" />{{ t('markTexture.preview.rampRow', { index: row.index }) }}</div>
 								</el-option>
 							</el-select>
 						</div>

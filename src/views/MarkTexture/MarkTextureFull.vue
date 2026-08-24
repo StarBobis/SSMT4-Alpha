@@ -3021,6 +3021,7 @@ onMounted(() => {
 	window.addEventListener('resize', syncRgbaPreviewCardSizeToViewport);
 });
 let hasSeenInitialActivation = false;
+let isMarkTexturePageActive = false;
 const cancelMarkTextureBackgroundWork = () => {
 	if (workspaceReloadTimer) {
 		clearTimeout(workspaceReloadTimer);
@@ -3033,6 +3034,7 @@ const cancelMarkTextureBackgroundWork = () => {
 };
 
 onActivated(() => {
+	isMarkTexturePageActive = true;
 	if (!hasSeenInitialActivation) {
 		hasSeenInitialActivation = true;
 		return;
@@ -3040,7 +3042,10 @@ onActivated(() => {
 	void loadSubMeshOptions();
 });
 
-onDeactivated(cancelMarkTextureBackgroundWork);
+onDeactivated(() => {
+	isMarkTexturePageActive = false;
+	cancelMarkTextureBackgroundWork();
+});
 onBeforeUnmount(() => {
 	cancelMarkTextureBackgroundWork();
 	stopRgbaPreviewResize();
@@ -3069,6 +3074,9 @@ watch(
 		subMeshOptionsLoadToken += 1;
 		markedTextureSummaryLoadToken += 1;
 		textureListLoadToken += 1;
+		// KeepAlive retains this page while the user visits GameBanana and other
+		// routes. Game switches must not start its loaders or surface its messages.
+		if (!isMarkTexturePageActive) return;
 		console.log(`${logPrefix} workspace-related setting changed, reload SubMesh options`, {
 			dbmtWorkFolder: appSettings.DBMTWorkFolder,
 			currentGameName: appSettings.CurrentGameName,

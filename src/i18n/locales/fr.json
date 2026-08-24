@@ -1187,6 +1187,7 @@
       "pbr": "PBR",
       "unlit": "Auto-émissif (faible coût)",
       "normalDisplacement": "Intensité du déplacement normal",
+      "gimiBody": "Corps / Vêtements GIMI", "antiAliasing": "Anticrénelage", "off": "Désactivé", "faceNeckAlignment": "Alignement visage / cou", "visionElement": "Élément de l’Œil divin", "visionEmission": "Émission de l’Œil divin", "normalStrength": "Intensité des normales", "bloom": "Bloom", "bloomStrength": "Intensité du bloom", "lightDirection": "Direction de la lumière", "usingLightMap": "LightMap : texture marquée utilisée", "lightMapFallback": "LightMap : valeur de secours utilisée", "usingRampMap": "RampMap : texture marquée utilisée", "rampMapFallback": "RampMap : texture par défaut utilisée", "rampRowMapping": "Correspondance des lignes RampMap", "body": "Corps", "rampRow": "Ligne RampMap {index}", "elements": { "anemo": "Anémo", "geo": "Géo", "electro": "Électro", "dendro": "Dendro", "cryo": "Cryo", "hydro": "Hydro", "pyro": "Pyro", "none": "Aucun" },
       "deleteOtherDataTypes": "Supprimer les autres types de données",
       "deleteDataType": "Supprimer le type de données",
       "frame": "Recadrer la vue",

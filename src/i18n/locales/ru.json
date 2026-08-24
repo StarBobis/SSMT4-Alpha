@@ -1187,6 +1187,7 @@
       "pbr": "PBR",
       "unlit": "Самосвечение (низкая нагрузка)",
       "normalDisplacement": "Интенсивность смещения нормалей",
+      "gimiBody": "Тело / одежда GIMI", "antiAliasing": "Сглаживание", "off": "Выкл.", "faceNeckAlignment": "Выравнивание лица / шеи", "visionElement": "Стихия Глаза Бога", "visionEmission": "Свечение Глаза Бога", "normalStrength": "Сила нормалей", "bloom": "Свечение", "bloomStrength": "Сила свечения", "lightDirection": "Направление света", "usingLightMap": "LightMap: используется отмеченная текстура", "lightMapFallback": "LightMap: используется резервное значение", "usingRampMap": "RampMap: используется отмеченная текстура", "rampMapFallback": "RampMap: используется текстура по умолчанию", "rampRowMapping": "Сопоставление строк RampMap", "body": "Тело", "rampRow": "Строка RampMap {index}", "elements": { "anemo": "Анемо", "geo": "Гео", "electro": "Электро", "dendro": "Дендро", "cryo": "Крио", "hydro": "Гидро", "pyro": "Пиро", "none": "Нет" },
       "deleteOtherDataTypes": "Удалить другие типы данных",
       "deleteDataType": "Удалить тип данных",
       "frame": "Сбросить вид",

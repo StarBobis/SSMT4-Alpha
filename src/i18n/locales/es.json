@@ -1187,6 +1187,7 @@
       "pbr": "PBR",
       "unlit": "Autoemisivo (baja sobrecarga)",
       "normalDisplacement": "Intensidad del desplazamiento normal",
+      "gimiBody": "Cuerpo / Ropa GIMI", "antiAliasing": "Antialiasing", "off": "Desactivado", "faceNeckAlignment": "Alineación de cara / cuello", "visionElement": "Elemento de la Visión", "visionEmission": "Emisión de la Visión", "normalStrength": "Intensidad de normales", "bloom": "Resplandor", "bloomStrength": "Intensidad del resplandor", "lightDirection": "Dirección de la luz", "usingLightMap": "LightMap: textura marcada en uso", "lightMapFallback": "LightMap: valor alternativo en uso", "usingRampMap": "RampMap: textura marcada en uso", "rampMapFallback": "RampMap: textura predeterminada en uso", "rampRowMapping": "Asignación de filas de RampMap", "body": "Cuerpo", "rampRow": "Fila {index} de RampMap", "elements": { "anemo": "Anemo", "geo": "Geo", "electro": "Electro", "dendro": "Dendro", "cryo": "Cryo", "hydro": "Hydro", "pyro": "Pyro", "none": "Ninguno" },
       "deleteOtherDataTypes": "Eliminar otros tipos de datos",
       "deleteDataType": "Eliminar tipo de datos",
       "frame": "Restablecer vista",
