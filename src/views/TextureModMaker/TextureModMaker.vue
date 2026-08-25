@@ -15,7 +15,7 @@ type MediaInfo = { width: number; height: number; fps?: number; duration?: numbe
 type SourceKind = 'image' | 'video' | 'sequence';
 type FitMode = 'cover' | 'contain' | 'tile' | 'stretch' | 'center';
 type DecodedRgba = { width: number; height: number; pixels: Uint8Array };
-type GenerationProgress = { running: boolean; phase: string; processed: number; total: number; message: string; stages: Record<string, { processed: number; total: number; elapsedMs?: number }> };
+type GenerationProgress = { running: boolean; phase: string; processed: number; total: number; message: string; stages: Record<string, { processed: number; total: number; elapsedMs?: number }>; logPath?: string };
 
 const { t } = useI18n();
 const STORAGE_KEY = 'ssmt4:texture-mod-maker:v1';
@@ -392,6 +392,11 @@ const cancelGeneration = async () => {
   } catch { /* User kept the generation running. */ }
   finally { cancelling.value = false; }
 };
+const openGenerationLog = async () => {
+  if (!generationProgress.value.logPath) return;
+  try { await openPath(generationProgress.value.logPath); }
+  catch (error) { ElMessage.error(String(error)); }
+};
 const syncVideoState = () => {
   const video = previewVideo.value; if (!video) return;
   if (sourceKind.value === 'video' && fps.value) {
@@ -621,6 +626,7 @@ onUnmounted(() => { if (generationProgressTimer) clearInterval(generationProgres
       <div class="tm-output-grid"><el-input v-model="modName" :placeholder="t('textureModMaker.modName')"/><div class="tm-path-row"><el-input v-model="outputDirectory" clearable :placeholder="t('textureModMaker.outputFolderDefault')"/><el-button @click="pickOutput">{{ t('textureModMaker.choose') }}</el-button></div><div class="tm-generate-actions"><el-button v-if="generating" type="danger" size="large" :loading="cancelling" @click="cancelGeneration">{{ t('textureModMaker.cancelGeneration') }}</el-button><el-button v-else type="primary" size="large" :disabled="!canGenerate" @click="generate">{{ t('textureModMaker.generate') }}</el-button></div></div>
       <small v-if="finalOutputPath" class="tm-output-location">{{ t('textureModMaker.outputLocation') }} {{ finalOutputPath }}</small>
       <small v-if="generationEstimate" class="tm-generation-estimate">{{ generationEstimate }}</small>
+      <el-button v-if="generationProgress.logPath" class="tm-log-button" text size="small" @click="openGenerationLog">{{ t('textureModMaker.openGenerationLog') }}</el-button>
       <div v-if="generating || generationProgress.phase === 'error'" class="tm-generation-progress"><div><span>{{ generationProgressText }}</span><small v-if="generationProgress.message" :title="generationProgress.message">{{ generationProgress.message }}</small></div><div class="tm-pipeline-progress" role="progressbar"><span v-for="stage in generationStages" :key="stage.phase" class="tm-pipeline-stage" :class="[`phase-${stage.phase}`, { active: stage.active, complete: stage.value >= 100 }]" :style="{ width: `${stage.value}%` }" :title="`${stage.label} ${Math.round(stage.value)}%`"></span></div><div class="tm-pipeline-details"><span v-for="stage in generationStages" :key="stage.phase" :class="{ active: stage.active, complete: stage.value >= 100 }"><i></i>{{ stage.label }}<b v-if="stage.total">{{ stage.processed }}/{{ stage.total }}</b><b v-else>{{ Math.round(stage.value) }}%</b><b v-if="stage.elapsedMs">{{ (stage.elapsedMs / 1000).toFixed(1) }}s</b></span></div></div>
     </section>
 

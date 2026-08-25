@@ -3,7 +3,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Stdio;
@@ -57,6 +57,7 @@ pub struct GenerationProgress {
     total: usize,
     message: String,
     stages: HashMap<String, StageProgress>,
+    log_path: String,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -119,6 +120,11 @@ fn set_generation_progress(phase: &str, processed: usize, total: usize, message:
                 stage.processed = stage.total;
             }
         }
+        let log_path = if phase == "preparing" {
+            String::new()
+        } else {
+            progress.log_path.clone()
+        };
         *progress = GenerationProgress {
             running: !matches!(phase, "complete" | "cancelled" | "error"),
             phase: phase.into(),
@@ -126,7 +132,55 @@ fn set_generation_progress(phase: &str, processed: usize, total: usize, message:
             total,
             message: message.into(),
             stages,
+            log_path,
         };
+    }
+}
+
+#[derive(Clone)]
+struct TextureGenerationLog {
+    file: Arc<Mutex<fs::File>>,
+    started: Instant,
+}
+
+impl TextureGenerationLog {
+    fn create(app: &AppHandle) -> Result<(Self, PathBuf), String> {
+        let folder = app
+            .path()
+            .app_local_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("Logs")
+            .join("TextureModMaker");
+        fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let stamp = chrono::Local::now().format("%Y%m%dT%H%M%S%.3f");
+        let path = folder.join(format!("{stamp}-texture-mod.log"));
+        let file = fs::File::create(&path).map_err(|e| e.to_string())?;
+        Ok((
+            Self {
+                file: Arc::new(Mutex::new(file)),
+                started: Instant::now(),
+            },
+            path,
+        ))
+    }
+
+    fn write(&self, level: &str, message: impl AsRef<str>) {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        if let Ok(mut file) = self.file.lock() {
+            let _ = writeln!(
+                file,
+                "{now} [{level}] +{:.3}s {}",
+                self.started.elapsed().as_secs_f64(),
+                message.as_ref()
+            );
+            let _ = file.flush();
+        }
+    }
+}
+
+fn set_generation_log_path(path: &Path) {
+    if let Ok(mut progress) = GENERATION_PROGRESS.lock() {
+        progress.log_path = path.to_string_lossy().to_string();
     }
 }
 
@@ -835,6 +889,22 @@ pub async fn generate_texture_mod(
 ) -> Result<String, String> {
     GENERATION_CANCELLED.store(false, Ordering::Relaxed);
     set_generation_progress("preparing", 0, 0, "");
+    let (generation_log, log_path) = TextureGenerationLog::create(&app)?;
+    set_generation_log_path(&log_path);
+    generation_log.write("INFO", "SSMT4 texture mod generation started");
+    generation_log.write(
+        "INFO",
+        format!("Target: {} ({})", request.texture_hash, request.target_path),
+    );
+    generation_log.write(
+        "INFO",
+        format!(
+            "Source: {} ({})",
+            request.source_kind,
+            request.source_path.as_deref().unwrap_or("sequence")
+        ),
+    );
+    generation_log.write("INFO", format!("Settings: fit={}, rotation={}°, flip_h={}, flip_v={}, size={}%, CPU threads={}, GPU jobs={}, BC7 quality={}, texconv batch={}", request.fit_mode, request.rotation, request.flip_horizontal, request.flip_vertical, request.size_percent, request.cpu_threads, request.gpu_workers, request.bc7_quality, request.texconv_batch_size));
     let target = PathBuf::from(request.target_path.trim());
     let (base_width, base_height) =
         dds_size(&target).ok_or("The selected target is not a valid DDS texture")?;
@@ -862,9 +932,17 @@ pub async fn generate_texture_mod(
         if resolved_output.parent() != Some(output_parent.as_path()) {
             return Err("Refusing to clear an output folder outside the selected parent".into());
         }
+        generation_log.write(
+            "WARN",
+            format!(
+                "Clearing existing output folder: {}",
+                resolved_output.display()
+            ),
+        );
         fs::remove_dir_all(&resolved_output).map_err(|e| e.to_string())?;
     }
     fs::create_dir_all(&output).map_err(|e| e.to_string())?;
+    generation_log.write("INFO", format!("Output folder: {}", output.display()));
     let temp = app
         .path()
         .app_cache_dir()
@@ -911,6 +989,7 @@ pub async fn generate_texture_mod(
                     / request.frame_step.max(1) as f64)
                     .ceil() as usize;
                 set_generation_progress("extracting", 0, expected, "");
+                generation_log.write("INFO", format!("FFmpeg extraction started: expected {expected} frames, range {start}-{end}, step {}", request.frame_step.max(1)));
                 run_generation_tool(&ffmpeg, &args)?;
                 let mut paths: Vec<_> = fs::read_dir(&temp)
                     .map_err(|e| e.to_string())?
@@ -919,6 +998,10 @@ pub async fn generate_texture_mod(
                     .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("jpg")))
                     .collect();
                 paths.sort();
+                generation_log.write(
+                    "INFO",
+                    format!("FFmpeg extraction completed: {} frames", paths.len()),
+                );
                 paths
             }
             _ => vec![PathBuf::from(
@@ -935,6 +1018,13 @@ pub async fn generate_texture_mod(
             return Err("No source frames matched".into());
         }
         set_generation_progress("transforming", 0, sources.len(), "");
+        generation_log.write(
+            "INFO",
+            format!(
+                "Frame transformation started: {} source frames",
+                sources.len()
+            ),
+        );
         let first_source = sources.first().ok_or("No source frames matched")?;
         let (source_width, source_height) = if first_source
             .extension()
@@ -953,6 +1043,10 @@ pub async fn generate_texture_mod(
             request.size_percent,
             request.rotation,
             &request.fit_mode,
+        );
+        generation_log.write(
+            "INFO",
+            format!("Output dimensions: {width}x{height}; target format: {target_format}"),
         );
         let encode_frames = |frames: &[PathBuf]| -> Result<(), String> {
             if frames.is_empty() {
@@ -979,10 +1073,23 @@ pub async fn generate_texture_mod(
             }
             args.push("--".into());
             args.extend(frames.iter().map(|path| path.to_string_lossy().to_string()));
+            generation_log.write(
+                "INFO",
+                format!("DirectXTex batch started: {} frames", frames.len()),
+            );
+            let batch_started = Instant::now();
             run_generation_tool(
                 &PathManager::ssmt_resources_folder().join("texconv.exe"),
                 &args,
             )?;
+            generation_log.write(
+                "INFO",
+                format!(
+                    "DirectXTex batch completed: {} frames in {:.3}s",
+                    frames.len(),
+                    batch_started.elapsed().as_secs_f64()
+                ),
+            );
             for frame in frames {
                 let _ = fs::remove_file(frame);
             }
@@ -1098,14 +1205,34 @@ pub async fn generate_texture_mod(
                         .collect()
                 });
                 pending_encode.extend(rendered_frames?);
+                generation_log.write(
+                    "INFO",
+                    format!(
+                        "Transformed batch completed: {}/{} frames; encoder queue has {} frames",
+                        transformed.load(Ordering::Relaxed),
+                        sources.len(),
+                        pending_encode.len()
+                    ),
+                );
                 while pending_encode.len() >= encode_batch_size {
                     let frames: Vec<_> = pending_encode.drain(..encode_batch_size).collect();
+                    generation_log.write(
+                        "INFO",
+                        format!("Queued {} frames for DirectXTex", frames.len()),
+                    );
                     work_tx
                         .send(frames)
                         .map_err(|_| "DirectXTex pipeline stopped unexpectedly".to_string())?;
                 }
             }
             if !pending_encode.is_empty() {
+                generation_log.write(
+                    "INFO",
+                    format!(
+                        "Queued final {} frames for DirectXTex",
+                        pending_encode.len()
+                    ),
+                );
                 work_tx
                     .send(pending_encode)
                     .map_err(|_| "DirectXTex pipeline stopped unexpectedly".to_string())?;
@@ -1133,6 +1260,13 @@ pub async fn generate_texture_mod(
                 sources.len()
             ));
         }
+        generation_log.write(
+            "INFO",
+            format!(
+                "DDS verification completed: {dds_count}/{} files",
+                sources.len()
+            ),
+        );
         let animated = sources.len() > 1
             || request.source_kind == "video"
             || request.source_kind == "sequence";
@@ -1148,6 +1282,7 @@ pub async fn generate_texture_mod(
         };
         set_generation_progress("writing", sources.len(), sources.len(), "");
         fs::write(output.join("TextureMod.ini"), ini).map_err(|e| e.to_string())?;
+        generation_log.write("INFO", "TextureMod.ini written");
         Ok(())
     })();
     let _ = fs::remove_dir_all(&temp);
@@ -1155,6 +1290,14 @@ pub async fn generate_texture_mod(
         let _ = fs::remove_dir_all(&output);
     }
     if let Err(error) = result {
+        generation_log.write("ERROR", format!("Generation failed: {error}"));
+        generation_log.write(
+            "INFO",
+            format!(
+                "Total elapsed: {:.3}s",
+                generation_log.started.elapsed().as_secs_f64()
+            ),
+        );
         let phase = if GENERATION_CANCELLED.load(Ordering::Relaxed) {
             "cancelled"
         } else {
@@ -1163,6 +1306,17 @@ pub async fn generate_texture_mod(
         set_generation_progress(phase, 0, 0, &error);
         return Err(error);
     }
+    generation_log.write(
+        "INFO",
+        format!("Generation completed successfully: {}", output.display()),
+    );
+    generation_log.write(
+        "INFO",
+        format!(
+            "Total elapsed: {:.3}s",
+            generation_log.started.elapsed().as_secs_f64()
+        ),
+    );
     set_generation_progress("complete", 1, 1, "");
     Ok(output.to_string_lossy().to_string())
 }
