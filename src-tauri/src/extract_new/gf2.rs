@@ -202,7 +202,8 @@ impl GF2NewExtractor {
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
             crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
-                match_first_index, ib_file_name
+                match_first_index,
+                ib_file_name
             );
         }
         for d3d11_game_type in possible_d3d11_game_type_list {
@@ -389,7 +390,9 @@ impl GF2NewExtractor {
             crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
 
             if trianglelist_index.is_empty() {
-                crate::extract_log!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
+                crate::extract_log!(
+                    "当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项"
+                );
                 continue;
             }
 
@@ -405,7 +408,9 @@ impl GF2NewExtractor {
 
                 crate::extract_log!(
                     "当前分类: {} 提取Index: {} 提取槽位: {}",
-                    category_name, trianglelist_index, category_slot
+                    category_name,
+                    trianglelist_index,
+                    category_slot
                 );
 
                 if category_slot.is_empty() {
@@ -494,7 +499,8 @@ impl GF2NewExtractor {
                 } else if vertex_number != tmp_number {
                     crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
-                        vertex_number, tmp_number
+                        vertex_number,
+                        tmp_number
                     );
                     crate::extract_log!("槽位匹配失败");
                     all_match = false;

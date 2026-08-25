@@ -115,11 +115,7 @@ pub struct SubMeshJson {
 
     /// 标记后的 DiffuseMap 文件名列表，相对当前 SubMesh JSON 所在目录。
     /// 是 TextureMarkUpInfoList 的紧凑投影，方便导入器按顺序加载叠加层。
-    #[serde(
-        rename = "DiffuseMap",
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(rename = "DiffuseMap", default, skip_serializing_if = "Vec::is_empty")]
     pub diffuse_map: Vec<String>,
 
     /// 由后处理页标记的语义角色，供 Blender 插件识别面部、脖颈和眼部 SubMesh。

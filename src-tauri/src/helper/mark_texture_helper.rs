@@ -116,7 +116,8 @@ impl MarkTextureHelper {
                 Err(e) => {
                     crate::extract_error!(
                         "Failed to read component match-first-index map for DrawIB {}: {}",
-                        draw_ib, e
+                        draw_ib,
+                        e
                     );
                     continue;
                 }
@@ -132,7 +133,9 @@ impl MarkTextureHelper {
                     Err(e) => {
                         crate::extract_error!(
                             "Failed to read draw call index list for DrawIB {} component {}: {}",
-                            draw_ib, component_name, e
+                            draw_ib,
+                            component_name,
+                            e
                         );
                     }
                 }
@@ -265,7 +268,8 @@ impl MarkTextureHelper {
             Err(e) => {
                 crate::extract_error!(
                     "Failed to read LOD workspace directory {}: {}",
-                    lod_workspace_path, e
+                    lod_workspace_path,
+                    e
                 );
                 return;
             }

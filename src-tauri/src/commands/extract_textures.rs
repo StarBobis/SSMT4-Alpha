@@ -3,8 +3,8 @@ use crate::extract_new::extract_services::ExtractNewService;
 use crate::helper::texture_convert_helper::TextureConvertHelper;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::io::Read;
 use std::hash::{Hash, Hasher};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
@@ -117,7 +117,9 @@ pub async fn prepare_dds_webgl_preview(
         let mut locks = locks.lock().map_err(|_| "DDS preview lock is poisoned")?;
         locks.entry(cache_key.clone()).or_default().clone()
     };
-    let _conversion_guard = conversion_lock.lock().map_err(|_| "DDS conversion lock is poisoned")?;
+    let _conversion_guard = conversion_lock
+        .lock()
+        .map_err(|_| "DDS conversion lock is poisoned")?;
     if !output.is_file() {
         if let Some(limit) = max_dimension {
             let mut header = [0u8; 20];

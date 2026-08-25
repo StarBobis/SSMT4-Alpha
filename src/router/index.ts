@@ -18,6 +18,7 @@ const MarkTextureFull = () => import('../views/MarkTexture/MarkTextureFull.vue')
 const Settings = () => import('../views/Settings/Settings.vue')
 const XianZun = () => import('../views/XianZun/XianZun.vue')
 const UIBuilder = () => import('../views/UIBuilder/UIBuilder.vue')
+const TextureModMaker = () => import('../views/TextureModMaker/TextureModMaker.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home, meta: { title: 'Home', requiresGame: false } },
@@ -31,6 +32,7 @@ const routes = [
   { path: '/settings', name: 'Settings', component: Settings, meta: { title: 'Settings', requiresGame: false } },
   { path: '/xianzun', name: 'XianZun', component: XianZun, meta: { title: '芝士猫', requiresGame: false } },
   { path: '/ui-builder', name: 'UIBuilder', component: UIBuilder, meta: { title: 'UI Builder', requiresGame: false } },
+  { path: '/texture-mod-maker', name: 'TextureModMaker', component: TextureModMaker, meta: { title: 'Texture Mod Maker', requiresGame: true } },
 ]
 
 const router = createRouter({
@@ -43,7 +45,7 @@ router.beforeEach(async (to) => {
     return { name: 'GameLibrary' }
   }
 
-  const needMigotoPath = new Set(['WorkPage', 'MarkTextureFull'])
+  const needMigotoPath = new Set(['WorkPage', 'MarkTextureFull', 'TextureModMaker'])
   if (!needMigotoPath.has(String(to.name ?? ''))) {
     return true
   }

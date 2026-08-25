@@ -612,7 +612,8 @@ impl SRMINewExtractor {
                     })?;
                 crate::extract_log!(
                     "[export_category_buffer] computed read_len: category_name={}, read_len={}",
-                    category_name, read_len
+                    category_name,
+                    read_len
                 );
                 let end = metadata.byte_offset.checked_add(read_len).ok_or_else(|| {
                     format!(
@@ -913,7 +914,8 @@ impl SRMINewExtractor {
 
                 crate::extract_log!(
                     "category_name: {}, category_buf_filename: {}",
-                    category_name, category_buf_filename
+                    category_name,
+                    category_buf_filename
                 );
                 let category_output_buf_file_path =
                     game_type_output_path.join(format!("{}-{}.buf", name_prefix, category_name));
@@ -1489,7 +1491,8 @@ impl SRMINewExtractor {
 
                     crate::extract_log!(
                         "extract_slot: position_slot={}, blend_slot={}",
-                        position_slot, blend_slot
+                        position_slot,
+                        blend_slot
                     );
 
                     possible_list.push(wrapper);
@@ -1704,7 +1707,8 @@ impl SRMINewExtractor {
 
                 crate::extract_log!(
                     "CategoryName: {}, CategorySlot: {}",
-                    category_name, category_slot
+                    category_name,
+                    category_slot
                 );
 
                 let search_key = format!("{}-{}", extract_index, category_slot);
@@ -1810,7 +1814,8 @@ impl SRMINewExtractor {
                 if tmp_vertex_number == 0 {
                     crate::extract_log!(
                         "GameType {} skipped: invalid stride or empty buffer for category {}",
-                        d3d11_game_type.game_type_name, category_name
+                        d3d11_game_type.game_type_name,
+                        category_name
                     );
                     all_match = false;
                     break;
@@ -1849,7 +1854,8 @@ impl SRMINewExtractor {
                     if category_txt_filename.is_empty() {
                         crate::extract_log!(
                             "TXT file not found for category {}: search key {}",
-                            category_name, search_str
+                            category_name,
+                            search_str
                         );
                         all_match = false;
                         break;
@@ -1864,7 +1870,8 @@ impl SRMINewExtractor {
                             vertex_count_in_txt.parse::<u64>().unwrap_or(0);
                         crate::extract_log!(
                             "vertex_count_in_txt: {}, vertex_number: {}",
-                            vertex_count_in_txt_int, vertex_number
+                            vertex_count_in_txt_int,
+                            vertex_number
                         );
 
                         if tmp_vertex_number < vertex_count_in_txt_int {
@@ -1886,7 +1893,9 @@ impl SRMINewExtractor {
                 crate::extract_log!("category: {}", category_name);
                 crate::extract_log!(
                     "vertex_number: {}, tmp_vertex_number: {} for category {}",
-                    vertex_number, tmp_vertex_number, category_name
+                    vertex_number,
+                    tmp_vertex_number,
+                    category_name
                 );
 
                 if vertex_number == 0 {
@@ -1898,7 +1907,8 @@ impl SRMINewExtractor {
                 } else {
                     crate::extract_log!(
                         "category match successful: vertex number {} from category {}",
-                        vertex_number, category_name
+                        vertex_number,
+                        category_name
                     );
                 }
             }
@@ -1972,7 +1982,8 @@ impl SRMINewExtractor {
 
             crate::extract_log!(
                 "Found IB txt file: {}, for TriangleListIndex: {}",
-                ib_txt_filename, trianglelist_index
+                ib_txt_filename,
+                trianglelist_index
             );
 
             let ib_txt_filepath = self.fa_log.get_deduped_filepath(&ib_txt_filename);
@@ -1983,7 +1994,8 @@ impl SRMINewExtractor {
 
             crate::extract_log!(
                 "FirstIndex: {}, IndexCount: {}",
-                ib_txt_file.first_index, ib_txt_file.index_count
+                ib_txt_file.first_index,
+                ib_txt_file.index_count
             );
 
             match_first_index_ib_txt_filename_map.insert(first_index_u64, ib_txt_filename.clone());
@@ -2208,7 +2220,9 @@ impl SRMINewExtractor {
                     || cs_cb0_filename.contains("4d9c23fd387846c7")
                     || cs_cb0_filename.contains("ba3d8ab37ea2fd2d")
                 {
-                    crate::extract_log!("提取执行: 1c932707d4d8df41_4d9c23fd387846c7_ba3d8ab37ea2fd2d");
+                    crate::extract_log!(
+                        "提取执行: 1c932707d4d8df41_4d9c23fd387846c7_ba3d8ab37ea2fd2d"
+                    );
                     let mut possible_d3d11gametype_wrapper_list = self
                         .auto_gametype_detect_1c932707d4d8df41_4d9c23fd387846c7(
                             pointlist_index.clone(),

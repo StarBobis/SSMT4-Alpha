@@ -241,7 +241,9 @@ impl SnowBreakNewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!(
+                    "自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了"
+                );
                 continue;
             }
 
@@ -271,7 +273,8 @@ impl SnowBreakNewExtractor {
                         .insert(category_slot.clone(), category_file_name.clone());
                     crate::extract_log!(
                         "CategorySlot: {} ExtractFileName: {}",
-                        category_slot, category_file_name
+                        category_slot,
+                        category_file_name
                     );
                 }
             }
@@ -352,7 +355,8 @@ impl SnowBreakNewExtractor {
                 } else if vertex_count != slot_vertex_count {
                     crate::extract_log!(
                         "VertexCount: {} SlotVertexCount: {}",
-                        vertex_count, slot_vertex_count
+                        vertex_count,
+                        slot_vertex_count
                     );
                     crate::extract_log!(
                         "当前槽位: {} 文件数据不符合当前数据类型要求，跳过此数据类型",
@@ -427,7 +431,8 @@ impl SnowBreakNewExtractor {
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
             crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
-                match_first_index, ib_file_name
+                match_first_index,
+                ib_file_name
             );
         }
 

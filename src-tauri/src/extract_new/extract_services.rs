@@ -121,7 +121,8 @@ impl ExtractNewService {
         for drawib_entry in drawib_entries {
             crate::extract_log!(
                 "DrawIB: {}, Alias: {}",
-                drawib_entry.draw_ib, drawib_entry.alias
+                drawib_entry.draw_ib,
+                drawib_entry.alias
             );
             let draw_ib = drawib_entry.draw_ib;
 
@@ -144,7 +145,10 @@ impl ExtractNewService {
             for ps_texture_filename in trianglelist_texture_file_list {
                 let deduped_filepath = fa.log.get_deduped_filepath(&ps_texture_filename);
                 if deduped_filepath.is_empty() {
-                    crate::extract_log!("No deduped file found for texture: {}", ps_texture_filename);
+                    crate::extract_log!(
+                        "No deduped file found for texture: {}",
+                        ps_texture_filename
+                    );
                     continue;
                 }
 
@@ -182,7 +186,8 @@ impl ExtractNewService {
         for drawib_entry in drawib_entries {
             crate::extract_log!(
                 "DrawIB: {}, Alias: {}",
-                drawib_entry.draw_ib, drawib_entry.alias
+                drawib_entry.draw_ib,
+                drawib_entry.alias
             );
             let draw_ib = drawib_entry.draw_ib;
 

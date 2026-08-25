@@ -76,6 +76,7 @@ const pageVisibilityGroups = computed(() => [
   { title: t('settings.pageVisibility.modCreation'), pages: [
     { id: 'work' as OptionalPageId, label: t('titlebar.nav.work') },
     { id: 'markTexture' as OptionalPageId, label: t('titlebar.nav.markTexture') },
+    { id: 'textureModMaker' as OptionalPageId, label: t('titlebar.nav.textureModMaker') },
     { id: 'uiBuilder' as OptionalPageId, label: t('titlebar.nav.uiBuilder') },
   ] },
   { title: t('settings.pageVisibility.modManagement'), pages: [

@@ -106,7 +106,8 @@ impl ExprUtils {
         if let Ok(n) = token_trim.parse::<i64>() {
             crate::extract_log!(
                 "[Expr][ResolveToken] token='{}' source=literal value={}",
-                token_trim, n
+                token_trim,
+                n
             );
             return Ok(n.to_string());
         }
@@ -124,7 +125,8 @@ impl ExprUtils {
             })?;
             crate::extract_log!(
                 "[Expr][ResolveToken] token='{}' source=active value={}",
-                token_trim, parsed
+                token_trim,
+                parsed
             );
             return Ok(parsed.to_string());
         }
@@ -142,7 +144,8 @@ impl ExprUtils {
                 })?;
                 crate::extract_log!(
                     "[Expr][ResolveToken] token='{}' source=global-expression value={}",
-                    token_trim, parsed
+                    token_trim,
+                    parsed
                 );
                 return Ok(parsed.to_string());
             }
@@ -159,7 +162,8 @@ impl ExprUtils {
                 })?;
             crate::extract_log!(
                 "[Expr][ResolveToken] token='{}' source=global-init value={}",
-                token_trim, parsed
+                token_trim,
+                parsed
             );
             return Ok(parsed.to_string());
         }

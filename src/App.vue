@@ -67,13 +67,14 @@ watch(() => AppStateManager.isFirstRunOnboardingOpen.value, async open => {
   if (open && !firstRunCacheDir.value) firstRunCacheDir.value = await GlobalConfig.SSMT4DefaultCacheFolder();
 }, { immediate: true });
 const firstRunRoleVisibility: Record<'author' | 'player' | 'both', PageVisibilitySettings> = {
-  author: { work: true, markTexture: true, mods: false, gameBanana: false, nexusMods: false, xianzun: false, uiBuilder: true },
-  player: { work: false, markTexture: false, mods: true, gameBanana: true, nexusMods: true, xianzun: true, uiBuilder: false },
-  both: { work: true, markTexture: true, mods: true, gameBanana: true, nexusMods: true, xianzun: true, uiBuilder: true },
+  author: { work: true, markTexture: true, textureModMaker: true, mods: false, gameBanana: false, nexusMods: false, xianzun: false, uiBuilder: true },
+  player: { work: false, markTexture: false, textureModMaker: false, mods: true, gameBanana: true, nexusMods: true, xianzun: true, uiBuilder: false },
+  both: { work: true, markTexture: true, textureModMaker: true, mods: true, gameBanana: true, nexusMods: true, xianzun: true, uiBuilder: true },
 };
 const firstRunPageLabels: Array<{ id: keyof PageVisibilitySettings; labelKey: string }> = [
   { id: 'work', labelKey: 'titlebar.nav.work' },
   { id: 'markTexture', labelKey: 'titlebar.nav.markTexture' },
+  { id: 'textureModMaker', labelKey: 'titlebar.nav.textureModMaker' },
   { id: 'mods', labelKey: 'titlebar.nav.mods' },
   { id: 'gameBanana', labelKey: 'titlebar.nav.gameBanana' },
   { id: 'nexusMods', labelKey: 'titlebar.nav.nexusMods' },
@@ -149,6 +150,7 @@ const shouldShowGlobalDimLayer = computed(() => (
   || route.path === '/mods'
   || route.path === '/work'
   || route.path === '/mark-texture-full'
+  || route.path === '/texture-mod-maker'
   || route.path === '/xianzun'
   || route.path === '/ui-builder'
   || route.path.startsWith('/gamebanana')

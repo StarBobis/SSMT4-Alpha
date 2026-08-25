@@ -49,12 +49,13 @@ export type ModelExtractionLogLanguage = 'zh-CN' | 'en'
 export type GameBananaTranslationProvider = 'openai' | 'compatible' | 'claude' | 'deepseek' | 'gemini' | 'google'
 export type GameBananaTranslationFontStyle = 'regular' | 'italic' | 'bold' | 'bold-italic'
 export type GameBananaTranslationFailureMode = 'retry' | 'message' | 'silent'
-export type OptionalPageId = 'work' | 'markTexture' | 'mods' | 'gameBanana' | 'nexusMods' | 'xianzun' | 'uiBuilder'
+export type OptionalPageId = 'work' | 'markTexture' | 'textureModMaker' | 'mods' | 'gameBanana' | 'nexusMods' | 'xianzun' | 'uiBuilder'
 export type PageVisibilitySettings = Record<OptionalPageId, boolean>
 
 export const DEFAULT_PAGE_VISIBILITY: PageVisibilitySettings = {
 	work: true,
 	markTexture: true,
+	textureModMaker: true,
 	mods: true,
 	gameBanana: true,
 	nexusMods: true,

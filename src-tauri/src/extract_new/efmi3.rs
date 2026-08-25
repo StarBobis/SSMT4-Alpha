@@ -309,7 +309,9 @@ impl EFMI3FullNewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!(
+                    "自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了"
+                );
                 continue;
             }
 
@@ -329,7 +331,9 @@ impl EFMI3FullNewExtractor {
 
                 crate::extract_log!(
                     "当前分类: {} 提取Index: {} 提取槽位: {}",
-                    category_name, trianglelist_index, category_slot
+                    category_name,
+                    trianglelist_index,
+                    category_slot
                 );
 
                 let search_key = format!("{}-{}", trianglelist_index, category_slot);
@@ -358,7 +362,8 @@ impl EFMI3FullNewExtractor {
 
                 crate::extract_log!(
                     "Category: {} File: {}",
-                    category_name, category_buf_file_path
+                    category_name,
+                    category_buf_file_path
                 );
 
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
@@ -481,7 +486,8 @@ impl EFMI3FullNewExtractor {
                 } else if vertex_number != tmp_number {
                     crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
-                        vertex_number, tmp_number
+                        vertex_number,
+                        tmp_number
                     );
                     crate::extract_log!("槽位匹配失败");
                     all_match = false;
@@ -684,7 +690,9 @@ impl EFMI3FullNewExtractor {
             crate::extract_log!("Unique IB Txt File: {}", ib_txt_file.file_name);
             crate::extract_log!(
                 "First Index: {} Index Count: {} Byte Offset: {}",
-                ib_txt_file.first_index, ib_txt_file.index_count, ib_txt_file.byte_offset
+                ib_txt_file.first_index,
+                ib_txt_file.index_count,
+                ib_txt_file.byte_offset
             );
             SSMTTimerUtils::start("数据类型识别测试");
             let unique_str = format!(
@@ -752,7 +760,10 @@ impl EFMI3FullNewExtractor {
                         let deduped_filepath =
                             self.fa.log.get_deduped_filepath(&ps_texture_filename);
                         if deduped_filepath.is_empty() {
-                            crate::extract_log!("No deduped file found for texture: {}", ps_texture_filename);
+                            crate::extract_log!(
+                                "No deduped file found for texture: {}",
+                                ps_texture_filename
+                            );
                             continue;
                         }
 
@@ -773,7 +784,6 @@ impl EFMI3FullNewExtractor {
                 }
             }
             SSMTTimerUtils::end("复制DedupedTextures到工作空间");
-
         }
 
         //根据unique_str_extracted_dict，移除掉unique_str_index_list_dict中对应的为false的项

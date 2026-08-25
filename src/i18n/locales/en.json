@@ -266,6 +266,7 @@
       "home": "Home",
       "work": "Work",
       "markTexture": "Extraction Postprocess",
+      "textureModMaker": "Texture Mod Maker",
       "gameType": "Data Type",
       "mods": "Mods",
       "gameBanana": "GameBanana",
@@ -1616,6 +1617,20 @@
       "installFailed": "Unable to download and install the mod: {error}",
       "openExternal": "Unable to open the external page: {error}"
     }
+  },
+  "textureModMaker": {
+    "title": "Texture Mod Maker",
+    "description": "Create static or animated texture mods directly from FrameAnalysis, without a workspace.",
+    "ready": "Ready", "missing": "Not installed", "install": "Install", "ffmpegInstalled": "FFmpeg installed",
+    "targetTitle": "Target texture", "targetDesc": "Scan rendered textures and confirm the replacement target by hash.",
+    "pickFrameAnalysis": "Select FrameAnalysis folder", "frameAnalysisPlaceholder": "Full FrameAnalysis path", "choose": "Choose", "useLatest": "Use latest FrameAnalysis", "noFrameAnalysis": "No FrameAnalysis folder exists for the current game", "scan": "Scan textures",
+    "noTextures": "No rendered textures were found", "textureCount": "Found {count} selectable textures", "textureFilterPlaceholder": "Filter textures by hash or filename", "noMatchingTextures": "No matching textures", "hashPlaceholder": "Enter an 8-digit texture hash", "confirmHash": "Confirm hash", "hashNotFound": "This hash is not a rendered texture in the current FrameAnalysis", "view": "View",
+    "sourceTitle": "Media source", "sourceDesc": "Choose an image, video, or an ordered image sequence.", "image": "Image", "video": "Video", "sequence": "Image sequence", "sourcePlaceholder": "Choose an image or video", "sequenceFolder": "Image sequence folder", "chooseFolder": "Choose folder", "chooseFrames": "Choose frames", "frameRegex": "Filename regex", "applyRegex": "Apply", "noFrames": "The regex did not match any image frames",
+    "previewTitle": "Live preview", "previewDesc": "The canvas always follows the target texture aspect ratio.", "previewEmpty": "Choose a source to preview it", "viewSource": "Inspect", "sourcePreviewTitle": "Source image preview", "viewerHint": "Wheel to zoom · drag to pan · double-click to reset", "previewLoadFailed": "Failed to decode the source image asynchronously",
+    "optionsTitle": "Transform and encoding", "optionsDesc": "DDS keeps the target texture format; FFmpeg controls video quality compression.", "fit": "Layout", "rotation": "Rotation", "flipHorizontal": "Flip horizontally", "flipVertical": "Flip vertically", "fps": "Output frame rate", "frameStep": "Frame sampling step", "trimRange": "Start / end frame", "size": "Output size", "videoQuality": "Video quality", "loop": "Playback",
+    "fitModes": { "cover": "Fill (crop)", "contain": "Fit (letterbox)", "tile": "Tile", "stretch": "Stretch", "center": "Center" },
+    "loopModes": { "loop": "Loop", "once": "Play once" },
+    "outputTitle": "Generate mod", "outputDesc": "Outputs DDS resources, animation frames, and a loadable 3Dmigoto INI.", "modName": "Mod folder name", "outputFolder": "Output parent folder", "generate": "Generate and open", "cancelGeneration": "Cancel generation", "generated": "Texture mod generated", "estimate": "Estimated {frames} frames, about {lower}–{upper} (varies by CPU and DDS format)", "seconds": "{count}s", "minutes": "{count} min", "hoursMinutes": "{hours}h {minutes}m", "resetZoom": "Reset zoom", "close": "Close"
   },
   "resourceManager": {
     "messages": {

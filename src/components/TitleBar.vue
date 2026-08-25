@@ -87,6 +87,7 @@ const allNavItems = ref<NavItem[]>([
     { id: 'home', path: '/', labelKey: 'titlebar.nav.home', iconType: 'home' },
     { id: 'work', path: '/work', labelKey: 'titlebar.nav.work', iconType: 'work' },
     { id: 'mark-texture-full', path: '/mark-texture-full', labelKey: 'titlebar.nav.markTexture', iconType: 'mark-texture-full' },
+    { id: 'texture-mod-maker', path: '/texture-mod-maker', labelKey: 'titlebar.nav.textureModMaker', iconType: 'texture-mod-maker' },
     { id: 'mods', path: '/mods', labelKey: 'titlebar.nav.mods', iconType: 'mods' },
     { id: 'gamebanana', path: '/gamebanana', labelKey: 'titlebar.nav.gameBanana', iconType: 'gamebanana' },
     { id: 'nexusmods', path: '/nexusmods', labelKey: 'titlebar.nav.nexusMods', iconType: 'nexusmods' },
@@ -156,6 +157,7 @@ const displayItems = computed(() => {
     const visibilityKeyByNavId: Partial<Record<string, keyof typeof appSettings.pageVisibility>> = {
         work: 'work',
         'mark-texture-full': 'markTexture',
+        'texture-mod-maker': 'textureModMaker',
         mods: 'mods',
         gamebanana: 'gameBanana',
         nexusmods: 'nexusMods',
@@ -390,6 +392,8 @@ const togglePin = async () => {
                 </svg>
 
                 <svg v-if="item.id === 'mark-texture-full'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"></path><path d="M9 9h6"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg>
+
+                <svg v-if="item.id === 'texture-mod-maker'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8" cy="9" r="2"></circle><path d="m4 17 5-5 3 3 2-2 6 6"></path><path d="M17 2v4M15 4h4"></path></svg>
 
                 <svg v-if="item.id === 'ui-builder'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 8h8v8H8z"></path><path d="M8 12h8M12 8v8"></path></svg>
 

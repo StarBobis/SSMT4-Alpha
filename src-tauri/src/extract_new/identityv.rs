@@ -512,7 +512,9 @@ impl IdentityVNewExtractor {
                 }
 
                 if !all_slot_buf_file_exists {
-                    crate::extract_log!("当前数据类型并非所有的槽位Buffer文件都存在，不满足，跳过。");
+                    crate::extract_log!(
+                        "当前数据类型并非所有的槽位Buffer文件都存在，不满足，跳过。"
+                    );
                     continue;
                 }
 
@@ -533,7 +535,8 @@ impl IdentityVNewExtractor {
 
                     crate::extract_log!(
                         "当前匹配槽位: {} Stride: {}",
-                        category_name, category_stride
+                        category_name,
+                        category_stride
                     );
                     if category_stride == 0 {
                         all_match = false;
@@ -580,7 +583,10 @@ impl IdentityVNewExtractor {
 
                     let yu_shu = buf_file_size % category_stride;
                     if yu_shu != 0 {
-                        crate::extract_log!("余数不为0: {}，文件步长除以类别步长不能含余数", yu_shu);
+                        crate::extract_log!(
+                            "余数不为0: {}，文件步长除以类别步长不能含余数",
+                            yu_shu
+                        );
                         all_match = false;
                         break;
                     }
@@ -598,7 +604,8 @@ impl IdentityVNewExtractor {
                     if vertex_number != tmp_number {
                         crate::extract_log!(
                             "VertexNumber: {} 当前槽位数量: {}",
-                            vertex_number, tmp_number
+                            vertex_number,
+                            tmp_number
                         );
                         crate::extract_log!("槽位匹配失败");
                         all_match = false;
@@ -638,7 +645,10 @@ impl IdentityVNewExtractor {
 
                         if stride_show != d3d11_game_type.get_self_stride() {
                             crate::extract_log!("显示步长: {}", stride_show_str);
-                            crate::extract_log!("数据类型步长: {}", d3d11_game_type.get_self_stride());
+                            crate::extract_log!(
+                                "数据类型步长: {}",
+                                d3d11_game_type.get_self_stride()
+                            );
                             crate::extract_log!("当前文件中显示步长与数据类型步长不符，匹配失败");
                             all_match = false;
                             break;
@@ -654,7 +664,8 @@ impl IdentityVNewExtractor {
             if possible_game_type_list.is_empty() {
                 crate::extract_log!(
                     "未找到任何匹配的数据类型，跳过当前 DrawIB。DrawIB: {} TrianglelistIndex: {:?}",
-                    draw_ib, trianglelist_index_list
+                    draw_ib,
+                    trianglelist_index_list
                 );
                 continue;
             }

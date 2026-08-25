@@ -309,7 +309,8 @@ impl HIMINewExtractor {
         for (match_first_index, ib_file_name) in &match_first_index_ib_txt_file_name_dict {
             crate::extract_log!(
                 "MatchFirstIndex: {} IBFileName: {}",
-                match_first_index, ib_file_name
+                match_first_index,
+                ib_file_name
             );
         }
         for d3d11_game_type in possible_d3d11_game_type_list {
@@ -493,7 +494,9 @@ impl HIMINewExtractor {
             }
 
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!(
+                    "自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了"
+                );
                 continue;
             }
 
@@ -507,7 +510,9 @@ impl HIMINewExtractor {
             crate::extract_log!("TrianglelistIndex: {}", trianglelist_index);
 
             if trianglelist_index.is_empty() {
-                crate::extract_log!("当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项");
+                crate::extract_log!(
+                    "当前GameType无法找到符合槽位存在条件的TrianglelistIndex，跳过此项"
+                );
                 continue;
             }
 
@@ -533,7 +538,9 @@ impl HIMINewExtractor {
 
                 crate::extract_log!(
                     "当前分类: {} 提取Index: {} 提取槽位: {}",
-                    category_name, extract_index, category_slot
+                    category_name,
+                    extract_index,
+                    category_slot
                 );
 
                 let search_key = format!("{}-{}", extract_index, category_slot);
@@ -547,7 +554,8 @@ impl HIMINewExtractor {
                     self.fa.log.get_deduped_filepath(&category_buf_file_name);
                 crate::extract_log!(
                     "Category: {} File: {}",
-                    category_name, category_buf_file_path
+                    category_name,
+                    category_buf_file_path
                 );
 
                 if category_buf_file_path.is_empty() || !Path::new(&category_buf_file_path).exists()
@@ -663,7 +671,9 @@ impl HIMINewExtractor {
                     if !show_stride.trim().is_empty() {
                         let show_stride_count = show_stride.parse::<u64>().unwrap_or(0);
                         if show_stride_count != category_stride {
-                            crate::extract_log!("槽位的txt文件Stride与数据类型Stride不符，跳过此数据类型。");
+                            crate::extract_log!(
+                                "槽位的txt文件Stride与数据类型Stride不符，跳过此数据类型。"
+                            );
                             all_match = false;
                             break;
                         }
@@ -675,7 +685,8 @@ impl HIMINewExtractor {
                 } else if vertex_number != tmp_number {
                     crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
-                        vertex_number, tmp_number
+                        vertex_number,
+                        tmp_number
                     );
                     crate::extract_log!("槽位匹配失败");
                     all_match = false;

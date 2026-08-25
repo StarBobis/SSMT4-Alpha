@@ -198,7 +198,9 @@ impl WWMINewExtractor {
             .iter()
         {
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!(
+                    "自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了"
+                );
                 continue;
             }
 
@@ -229,7 +231,8 @@ impl WWMINewExtractor {
                         .insert(category_slot.clone(), category_file_name.clone());
                     crate::extract_log!(
                         "CategorySlot: {} ExtractFileName: {}",
-                        category_slot, category_file_name
+                        category_slot,
+                        category_file_name
                     );
                 }
             }
@@ -309,7 +312,8 @@ impl WWMINewExtractor {
                 } else if vertex_count != slot_vertex_count {
                     crate::extract_log!(
                         "VertexCount: {} SlotVertexCount: {}",
-                        vertex_count, slot_vertex_count
+                        vertex_count,
+                        slot_vertex_count
                     );
                     crate::extract_log!(
                         "当前槽位: {} 文件数据不符合当前数据类型要求，跳过此数据类型",
@@ -553,10 +557,14 @@ impl WWMINewExtractor {
                                     shapekeys.dispatch_y = sk_dispatch_y;
                                     crate::extract_log!(
                                         "ShapeKeys: vertex_count={} dispatch_y={} checksum={}",
-                                        sk_vertex_count, sk_dispatch_y, sk_checksum
+                                        sk_vertex_count,
+                                        sk_dispatch_y,
+                                        sk_checksum
                                     );
                                 }
-                                Ok(_) => crate::extract_log!("cs-cb0 buffer 太短，无法读取 128 个 u32"),
+                                Ok(_) => {
+                                    crate::extract_log!("cs-cb0 buffer 太短，无法读取 128 个 u32")
+                                }
                                 Err(e) => crate::extract_log!("读取 cs-cb0 buffer 失败: {}", e),
                             }
                         }
@@ -592,7 +600,9 @@ impl WWMINewExtractor {
                             .collect();
                     }
                 } else {
-                    crate::extract_log!("存在VB6槽位，但无法找到ShapeKey提取Index，跳过形态键提取。");
+                    crate::extract_log!(
+                        "存在VB6槽位，但无法找到ShapeKey提取Index，跳过形态键提取。"
+                    );
                 }
 
                 //逐个Submesh输出内容
@@ -605,7 +615,9 @@ impl WWMINewExtractor {
                 {
                     crate::extract_log!(
                         "MatchFirstIndex: {} IBTxtFileName: {} TrianglelistIndex: {}",
-                        match_first_index, ib_txt_filename, trianglelist_index
+                        match_first_index,
+                        ib_txt_filename,
+                        trianglelist_index
                     );
 
                     let unique_ib_txt_file_path =
@@ -784,7 +796,10 @@ impl WWMINewExtractor {
                             .log
                             .get_deduped_filepath(&submesh_cb4_file_name);
                         if cb4_buf_path.is_empty() {
-                            crate::extract_log!("cb4 deduped path is empty: {}", submesh_cb4_file_name);
+                            crate::extract_log!(
+                                "cb4 deduped path is empty: {}",
+                                submesh_cb4_file_name
+                            );
                         } else {
                             let dest_name = format!("{}-BoneMatrix.buf", unique_str_folder_name);
                             fs::copy(&cb4_buf_path, game_type_output_path.join(&dest_name))

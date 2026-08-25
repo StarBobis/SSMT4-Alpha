@@ -774,7 +774,8 @@ impl YYSLSNewExtractor {
 
                 crate::extract_log!(
                     "当前匹配槽位: {} Stride: {}",
-                    category_name, category_stride
+                    category_name,
+                    category_stride
                 );
 
                 if category_stride == 0 {
@@ -844,7 +845,8 @@ impl YYSLSNewExtractor {
                 if vertex_number != tmp_number {
                     crate::extract_log!(
                         "VertexNumber: {} 当前槽位数量: {}",
-                        vertex_number, tmp_number
+                        vertex_number,
+                        tmp_number
                     );
                     crate::extract_log!("槽位匹配失败");
                     all_match = false;

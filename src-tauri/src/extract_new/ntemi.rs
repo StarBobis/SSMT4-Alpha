@@ -313,7 +313,10 @@ impl NTEMINewExtractor {
                 Err(e) => {
                     crate::extract_log!(
                         "NTEMI category metadata fallback: category={} buf={} txt={} reason={}",
-                        category_name, category_buf_filename, category_txt_file_path, e
+                        category_name,
+                        category_buf_filename,
+                        category_txt_file_path,
+                        e
                     );
                 }
             }
@@ -358,7 +361,8 @@ impl NTEMINewExtractor {
             {
                 crate::extract_log!(
                     "[collect] {} ib={}: first_index=0 index_count=0, trying indirect resolve",
-                    trianglelist_index, ib_file_name
+                    trianglelist_index,
+                    ib_file_name
                 );
                 // Headers missing — likely a DrawIndexedInstancedIndirect call.
                 // Try to get the real params from the indirect args buffer.
@@ -836,7 +840,8 @@ impl NTEMINewExtractor {
         if vb0_hash.is_empty() {
             crate::extract_log!(
                 "NTEMI PointlistIndex 识别失败: DrawIB {} 的 vb0 文件名无法解析 hash: {}",
-                draw_ib, trianglelist_vb0_filename
+                draw_ib,
+                trianglelist_vb0_filename
             );
             return String::new();
         }
@@ -982,7 +987,9 @@ impl NTEMINewExtractor {
 
             crate::extract_log!("当前数据类型: {}", d3d11_game_type.game_type_name);
             if find_at_least_one_gpu_type && !d3d11_game_type.gpu_pre_skinning {
-                crate::extract_log!("自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了");
+                crate::extract_log!(
+                    "自动优化:已经找到了满足条件的GPU类型，所以这个CPU类型就不用判断了"
+                );
                 continue;
             }
 
@@ -1028,7 +1035,8 @@ impl NTEMINewExtractor {
                 category_buf_filename_dict.insert(category.clone(), category_buf_filename.clone());
                 crate::extract_log!(
                     "CategorySlot: {} ExtractBufFileName: {}",
-                    category_slot, category_buf_filename
+                    category_slot,
+                    category_buf_filename
                 );
             }
 
@@ -1068,7 +1076,8 @@ impl NTEMINewExtractor {
                     .unwrap_or_default();
                 crate::extract_log!(
                     "CategorySlot: {} CategoryBufFileName: {}",
-                    category_slot, category_buf_filename
+                    category_slot,
+                    category_buf_filename
                 );
 
                 let category_buf_filepath =
@@ -1107,7 +1116,9 @@ impl NTEMINewExtractor {
                 if slot_file_size == 0 || slot_file_size % category_stride != 0 {
                     crate::extract_log!(
                         "当前槽位: {} 文件大小({})与步长({})不匹配，跳过此数据类型",
-                        category_slot, slot_file_size, category_stride
+                        category_slot,
+                        slot_file_size,
+                        category_stride
                     );
                     all_slot_match = false;
                     break;
@@ -1120,7 +1131,8 @@ impl NTEMINewExtractor {
                 } else if vertex_count != slot_vertex_count {
                     crate::extract_log!(
                         "VertexCount: {} SlotVertexCount: {}",
-                        vertex_count, slot_vertex_count
+                        vertex_count,
+                        slot_vertex_count
                     );
                     crate::extract_log!(
                         "当前槽位: {} 文件数据不符合当前数据类型要求，跳过此数据类型",
@@ -1307,7 +1319,6 @@ impl NTEMINewExtractor {
                     }
                 }
             }
-
 
             let component_json_path = crate::helper::mark_texture_helper::
                 get_workspace_component_name_draw_call_index_list_json_path(workspace_path)?;

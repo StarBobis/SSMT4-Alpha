@@ -6,5 +6,6 @@ pub mod game_launcher;
 pub mod mod_library;
 pub mod mod_manager;
 pub mod recycle_bin;
+pub mod texture_mod_maker;
 pub mod vscheck;
 pub mod workspace_merge;
