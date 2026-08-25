@@ -186,6 +186,7 @@ pub fn run() {
             commands::texture_mod_maker::prepare_texture_mod_preview,
             commands::texture_mod_maker::generate_texture_mod,
             commands::texture_mod_maker::cancel_texture_mod_generation,
+            commands::texture_mod_maker::texture_mod_generation_progress,
             commands::compress::extract_zip_archive,
             commands::compress::create_rar_archive,
             commands::compress::create_mod_archive,

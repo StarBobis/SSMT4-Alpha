@@ -1,13 +1,16 @@
 use image::{imageops, DynamicImage, ImageBuffer, Rgba, RgbaImage};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc, LazyLock, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 #[cfg(windows)]
@@ -16,6 +19,124 @@ use std::os::windows::process::CommandExt;
 use crate::config::path_manager::PathManager;
 
 static GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
+static GENERATION_PROGRESS: LazyLock<Mutex<GenerationProgress>> =
+    LazyLock::new(|| Mutex::new(GenerationProgress::default()));
+static GENERATION_STAGE_STARTED: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn start_generation_stage(phase: &str) {
+    if let Ok(mut starts) = GENERATION_STAGE_STARTED.lock() {
+        starts.entry(phase.into()).or_insert_with(Instant::now);
+    }
+}
+
+fn expose_generation_stage(phase: &str, total: usize) {
+    start_generation_stage(phase);
+    let elapsed_ms = GENERATION_STAGE_STARTED
+        .lock()
+        .ok()
+        .and_then(|starts| {
+            starts
+                .get(phase)
+                .map(|started| started.elapsed().as_millis() as u64)
+        })
+        .unwrap_or_default();
+    if let Ok(mut progress) = GENERATION_PROGRESS.lock() {
+        let stage = progress.stages.entry(phase.into()).or_default();
+        stage.total = total;
+        stage.elapsed_ms = elapsed_ms;
+    }
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationProgress {
+    running: bool,
+    phase: String,
+    processed: usize,
+    total: usize,
+    message: String,
+    stages: HashMap<String, StageProgress>,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageProgress {
+    processed: usize,
+    total: usize,
+    elapsed_ms: u64,
+}
+
+fn set_generation_progress(phase: &str, processed: usize, total: usize, message: &str) {
+    let elapsed_ms = if matches!(
+        phase,
+        "extracting" | "transforming" | "encoding" | "writing"
+    ) {
+        GENERATION_STAGE_STARTED
+            .lock()
+            .ok()
+            .map(|mut starts| {
+                starts
+                    .entry(phase.into())
+                    .or_insert_with(Instant::now)
+                    .elapsed()
+                    .as_millis() as u64
+            })
+            .unwrap_or_default()
+    } else {
+        if phase == "preparing" {
+            if let Ok(mut starts) = GENERATION_STAGE_STARTED.lock() {
+                starts.clear();
+            }
+        }
+        0
+    };
+    if let Ok(mut progress) = GENERATION_PROGRESS.lock() {
+        let previous_phase = progress.phase.clone();
+        let mut stages = if phase == "preparing" {
+            HashMap::new()
+        } else {
+            progress.stages.clone()
+        };
+        if previous_phase == "extracting" && phase != "extracting" {
+            if let Some(stage) = stages.get_mut("extracting") {
+                stage.processed = stage.total;
+            }
+        }
+        if total > 0
+            && matches!(
+                phase,
+                "extracting" | "transforming" | "encoding" | "writing"
+            )
+        {
+            let stage = stages.entry(phase.into()).or_default();
+            stage.processed = stage.processed.max(processed.min(total));
+            stage.total = total;
+            stage.elapsed_ms = elapsed_ms;
+        }
+        if phase == "complete" {
+            for stage in stages.values_mut() {
+                stage.processed = stage.total;
+            }
+        }
+        *progress = GenerationProgress {
+            running: !matches!(phase, "complete" | "cancelled" | "error"),
+            phase: phase.into(),
+            processed,
+            total,
+            message: message.into(),
+            stages,
+        };
+    }
+}
+
+#[tauri::command]
+pub fn texture_mod_generation_progress() -> GenerationProgress {
+    GENERATION_PROGRESS
+        .lock()
+        .map(|v| v.clone())
+        .unwrap_or_default()
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +181,22 @@ pub struct TextureModRequest {
     loop_mode: String,
     trim_start_frame: Option<u64>,
     trim_end_frame: Option<u64>,
+    cpu_threads: u16,
+    gpu_workers: u8,
+    #[serde(default = "default_bc7_quality")]
+    bc7_quality: String,
+    #[serde(default = "default_texconv_batch_size")]
+    texconv_batch_size: u16,
+    #[serde(default)]
+    overwrite: bool,
+}
+
+fn default_bc7_quality() -> String {
+    "quick".into()
+}
+
+fn default_texconv_batch_size() -> u16 {
+    16
 }
 
 fn texture_hash(name: &str) -> Option<String> {
@@ -314,10 +451,25 @@ fn ensure_generation_active() -> Result<(), String> {
 fn run_generation_tool(path: &Path, args: &[String]) -> Result<(), String> {
     ensure_generation_active()?;
     let mut command = Command::new(path);
-    command.args(args).stdout(Stdio::null()).stderr(Stdio::null());
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     command.creation_flags(0x08000000);
     let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let mut stdout = child.stdout.take().ok_or("Unable to capture tool output")?;
+    let mut stderr = child.stderr.take().ok_or("Unable to capture tool errors")?;
+    let stdout_reader = thread::spawn(move || {
+        let mut data = Vec::new();
+        let _ = stdout.read_to_end(&mut data);
+        data
+    });
+    let stderr_reader = thread::spawn(move || {
+        let mut data = Vec::new();
+        let _ = stderr.read_to_end(&mut data);
+        data
+    });
     loop {
         if GENERATION_CANCELLED.load(Ordering::Relaxed) {
             let _ = child.kill();
@@ -325,10 +477,18 @@ fn run_generation_tool(path: &Path, args: &[String]) -> Result<(), String> {
             return Err("Texture mod generation cancelled".into());
         }
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            let stdout = stdout_reader.join().unwrap_or_default();
+            let stderr = stderr_reader.join().unwrap_or_default();
             return if status.success() {
                 Ok(())
             } else {
-                Err(format!("{} exited with status {status}", path.display()))
+                let details =
+                    String::from_utf8_lossy(if stderr.is_empty() { &stdout } else { &stderr });
+                Err(format!(
+                    "{} exited with status {status}: {}",
+                    path.display(),
+                    details.trim()
+                ))
             };
         }
         thread::sleep(Duration::from_millis(80));
@@ -338,6 +498,7 @@ fn run_generation_tool(path: &Path, args: &[String]) -> Result<(), String> {
 #[tauri::command]
 pub fn cancel_texture_mod_generation() {
     GENERATION_CANCELLED.store(true, Ordering::Relaxed);
+    set_generation_progress("cancelling", 0, 0, "");
 }
 
 #[tauri::command]
@@ -464,6 +625,7 @@ fn transform(
     };
     let source = image.to_rgba8();
     let (sw, sh) = source.dimensions();
+    let fill = fast_average_color(&source);
     if mode == "stretch" {
         return imageops::resize(&source, width, height, imageops::FilterType::Lanczos3);
     }
@@ -500,7 +662,7 @@ fn transform(
         )
         .to_image();
     }
-    let mut out = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+    let mut out = ImageBuffer::from_pixel(width, height, fill);
     imageops::overlay(
         &mut out,
         &resized,
@@ -508,6 +670,64 @@ fn transform(
         (height as i64 - rh as i64) / 2,
     );
     out
+}
+
+fn fast_average_color(image: &RgbaImage) -> Rgba<u8> {
+    let pixels = image.as_raw();
+    let pixel_count = (pixels.len() / 4).max(1);
+    // At most ~4096 samples per frame. This is stable enough for letterboxing
+    // without turning a cosmetic fill color into measurable work.
+    let stride = (pixel_count / 4096).max(1);
+    let mut sum = [0_u64; 4];
+    let mut count = 0_u64;
+    for index in (0..pixel_count).step_by(stride) {
+        let offset = index * 4;
+        sum[0] += pixels[offset] as u64;
+        sum[1] += pixels[offset + 1] as u64;
+        sum[2] += pixels[offset + 2] as u64;
+        sum[3] += pixels[offset + 3] as u64;
+        count += 1;
+    }
+    Rgba([
+        (sum[0] / count) as u8,
+        (sum[1] / count) as u8,
+        (sum[2] / count) as u8,
+        (sum[3] / count) as u8,
+    ])
+}
+
+fn output_dimensions(
+    source_width: u32,
+    source_height: u32,
+    target_width: u32,
+    target_height: u32,
+    size_percent: u32,
+    rotation: u16,
+    mode: &str,
+) -> (u32, u32) {
+    let (source_width, source_height) = if rotation % 180 == 90 {
+        (source_height, source_width)
+    } else {
+        (source_width, source_height)
+    };
+    let scale = size_percent.clamp(10, 100) as f64 / 100.0;
+    let sw = ((source_width as f64 * scale).round() as u32).max(1);
+    let sh = ((source_height as f64 * scale).round() as u32).max(1);
+    let target_ratio = target_width as f64 / target_height as f64;
+    let source_ratio = sw as f64 / sh as f64;
+    if mode == "cover" {
+        // Largest target-aspect canvas contained by the scaled source.
+        if source_ratio > target_ratio {
+            (((sh as f64 * target_ratio).round() as u32).max(1), sh)
+        } else {
+            (sw, ((sw as f64 / target_ratio).round() as u32).max(1))
+        }
+    } else if source_ratio > target_ratio {
+        // Smallest target-aspect canvas containing the scaled source.
+        (sw, ((sw as f64 / target_ratio).ceil() as u32).max(1))
+    } else {
+        (((sh as f64 * target_ratio).ceil() as u32).max(1), sh)
+    }
 }
 
 fn collect_sequence(request: &TextureModRequest) -> Result<Vec<PathBuf>, String> {
@@ -575,6 +795,11 @@ pub async fn list_texture_mod_sequence(
         loop_mode: "loop".into(),
         trim_start_frame: None,
         trim_end_frame: None,
+        cpu_threads: 1,
+        gpu_workers: 1,
+        bc7_quality: "quick".into(),
+        texconv_batch_size: 16,
+        overwrite: false,
     };
     Ok(collect_sequence(&request)?
         .into_iter()
@@ -609,19 +834,35 @@ pub async fn generate_texture_mod(
     request: TextureModRequest,
 ) -> Result<String, String> {
     GENERATION_CANCELLED.store(false, Ordering::Relaxed);
+    set_generation_progress("preparing", 0, 0, "");
     let target = PathBuf::from(request.target_path.trim());
     let (base_width, base_height) =
         dds_size(&target).ok_or("The selected target is not a valid DDS texture")?;
     let target_format = dds_format(&target).ok_or("Unable to determine the target DDS format")?;
-    let scale = request.size_percent.clamp(10, 100) as f64 / 100.0;
-    let width = ((base_width as f64 * scale).round() as u32).max(1);
-    let height = ((base_height as f64 * scale).round() as u32).max(1);
-    let output = PathBuf::from(request.output_directory.trim()).join(request.mod_name.trim());
+    let output_parent = PathBuf::from(request.output_directory.trim());
+    let mod_name = request.mod_name.trim();
+    if mod_name.is_empty()
+        || mod_name == "."
+        || mod_name == ".."
+        || Path::new(mod_name).components().count() != 1
+    {
+        return Err("The mod folder name must be a single non-empty folder name".into());
+    }
+    fs::create_dir_all(&output_parent).map_err(|e| e.to_string())?;
+    let output_parent = output_parent.canonicalize().map_err(|e| e.to_string())?;
+    let output = output_parent.join(mod_name);
     if output.exists() {
-        return Err(format!(
-            "Output folder already exists: {}",
-            output.display()
-        ));
+        if !request.overwrite {
+            return Err(format!(
+                "Output folder already exists: {}",
+                output.display()
+            ));
+        }
+        let resolved_output = output.canonicalize().map_err(|e| e.to_string())?;
+        if resolved_output.parent() != Some(output_parent.as_path()) {
+            return Err("Refusing to clear an output folder outside the selected parent".into());
+        }
+        fs::remove_dir_all(&resolved_output).map_err(|e| e.to_string())?;
     }
     fs::create_dir_all(&output).map_err(|e| e.to_string())?;
     let temp = app
@@ -651,8 +892,12 @@ pub async fn generate_texture_mod(
                     request.frame_step.max(1)
                 );
                 let args = vec![
+                    "-threads".into(),
+                    request.cpu_threads.max(1).to_string(),
                     "-i".into(),
                     request.source_path.clone().unwrap_or_default(),
+                    "-threads".into(),
+                    request.cpu_threads.max(1).to_string(),
                     "-vf".into(),
                     filter,
                     "-vsync".into(),
@@ -662,6 +907,10 @@ pub async fn generate_texture_mod(
                     pattern.to_string_lossy().to_string(),
                     "-y".into(),
                 ];
+                let expected = ((end.saturating_sub(start) + 1) as f64
+                    / request.frame_step.max(1) as f64)
+                    .ceil() as usize;
+                set_generation_progress("extracting", 0, expected, "");
                 run_generation_tool(&ffmpeg, &args)?;
                 let mut paths: Vec<_> = fs::read_dir(&temp)
                     .map_err(|e| e.to_string())?
@@ -685,56 +934,31 @@ pub async fn generate_texture_mod(
         if sources.is_empty() {
             return Err("No source frames matched".into());
         }
-        let mut rendered_frames = Vec::with_capacity(sources.len());
-        for (index, source) in sources.iter().enumerate() {
-            ensure_generation_active()?;
-            let readable_source = if source
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("dds"))
-            {
-                let conversion = temp.join(format!("source-dds-{index:05}"));
-                fs::create_dir_all(&conversion).map_err(|e| e.to_string())?;
-                let args = vec![
-                    source.to_string_lossy().to_string(),
-                    "-ft".into(),
-                    "png".into(),
-                    "-o".into(),
-                    conversion.to_string_lossy().to_string(),
-                    "-y".into(),
-                ];
-                run_generation_tool(
-                    &PathManager::ssmt_resources_folder().join("texconv.exe"),
-                    &args,
-                )?;
-                conversion
-                    .join(source.file_stem().ok_or("DDS source has no filename")?)
-                    .with_extension("png")
-            } else {
-                source.clone()
-            };
-            let image = image::open(&readable_source)
-                .map_err(|e| format!("Failed to read {}: {e}", source.display()))?;
-            let rendered = transform(
-                image,
-                width,
-                height,
-                &request.fit_mode,
-                request.flip_horizontal,
-                request.flip_vertical,
-                request.rotation,
-            );
-            let png = temp.join(format!("frame_{:05}.png", index + 1));
-            rendered.save(&png).map_err(|e| e.to_string())?;
-            rendered_frames.push(png);
-        }
-        // Starting texconv once per frame dominates short video generation. Batch
-        // inputs while keeping each Windows command line comfortably below its limit.
-        for frames in rendered_frames.chunks(64) {
-            let mut args: Vec<String> = frames
-                .iter()
-                .map(|path| path.to_string_lossy().to_string())
-                .collect();
-            args.extend([
+        set_generation_progress("transforming", 0, sources.len(), "");
+        let first_source = sources.first().ok_or("No source frames matched")?;
+        let (source_width, source_height) = if first_source
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("dds"))
+        {
+            dds_size(first_source).ok_or("The first source frame is not a valid DDS texture")?
+        } else {
+            image::image_dimensions(first_source)
+                .map_err(|e| format!("Failed to read source dimensions: {e}"))?
+        };
+        let (width, height) = output_dimensions(
+            source_width,
+            source_height,
+            base_width,
+            base_height,
+            request.size_percent,
+            request.rotation,
+            &request.fit_mode,
+        );
+        let encode_frames = |frames: &[PathBuf]| -> Result<(), String> {
+            if frames.is_empty() {
+                return Ok(());
+            }
+            let mut args: Vec<String> = vec![
                 "-ft".into(),
                 "dds".into(),
                 "-f".into(),
@@ -742,11 +966,172 @@ pub async fn generate_texture_mod(
                 "-o".into(),
                 output.to_string_lossy().to_string(),
                 "-y".into(),
-            ]);
+            ];
+            if target_format.to_ascii_uppercase().starts_with("BC6")
+                || target_format.to_ascii_uppercase().starts_with("BC7")
+            {
+                args.extend(["-gpu".into(), "0".into()]);
+            }
+            if target_format.to_ascii_uppercase().starts_with("BC7")
+                && request.bc7_quality == "quick"
+            {
+                args.extend(["-bc".into(), "q".into()]);
+            }
+            args.push("--".into());
+            args.extend(frames.iter().map(|path| path.to_string_lossy().to_string()));
             run_generation_tool(
                 &PathManager::ssmt_resources_folder().join("texconv.exe"),
                 &args,
             )?;
+            for frame in frames {
+                let _ = fs::remove_file(frame);
+            }
+            Ok(())
+        };
+        let max_threads = thread::available_parallelism()
+            .map(|v| v.get())
+            .unwrap_or(1);
+        let cpu_threads = usize::from(request.cpu_threads.max(1)).min(max_threads);
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(cpu_threads)
+            .build()
+            .map_err(|e| e.to_string())?;
+        let transformed = AtomicUsize::new(0);
+        let encoded = Arc::new(AtomicUsize::new(0));
+        let gpu_workers = usize::from(request.gpu_workers.clamp(1, 4));
+        // Start feeding the encoder after roughly one CPU-pool wave instead of
+        // waiting for a fixed 64-frame block. DirectXTex jobs stay small so two
+        // concurrent workers do not make progress jump by 32 frames at once.
+        let transform_batch_size = cpu_threads.clamp(8, 32);
+        let encode_batch_size = usize::from(request.texconv_batch_size.clamp(1, 64));
+        let (work_tx, work_rx) = mpsc::sync_channel::<Vec<PathBuf>>(gpu_workers * 2);
+        let work_rx = Arc::new(Mutex::new(work_rx));
+        let pipeline_error = Arc::new(Mutex::new(None::<String>));
+        let producer_result = thread::scope(|scope| -> Result<(), String> {
+            for _ in 0..gpu_workers {
+                let receiver = Arc::clone(&work_rx);
+                let error = Arc::clone(&pipeline_error);
+                let encoded = Arc::clone(&encoded);
+                let encoder = &encode_frames;
+                let total = sources.len();
+                scope.spawn(move || loop {
+                    let frames = match receiver.lock().ok().and_then(|rx| rx.recv().ok()) {
+                        Some(frames) => frames,
+                        None => break,
+                    };
+                    if error.lock().map(|value| value.is_some()).unwrap_or(true) {
+                        for frame in frames {
+                            let _ = fs::remove_file(frame);
+                        }
+                        continue;
+                    }
+                    let count = frames.len();
+                    expose_generation_stage("encoding", total);
+                    if let Err(reason) = encoder(&frames) {
+                        if let Ok(mut value) = error.lock() {
+                            *value = Some(reason);
+                        }
+                        for frame in frames {
+                            let _ = fs::remove_file(frame);
+                        }
+                        continue;
+                    }
+                    let done = encoded.fetch_add(count, Ordering::Relaxed) + count;
+                    set_generation_progress("encoding", done, total, "");
+                });
+            }
+            let mut pending_encode = Vec::with_capacity(encode_batch_size + transform_batch_size);
+            for (batch_index, batch) in sources.chunks(transform_batch_size).enumerate() {
+                ensure_generation_active()?;
+                if let Some(reason) = pipeline_error.lock().ok().and_then(|value| value.clone()) {
+                    return Err(reason);
+                }
+                let batch_start = batch_index * transform_batch_size;
+                let rendered_frames: Result<Vec<PathBuf>, String> = pool.install(|| {
+                    batch
+                        .par_iter()
+                        .enumerate()
+                        .map(|(local_index, source)| {
+                            ensure_generation_active()?;
+                            let index = batch_start + local_index;
+                            let readable_source = if source
+                                .extension()
+                                .is_some_and(|e| e.eq_ignore_ascii_case("dds"))
+                            {
+                                let conversion = temp.join(format!("source-dds-{index:05}"));
+                                fs::create_dir_all(&conversion).map_err(|e| e.to_string())?;
+                                let args = vec![
+                                    source.to_string_lossy().to_string(),
+                                    "-ft".into(),
+                                    "png".into(),
+                                    "-o".into(),
+                                    conversion.to_string_lossy().to_string(),
+                                    "-y".into(),
+                                ];
+                                run_generation_tool(
+                                    &PathManager::ssmt_resources_folder().join("texconv.exe"),
+                                    &args,
+                                )?;
+                                conversion
+                                    .join(source.file_stem().ok_or("DDS source has no filename")?)
+                                    .with_extension("png")
+                            } else {
+                                source.clone()
+                            };
+                            let image = image::open(&readable_source)
+                                .map_err(|e| format!("Failed to read {}: {e}", source.display()))?;
+                            let rendered = transform(
+                                image,
+                                width,
+                                height,
+                                &request.fit_mode,
+                                request.flip_horizontal,
+                                request.flip_vertical,
+                                request.rotation,
+                            );
+                            let bmp = temp.join(format!("frame_{:05}.bmp", index + 1));
+                            rendered.save(&bmp).map_err(|e| e.to_string())?;
+                            let done = transformed.fetch_add(1, Ordering::Relaxed) + 1;
+                            set_generation_progress("transforming", done, sources.len(), "");
+                            Ok(bmp)
+                        })
+                        .collect()
+                });
+                pending_encode.extend(rendered_frames?);
+                while pending_encode.len() >= encode_batch_size {
+                    let frames: Vec<_> = pending_encode.drain(..encode_batch_size).collect();
+                    work_tx
+                        .send(frames)
+                        .map_err(|_| "DirectXTex pipeline stopped unexpectedly".to_string())?;
+                }
+            }
+            if !pending_encode.is_empty() {
+                work_tx
+                    .send(pending_encode)
+                    .map_err(|_| "DirectXTex pipeline stopped unexpectedly".to_string())?;
+            }
+            drop(work_tx);
+            Ok(())
+        });
+        producer_result?;
+        if let Some(reason) = pipeline_error.lock().ok().and_then(|value| value.clone()) {
+            return Err(reason);
+        }
+        let dds_count = fs::read_dir(&output)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("dds"))
+            })
+            .count();
+        if dds_count != sources.len() {
+            return Err(format!(
+                "DirectXTex produced {dds_count} of {} expected DDS frames",
+                sources.len()
+            ));
         }
         let animated = sources.len() > 1
             || request.source_kind == "video"
@@ -761,14 +1146,24 @@ pub async fn generate_texture_mod(
         } else {
             static_ini(&request.texture_hash)
         };
+        set_generation_progress("writing", sources.len(), sources.len(), "");
         fs::write(output.join("TextureMod.ini"), ini).map_err(|e| e.to_string())?;
         Ok(())
     })();
     let _ = fs::remove_dir_all(&temp);
-    if GENERATION_CANCELLED.load(Ordering::Relaxed) {
+    if result.is_err() {
         let _ = fs::remove_dir_all(&output);
     }
-    result?;
+    if let Err(error) = result {
+        let phase = if GENERATION_CANCELLED.load(Ordering::Relaxed) {
+            "cancelled"
+        } else {
+            "error"
+        };
+        set_generation_progress(phase, 0, 0, &error);
+        return Err(error);
+    }
+    set_generation_progress("complete", 1, 1, "");
     Ok(output.to_string_lossy().to_string())
 }
 

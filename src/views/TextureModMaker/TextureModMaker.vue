@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { join } from '@tauri-apps/api/path';
-import { readDir, readFile } from '@tauri-apps/plugin-fs';
-import { ElMessage } from 'element-plus';
+import { exists, readDir, readFile } from '@tauri-apps/plugin-fs';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { PathHelper } from '../../helper/PathHelper';
 import { Close } from '@element-plus/icons-vue';
@@ -15,6 +15,7 @@ type MediaInfo = { width: number; height: number; fps?: number; duration?: numbe
 type SourceKind = 'image' | 'video' | 'sequence';
 type FitMode = 'cover' | 'contain' | 'tile' | 'stretch' | 'center';
 type DecodedRgba = { width: number; height: number; pixels: Uint8Array };
+type GenerationProgress = { running: boolean; phase: string; processed: number; total: number; message: string; stages: Record<string, { processed: number; total: number; elapsedMs?: number }> };
 
 const { t } = useI18n();
 const STORAGE_KEY = 'ssmt4:texture-mod-maker:v1';
@@ -42,13 +43,65 @@ const videoTrimRange = ref<[number, number]>([0, 0]);
 const frameStep = ref(1);
 const sizePercent = ref(100);
 const videoQuality = ref(90);
+const cpuThreadLimit = Math.max(1, navigator.hardwareConcurrency || 4);
+const cpuThreads = ref(Math.max(1, Math.ceil(cpuThreadLimit / 2)));
+const gpuWorkers = ref(2);
+const bc7Quality = ref<'quick' | 'standard'>('quick');
+const texconvBatchSize = ref(16);
 const loopMode = ref<'loop' | 'once'>('loop');
 const outputDirectory = ref('');
+const defaultOutputDirectory = ref('');
 const modName = ref('TextureMod');
 const ffmpegReady = ref(false);
 const installingFfmpeg = ref(false);
 const generating = ref(false);
 const cancelling = ref(false);
+const generationProgress = ref<GenerationProgress>({ running: false, phase: '', processed: 0, total: 0, message: '', stages: {} });
+const generationStageValues = ref<Record<string, number>>({});
+const generationStageDetails = ref<Record<string, { processed: number; total: number; elapsedMs?: number }>>({});
+let generationProgressTimer: ReturnType<typeof setInterval> | undefined;
+const generationStages = computed(() => {
+  const phases = sourceKind.value === 'video'
+    ? ['extracting', 'transforming', 'encoding', 'writing']
+    : ['transforming', 'encoding', 'writing'];
+  return phases.map(phase => ({
+    phase,
+    label: t(`textureModMaker.generationPhases.${phase}`),
+    value: generationStageValues.value[phase] || 0,
+    active: generationProgress.value.phase === phase,
+    processed: generationStageDetails.value[phase]?.processed || 0,
+    total: generationStageDetails.value[phase]?.total || 0,
+    elapsedMs: generationStageDetails.value[phase]?.elapsedMs || 0,
+  }));
+});
+const applyGenerationProgress = (progress: GenerationProgress) => {
+  const previousPhase = generationProgress.value.phase;
+  generationProgress.value = progress;
+  const values = { ...generationStageValues.value };
+  const details = { ...generationStageDetails.value };
+  for (const [phase, stage] of Object.entries(progress.stages || {})) {
+    details[phase] = stage;
+    values[phase] = stage.total > 0 ? Math.min(100, stage.processed / stage.total * 100) : 0;
+  }
+  if (previousPhase === 'extracting' && progress.phase !== 'extracting') {
+    values.extracting = 100;
+    if (details.extracting) details.extracting = { ...details.extracting, processed: details.extracting.total };
+  }
+  if (progress.total > 0 && ['extracting','transforming','encoding','writing'].includes(progress.phase)) {
+    values[progress.phase] = Math.max(values[progress.phase] || 0, Math.min(100, progress.processed / progress.total * 100));
+    const previous = details[progress.phase];
+    details[progress.phase] = { processed: Math.max(previous?.processed || 0, progress.processed), total: progress.total, elapsedMs: previous?.elapsedMs };
+  }
+  if (progress.phase === 'complete') for (const phase of ['extracting','transforming','encoding','writing']) values[phase] = 100;
+  generationStageValues.value = values;
+  generationStageDetails.value = details;
+};
+const generationProgressText = computed(() => {
+  const progress = generationProgress.value;
+  if (!progress.phase) return '';
+  const phase = t(`textureModMaker.generationPhases.${progress.phase}`);
+  return progress.total > 0 ? t('textureModMaker.progressFrames', { phase, processed: progress.processed, total: progress.total, remaining: Math.max(0, progress.total - progress.processed) }) : phase;
+});
 const previewVideo = ref<HTMLVideoElement>();
 const videoPaused = ref(false);
 const videoMuted = ref(true);
@@ -84,6 +137,21 @@ const targetRatio = computed(() => selectedTexture.value?.width && selectedTextu
   ? `${selectedTexture.value.width} / ${selectedTexture.value.height}` : '16 / 9');
 const targetRatioValue = computed(() => selectedTexture.value?.width && selectedTexture.value.height
   ? selectedTexture.value.width / selectedTexture.value.height : 16 / 9);
+const outputSize = computed(() => {
+  const target = selectedTexture.value; const source = mediaInfo.value;
+  if (!target || !source?.width || !source.height) return undefined;
+  const rotated = rotation.value % 180 === 90;
+  const scale = Math.max(.1, sizePercent.value / 100);
+  const sw = Math.max(1, Math.round((rotated ? source.height : source.width) * scale));
+  const sh = Math.max(1, Math.round((rotated ? source.width : source.height) * scale));
+  const targetRatio = target.width / target.height; const sourceRatio = sw / sh;
+  if (fitMode.value === 'cover') return sourceRatio > targetRatio
+    ? { width: Math.max(1, Math.round(sh * targetRatio)), height: sh }
+    : { width: sw, height: Math.max(1, Math.round(sw / targetRatio)) };
+  return sourceRatio > targetRatio
+    ? { width: sw, height: Math.max(1, Math.ceil(sw / targetRatio)) }
+    : { width: Math.max(1, Math.ceil(sh * targetRatio)), height: sh };
+});
 const previewBoxStyle = computed(() => ({
   aspectRatio: targetRatio.value,
   width: `min(100%, calc(420px * ${targetRatioValue.value}))`,
@@ -94,13 +162,25 @@ const previewTransform = computed(() => {
   return { transform: transforms || undefined };
 });
 const previewObjectFit = computed(() => ({ cover: 'cover', contain: 'contain', stretch: 'fill', center: 'none', tile: 'none' }[fitMode.value]));
-const canGenerate = computed(() => !!selectedTexture.value && !!outputDirectory.value.trim() && !!modName.value.trim()
+const canGenerate = computed(() => !!selectedTexture.value && !!modName.value.trim() && !!(outputDirectory.value.trim() || defaultOutputDirectory.value)
   && (sourceKind.value === 'sequence' ? (!!sequenceDirectory.value || sequenceFiles.value.length > 0) : !!sourcePath.value)
   && (sourceKind.value !== 'video' || !!fps.value));
 const filteredTextures = computed(() => {
   const query = hashInput.value.trim().toLowerCase();
   return query ? textures.value.filter(item => item.hash.includes(query) || item.fileName.toLowerCase().includes(query)) : textures.value;
 });
+const effectiveOutputDirectory = computed(() => outputDirectory.value.trim() || defaultOutputDirectory.value);
+const finalOutputPath = computed(() => effectiveOutputDirectory.value && modName.value.trim()
+  ? `${effectiveOutputDirectory.value.replace(/[\\/]+$/, '')}\\${modName.value.trim()}` : '');
+const refreshDefaultOutputDirectory = async () => {
+  try {
+    const migotoPath = await PathHelper.GetCurrentGame3DmigotoFolderPath();
+    if (!migotoPath) { defaultOutputDirectory.value = ''; return; }
+    const category = sourceKind.value === 'video' ? 'DynamicTextureMod'
+      : sourceKind.value === 'sequence' ? 'TextureSequenceMod' : 'StaticTextureMod';
+    defaultOutputDirectory.value = await join(migotoPath, 'Mods', 'SSMTGeneratedMod', 'TextureMod', category);
+  } catch { defaultOutputDirectory.value = ''; }
+};
 const expectedFrameCount = computed(() => {
   if (sourceKind.value === 'image') return sourcePath.value ? 1 : 0;
   if (sourceKind.value === 'sequence') return Math.ceil(sequenceFiles.value.length / Math.max(1, frameStep.value));
@@ -131,10 +211,9 @@ const formatDuration = (seconds: number) => {
 const generationEstimate = computed(() => {
   const target = selectedTexture.value; const frames = expectedFrameCount.value;
   if (!target || !frames) return '';
-  const scale = Math.max(0.1, sizePercent.value / 100);
-  const megapixels = target.width * target.height * scale * scale / 1_000_000;
+  const megapixels = outputSize.value ? outputSize.value.width * outputSize.value.height / 1_000_000 : target.width * target.height / 1_000_000;
   const format = target.format.toUpperCase();
-  const perFrame = format.includes('BC7') ? .22 + megapixels * .20
+  const perFrame = format.includes('BC7') ? (bc7Quality.value === 'quick' ? .06 + megapixels * .055 : .16 + megapixels * .09)
     : format.includes('BC6') ? .18 + megapixels * .16
       : format.includes('BC') ? .045 + megapixels * .04
         : .025 + megapixels * .025;
@@ -148,9 +227,10 @@ const generationEstimate = computed(() => {
 
 const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ frameAnalysisPath: frameAnalysisPath.value, sourceKind: sourceKind.value,
   sequenceRegex: sequenceRegex.value, fitMode: fitMode.value, flipVertical: flipVertical.value, flipHorizontal: flipHorizontal.value,
-  rotation: rotation.value, frameStep: frameStep.value, sizePercent: sizePercent.value, videoQuality: videoQuality.value,
+  rotation: rotation.value, frameStep: frameStep.value, sizePercent: sizePercent.value, videoQuality: videoQuality.value, cpuThreads: cpuThreads.value, gpuWorkers: gpuWorkers.value,
+  bc7Quality: bc7Quality.value, texconvBatchSize: texconvBatchSize.value,
   loopMode: loopMode.value, outputDirectory: outputDirectory.value, modName: modName.value }));
-watch([frameAnalysisPath, sourceKind, sequenceRegex, fitMode, flipVertical, flipHorizontal, rotation, frameStep, sizePercent, videoQuality, loopMode, outputDirectory, modName], persist);
+watch([frameAnalysisPath, sourceKind, sequenceRegex, fitMode, flipVertical, flipHorizontal, rotation, frameStep, sizePercent, videoQuality, cpuThreads, gpuWorkers, bc7Quality, texconvBatchSize, loopMode, outputDirectory, modName], persist);
 
 const pickFrameAnalysis = async () => {
   const value = await open({ directory: true, multiple: false, title: t('textureModMaker.pickFrameAnalysis') });
@@ -240,12 +320,13 @@ const loadSequence = async () => {
   try {
     sequenceFiles.value = await invoke<string[]>('list_texture_mod_sequence', { folder: sequenceDirectory.value, pattern: sequenceRegex.value });
     sequenceFrame.value = 0;
+    if (sequenceFiles.value[0]) mediaInfo.value = await invoke<MediaInfo>('texture_mod_media_info', { path: sequenceFiles.value[0] });
     if (!sequenceFiles.value.length) ElMessage.warning(t('textureModMaker.noFrames'));
   } catch (error) { sequenceFiles.value = []; ElMessage.error(String(error)); }
 };
 const pickSequenceFiles = async () => {
   const value = await open({ multiple: true, directory: false, filters: [{ name: 'Images', extensions: ['dds','png','jpg','jpeg','webp','bmp'] }] });
-  if (Array.isArray(value)) { sequenceFiles.value = value; sequenceDirectory.value = ''; sequenceFrame.value = 0; }
+  if (Array.isArray(value)) { sequenceFiles.value = value; sequenceDirectory.value = ''; sequenceFrame.value = 0; if (value[0]) mediaInfo.value = await invoke<MediaInfo>('texture_mod_media_info', { path: value[0] }); }
 };
 const pickOutput = async () => {
   const value = await open({ directory: true, multiple: false });
@@ -259,26 +340,56 @@ const installFfmpeg = async () => {
 };
 const generate = async () => {
   if (!canGenerate.value || !selectedTexture.value) return;
+  let overwrite = false;
+  if (finalOutputPath.value && await exists(finalOutputPath.value)) {
+    try {
+      await ElMessageBox.confirm(t('textureModMaker.overwriteConfirmMessage', { path: finalOutputPath.value }), t('textureModMaker.overwriteConfirmTitle'), {
+        type: 'warning', confirmButtonText: t('textureModMaker.confirmOverwrite'), cancelButtonText: t('textureModMaker.cancelOverwrite'),
+      });
+      overwrite = true;
+    } catch { return; }
+  }
   generating.value = true;
+  generationStageValues.value = {};
+  generationStageDetails.value = {};
+  const refreshProgress = async () => {
+    try { applyGenerationProgress(await invoke<GenerationProgress>('texture_mod_generation_progress')); } catch { /* Generation result reports errors. */ }
+  };
+  applyGenerationProgress({ running: true, phase: 'preparing', processed: 0, total: 0, message: '', stages: {} });
+  generationProgressTimer = setInterval(() => { void refreshProgress(); }, 150);
   try {
     const path = await invoke<string>('generate_texture_mod', { request: {
       targetPath: selectedTexture.value.path, textureHash: selectedTexture.value.hash, sourceKind: sourceKind.value,
       sourcePath: sourcePath.value || null, sequenceFiles: sequenceFiles.value, sequenceDirectory: sequenceDirectory.value || null,
-      sequenceRegex: sequenceRegex.value || null, outputDirectory: outputDirectory.value, modName: modName.value,
+      sequenceRegex: sequenceRegex.value || null, outputDirectory: effectiveOutputDirectory.value, modName: modName.value,
       fitMode: fitMode.value, flipVertical: flipVertical.value, flipHorizontal: flipHorizontal.value, rotation: rotation.value,
       fps: fps.value || null, frameStep: frameStep.value, sizePercent: sizePercent.value, videoQuality: videoQuality.value, loopMode: loopMode.value,
       trimStartFrame: sourceKind.value === 'video' ? videoTrimRange.value[0] : null,
       trimEndFrame: sourceKind.value === 'video' ? videoTrimRange.value[1] : null,
+      cpuThreads: cpuThreads.value,
+      gpuWorkers: gpuWorkers.value,
+      bc7Quality: bc7Quality.value,
+      texconvBatchSize: texconvBatchSize.value,
+      overwrite,
     }});
     ElMessage.success(t('textureModMaker.generated'));
     await openPath(path);
-  } catch (error) { ElMessage.error(String(error)); }
-  finally { generating.value = false; }
+  } catch (error) {
+    const reason = String(error);
+    console.error('Texture mod generation failed:', error);
+    ElMessage.error({ message: reason.length > 280 ? `${reason.slice(0, 280)}…` : reason, duration: 8000, showClose: true });
+  }
+  finally { generating.value = false; if (generationProgressTimer) clearInterval(generationProgressTimer); generationProgressTimer = undefined; await refreshProgress(); }
 };
 const cancelGeneration = async () => {
   if (!generating.value || cancelling.value) return;
   cancelling.value = true;
-  try { await invoke('cancel_texture_mod_generation'); }
+  try {
+    await ElMessageBox.confirm(t('textureModMaker.cancelConfirmMessage'), t('textureModMaker.cancelConfirmTitle'), {
+      type: 'warning', confirmButtonText: t('textureModMaker.confirmCancel'), cancelButtonText: t('textureModMaker.keepGenerating'),
+    });
+    await invoke('cancel_texture_mod_generation');
+  } catch { /* User kept the generation running. */ }
   finally { cancelling.value = false; }
 };
 const syncVideoState = () => {
@@ -405,7 +516,7 @@ watch([sequenceFiles, sequenceFrame], () => { void updateSequencePreview(); }, {
 watch(videoTrimRange, range => {
   if (previewVideo.value && fps.value) previewVideo.value.currentTime = range[0] / fps.value;
 }, { deep: true });
-watch(sourceKind, () => { sourcePath.value = ''; preparedSourcePath.value = ''; mediaInfo.value = undefined; fps.value = undefined; });
+watch(sourceKind, () => { sourcePath.value = ''; preparedSourcePath.value = ''; mediaInfo.value = undefined; fps.value = undefined; void refreshDefaultOutputDirectory(); });
 
 onMounted(async () => {
   try {
@@ -418,13 +529,19 @@ onMounted(async () => {
     if ([0,90,180,270].includes(saved.rotation)) rotation.value = saved.rotation;
     if (saved.frameStep) frameStep.value = saved.frameStep; if (saved.sizePercent) sizePercent.value = saved.sizePercent;
     if (Number.isFinite(saved.videoQuality)) videoQuality.value = Math.min(100, Math.max(1, saved.videoQuality));
+    if (Number.isFinite(saved.cpuThreads)) cpuThreads.value = Math.min(cpuThreadLimit, Math.max(1, Math.round(saved.cpuThreads)));
+    if (Number.isFinite(saved.gpuWorkers)) gpuWorkers.value = Math.min(4, Math.max(1, Math.round(saved.gpuWorkers)));
+    if (['quick','standard'].includes(saved.bc7Quality)) bc7Quality.value = saved.bc7Quality;
+    if (Number.isFinite(saved.texconvBatchSize)) texconvBatchSize.value = Math.min(64, Math.max(1, Math.round(saved.texconvBatchSize)));
     if (['loop','once'].includes(saved.loopMode)) loopMode.value = saved.loopMode;
     if (saved.outputDirectory) outputDirectory.value = saved.outputDirectory; if (saved.modName) modName.value = saved.modName;
   } catch { /* Ignore malformed local preferences. */ }
   ffmpegReady.value = await invoke<boolean>('texture_mod_ffmpeg_status');
+  await refreshDefaultOutputDirectory();
   if (frameAnalysisPath.value) await scanTextures();
   await nextTick();
 });
+onUnmounted(() => { if (generationProgressTimer) clearInterval(generationProgressTimer); });
 </script>
 
 <template>
@@ -474,7 +591,7 @@ onMounted(async () => {
           <img v-else-if="sourcePreviewUrl && fitMode !== 'tile'" :src="sourcePreviewUrl" alt="" decoding="async" :style="previewTransform" :class="`object-${previewObjectFit}`"/>
           <span v-else-if="!sourcePreviewUrl">{{ t('textureModMaker.previewEmpty') }}</span>
           <el-button v-if="sourcePreviewUrl && !isVideo" class="tm-preview-detail-button" size="small" :loading="sourceDetailLoading" @click.stop="openSourceDetail">{{ t('textureModMaker.viewSource') }}</el-button>
-          <em v-if="selectedTexture">{{ selectedTexture.width }}×{{ selectedTexture.height }} · {{ sizePercent }}%</em>
+          <em v-if="outputSize">{{ outputSize.width }}×{{ outputSize.height }} · {{ sizePercent }}%</em>
         </div>
       </section>
     </div>
@@ -488,17 +605,23 @@ onMounted(async () => {
         <label class="tm-switch"><span>{{ t('textureModMaker.flipVertical') }}</span><el-switch v-model="flipVertical"/></label>
         <label v-if="sourceKind !== 'image'"><span>{{ t('textureModMaker.fps') }}</span><el-input-number v-model="fps" :min="0.01" :max="240" :precision="3"/></label>
         <label v-if="sourceKind !== 'image'"><span>{{ t('textureModMaker.frameStep') }}</span><el-input-number v-model="frameStep" :min="1" :max="1000"/></label>
-        <label v-if="sourceKind === 'video'" class="tm-option-wide"><span>{{ t('textureModMaker.trimRange') }}</span><div class="tm-trim-control"><el-input-number :model-value="videoTrimRange[0]" :min="0" :max="videoTrimRange[1]" controls-position="right" @update:model-value="setTrimStart"/><el-slider v-model="videoTrimRange" range :min="0" :max="videoFrameMax" :disabled="videoFrameMax < 1"/><el-input-number :model-value="videoTrimRange[1]" :min="videoTrimRange[0]" :max="videoFrameMax" controls-position="right" @update:model-value="setTrimEnd"/></div></label>
+        <label v-if="sourceKind === 'video'" class="tm-option-wide tm-trim-option"><span>{{ t('textureModMaker.trimRange') }}</span><div class="tm-trim-control"><el-slider v-model="videoTrimRange" range :min="0" :max="videoFrameMax" :disabled="videoFrameMax < 1"/><div class="tm-trim-endpoints"><div><span>{{ t('textureModMaker.trimStart') }}</span><el-input-number :model-value="videoTrimRange[0]" :min="0" :max="videoTrimRange[1]" controls-position="right" @update:model-value="setTrimStart"/></div><div><span>{{ t('textureModMaker.trimEnd') }}</span><el-input-number :model-value="videoTrimRange[1]" :min="videoTrimRange[0]" :max="videoFrameMax" controls-position="right" @update:model-value="setTrimEnd"/></div></div></div></label>
         <label><span>{{ t('textureModMaker.size') }}</span><el-slider v-model="sizePercent" :min="10" :max="100" :step="5" show-input/></label>
         <label v-if="sourceKind === 'video'"><span>{{ t('textureModMaker.videoQuality') }}</span><el-slider v-model="videoQuality" :min="1" :max="100" show-input/></label>
+        <label><span>{{ t('textureModMaker.cpuThreads') }}</span><el-input-number v-model="cpuThreads" :min="1" :max="cpuThreadLimit"/><small class="tm-thread-hint">{{ t('textureModMaker.cpuThreadsHint', { max: cpuThreadLimit }) }}</small></label>
+        <label><span>{{ t('textureModMaker.gpuWorkers') }}</span><el-input-number v-model="gpuWorkers" :min="1" :max="4"/><small class="tm-thread-hint">{{ t('textureModMaker.gpuWorkersHint') }}</small></label>
+        <label v-if="selectedTexture?.format.toUpperCase().startsWith('BC7')"><span>{{ t('textureModMaker.bc7Quality') }}</span><el-radio-group v-model="bc7Quality" class="tm-multi-switch"><el-radio-button value="quick">{{ t('textureModMaker.bc7QualityModes.quick') }}</el-radio-button><el-radio-button value="standard">{{ t('textureModMaker.bc7QualityModes.standard') }}</el-radio-button></el-radio-group><small class="tm-thread-hint">{{ t('textureModMaker.bc7QualityHint') }}</small></label>
+        <label><span>{{ t('textureModMaker.texconvBatchSize') }}</span><el-input-number v-model="texconvBatchSize" :min="1" :max="64"/><small class="tm-thread-hint">{{ t('textureModMaker.texconvBatchSizeHint') }}</small></label>
         <label v-if="sourceKind !== 'image'"><span>{{ t('textureModMaker.loop') }}</span><el-radio-group v-model="loopMode" class="tm-multi-switch"><el-radio-button value="loop">{{ t('textureModMaker.loopModes.loop') }}</el-radio-button><el-radio-button value="once">{{ t('textureModMaker.loopModes.once') }}</el-radio-button></el-radio-group></label>
       </div>
     </section>
 
     <section class="tm-card tm-output">
       <div class="tm-section-head"><b>5</b><div><h2>{{ t('textureModMaker.outputTitle') }}</h2><p>{{ t('textureModMaker.outputDesc') }}</p></div></div>
-      <div class="tm-output-grid"><el-input v-model="modName" :placeholder="t('textureModMaker.modName')"/><div class="tm-path-row"><el-input v-model="outputDirectory" :placeholder="t('textureModMaker.outputFolder')"/><el-button @click="pickOutput">{{ t('textureModMaker.choose') }}</el-button></div><div class="tm-generate-actions"><el-button v-if="generating" type="danger" size="large" :loading="cancelling" @click="cancelGeneration">{{ t('textureModMaker.cancelGeneration') }}</el-button><el-button v-else type="primary" size="large" :disabled="!canGenerate" @click="generate">{{ t('textureModMaker.generate') }}</el-button></div></div>
+      <div class="tm-output-grid"><el-input v-model="modName" :placeholder="t('textureModMaker.modName')"/><div class="tm-path-row"><el-input v-model="outputDirectory" clearable :placeholder="t('textureModMaker.outputFolderDefault')"/><el-button @click="pickOutput">{{ t('textureModMaker.choose') }}</el-button></div><div class="tm-generate-actions"><el-button v-if="generating" type="danger" size="large" :loading="cancelling" @click="cancelGeneration">{{ t('textureModMaker.cancelGeneration') }}</el-button><el-button v-else type="primary" size="large" :disabled="!canGenerate" @click="generate">{{ t('textureModMaker.generate') }}</el-button></div></div>
+      <small v-if="finalOutputPath" class="tm-output-location">{{ t('textureModMaker.outputLocation') }} {{ finalOutputPath }}</small>
       <small v-if="generationEstimate" class="tm-generation-estimate">{{ generationEstimate }}</small>
+      <div v-if="generating || generationProgress.phase === 'error'" class="tm-generation-progress"><div><span>{{ generationProgressText }}</span><small v-if="generationProgress.message" :title="generationProgress.message">{{ generationProgress.message }}</small></div><div class="tm-pipeline-progress" role="progressbar"><span v-for="stage in generationStages" :key="stage.phase" class="tm-pipeline-stage" :class="[`phase-${stage.phase}`, { active: stage.active, complete: stage.value >= 100 }]" :style="{ width: `${stage.value}%` }" :title="`${stage.label} ${Math.round(stage.value)}%`"></span></div><div class="tm-pipeline-details"><span v-for="stage in generationStages" :key="stage.phase" :class="{ active: stage.active, complete: stage.value >= 100 }"><i></i>{{ stage.label }}<b v-if="stage.total">{{ stage.processed }}/{{ stage.total }}</b><b v-else>{{ Math.round(stage.value) }}%</b><b v-if="stage.elapsedMs">{{ (stage.elapsedMs / 1000).toFixed(1) }}s</b></span></div></div>
     </section>
 
     <div v-if="targetPreviewOpen" class="channel-preview-overlay" role="dialog" aria-modal="true" @click.self="targetPreviewOpen = false"><div class="channel-preview-modal" @click.stop><header class="channel-preview-modal-header"><h3>{{ selectedTexture ? `${selectedTexture.hash} · ${selectedTexture.width}×${selectedTexture.height}` : '' }}</h3><div class="channel-preview-toolbar"><button v-for="channel in (['R','G','B','A'] as const)" :key="channel" type="button" class="channel-preview-toggle" :class="{ 'is-active': viewerChannels[channel] }" @click="toggleViewerChannel(channel)">{{ channel }}</button><span class="channel-preview-zoom">{{ Math.round(targetPreviewScale * 100) }}%</span><button class="channel-preview-close-btn" type="button" @click="targetPreviewOpen = false"><el-icon><Close/></el-icon></button></div></header><div class="channel-preview-stage" :class="{ dragging: targetPreviewDragging }" @wheel.prevent="targetPreviewScale = Math.min(12, Math.max(.2, targetPreviewScale * ($event.deltaY < 0 ? 1.12 : .89)))" @pointerdown="startTargetPreviewDrag" @pointermove="moveTargetPreviewDrag" @pointerup="stopTargetPreviewDrag" @pointercancel="stopTargetPreviewDrag" @dblclick="resetTargetPreview"><canvas ref="viewerCanvas" :style="targetPreviewTransform"/></div></div></div>
@@ -517,6 +640,8 @@ onMounted(async () => {
 .channel-preview-overlay{position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,9,16,.42);backdrop-filter:blur(6px)}.channel-preview-modal{position:relative;width:min(82vw,1100px);height:min(82vh,850px);max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);overflow:hidden;display:flex;flex-direction:column;border:var(--t-card-dark-border);border-radius:14px;background:var(--t-card-dark-bg);box-shadow:var(--t-card-dark-shadow);backdrop-filter:blur(12px) saturate(1.15);user-select:none}.channel-preview-modal-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:0 10px 0 14px;border-bottom:1px solid rgba(var(--theme-surface-tint-rgb),.12);background:rgba(var(--theme-surface-tint-rgb),.035)}.channel-preview-modal-header h3{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0;color:rgba(var(--theme-text-primary-rgb),.94);font-size:13px;font-weight:650}.channel-preview-toolbar{display:flex;align-items:center;gap:5px;flex:0 0 auto}.channel-preview-toggle,.channel-preview-close-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:1px solid rgba(var(--theme-surface-tint-rgb),.16);border-radius:6px;background:rgba(255,255,255,.035);color:rgba(var(--theme-text-primary-rgb),.38);font-size:12px;font-weight:750;cursor:pointer}.channel-preview-toggle.is-active{border-color:rgba(117,214,187,.5);background:rgba(117,214,187,.16);color:rgba(224,255,247,.96)}.channel-preview-close-btn{background:rgba(255,255,255,.045);color:rgba(var(--theme-text-primary-rgb),.8)}.channel-preview-close-btn:hover{background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.4);color:rgba(var(--theme-text-primary-rgb),.98)}.channel-preview-zoom{min-width:42px;color:rgba(var(--theme-text-secondary-rgb),.65);font-size:11px;text-align:center}.channel-preview-stage{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background-color:#242832;background-image:linear-gradient(45deg,#343946 25%,transparent 25%),linear-gradient(-45deg,#343946 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#343946 75%),linear-gradient(-45deg,transparent 75%,#343946 75%);background-position:0 0,0 8px,8px -8px,-8px 0;background-size:16px 16px;cursor:grab;touch-action:none}.channel-preview-stage.dragging{cursor:grabbing}.channel-preview-stage canvas{display:block;image-rendering:pixelated;max-width:92%;max-height:92%;object-fit:contain;transform-origin:center;will-change:transform}.tm-source-preview-modal{width:min(82vh,850px);height:min(82vh,850px);aspect-ratio:1/1}.tm-source-preview-stage canvas{max-width:80%;max-height:80%}
 .tm-options .tm-multi-switch :deep(> .el-radio-button){display:block!important;grid-template-columns:none!important;gap:0!important;width:auto!important;padding:0!important}
 .tm-generation-estimate{display:block;margin-top:9px;color:rgba(var(--theme-text-secondary-rgb),.62);font-size:11px}
+.tm-output-location{display:block;overflow:hidden;margin-top:8px;color:rgba(var(--theme-text-secondary-rgb),.42);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
 .tm-generate-actions{display:flex}.tm-generate-actions>.el-button{width:100%;margin:0}.tm-video-controls{position:absolute;z-index:3;right:8px;bottom:8px;left:8px;display:flex;align-items:center;gap:7px;height:34px;padding:0 8px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(5,9,14,.82);color:rgba(255,255,255,.78);font-size:10px;backdrop-filter:blur(10px)}.tm-video-controls button{display:grid;place-items:center;flex:0 0 auto;width:24px;height:24px;padding:0;border:0;border-radius:5px;background:rgba(255,255,255,.08);color:white;cursor:pointer}.tm-video-controls input{min-width:40px;flex:1;accent-color:#75d6bb}
-.tm-trim-control{display:grid;grid-template-columns:120px minmax(120px,1fr) 120px;align-items:center;gap:12px}.tm-trim-control .el-slider{min-width:0}@media(max-width:720px){.tm-trim-control{grid-template-columns:1fr 1fr}.tm-trim-control .el-slider{grid-column:1/-1;grid-row:1}}
+.tm-trim-control{display:grid;min-width:0;gap:5px}.tm-trim-control>.el-slider{min-width:0;margin:0 10px;width:calc(100% - 20px)}.tm-trim-endpoints{display:flex;align-items:center;justify-content:space-between;gap:16px}.tm-trim-endpoints>div{display:flex;align-items:center;gap:7px}.tm-trim-endpoints span{color:rgba(var(--theme-text-secondary-rgb),.58);font-size:10px}.tm-trim-endpoints .el-input-number{width:116px}@media(max-width:720px){.tm-trim-option{grid-template-columns:1fr!important}.tm-trim-endpoints{align-items:stretch}.tm-trim-endpoints>div{flex:1}.tm-trim-endpoints .el-input-number{width:100%}}
+.tm-generation-progress{display:grid;gap:7px;margin-top:10px;padding:9px 11px;border:1px solid rgba(var(--theme-surface-tint-rgb),.12);border-radius:9px;background:rgba(var(--theme-surface-tint-rgb),.035)}.tm-generation-progress>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:12px;color:rgba(var(--theme-text-primary-rgb),.78);font-size:11px}.tm-generation-progress small{max-width:55%;overflow:hidden;color:#ff9b87;text-overflow:ellipsis;white-space:nowrap}.tm-pipeline-progress{position:relative;width:100%;height:8px;overflow:hidden;border-radius:999px;background:rgba(var(--theme-surface-tint-rgb),.08)}.tm-pipeline-stage{position:absolute;inset:0 auto 0 0;display:block;transition:width .22s ease}.tm-pipeline-stage.phase-extracting{z-index:1;background:rgba(117,214,187,.24)}.tm-pipeline-stage.phase-transforming{z-index:2;background:rgba(117,214,187,.44)}.tm-pipeline-stage.phase-encoding{z-index:3;background:rgba(117,214,187,.7)}.tm-pipeline-stage.phase-writing{z-index:4;background:rgba(117,214,187,.94)}.tm-pipeline-stage.active{box-shadow:inset -2px 0 0 rgba(225,255,247,.9)}.tm-pipeline-details{display:flex!important;align-items:center!important;justify-content:flex-start!important;flex-wrap:wrap;gap:7px 15px!important}.tm-pipeline-details>span{display:flex;align-items:center;gap:5px;color:rgba(var(--theme-text-secondary-rgb),.48);font-size:10px}.tm-pipeline-details i{width:6px;height:6px;border-radius:50%;background:rgba(117,214,187,.3)}.tm-pipeline-details span.active{color:rgba(var(--theme-text-primary-rgb),.86)}.tm-pipeline-details span.active i{background:rgba(117,214,187,.7)}.tm-pipeline-details span.complete{color:rgba(var(--theme-text-secondary-rgb),.68)}.tm-pipeline-details span.complete i{background:rgba(117,214,187,.9)}.tm-pipeline-details b{font-weight:600;color:inherit}.tm-thread-hint{grid-column:2;color:rgba(var(--theme-text-secondary-rgb),.52);font-size:10px}
 </style>

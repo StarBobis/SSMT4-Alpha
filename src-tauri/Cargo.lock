@@ -4728,6 +4728,7 @@ dependencies = [
  "image 0.24.9",
  "md5",
  "notify",
+ "rayon",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
