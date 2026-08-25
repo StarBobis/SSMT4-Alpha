@@ -191,8 +191,8 @@ const normalizeStoredAppUiScale = (value: number) => {
 };
 
 watch(() => appSettings.uiScale, normalizeStoredAppUiScale, { immediate: true });
- 
- 
+
+
 // Disable default right-click context menu
 const preventContextMenu = (event: Event) => {
   event.preventDefault();
@@ -214,77 +214,58 @@ onUnmounted(() => {
   <div class="bg-layer">
     <transition-group name="bg-trans">
       <!-- Image Background -->
-      <div 
-        v-if="appSettings.bgType === BGType.Image && appSettings.bgImage"
-        :key="appSettings.bgImage"
-        class="bg-item"
-        :style="{ backgroundImage: `url(${appSettings.bgImage})` }"
-      ></div>
+      <div v-if="appSettings.bgType === BGType.Image && appSettings.bgImage" :key="appSettings.bgImage" class="bg-item"
+        :style="{ backgroundImage: `url(${appSettings.bgImage})` }"></div>
 
       <!-- Video Background -->
-      <video 
-        v-if="appSettings.bgType === BGType.Video && appSettings.bgVideo" 
-        :key="appSettings.bgVideo"
-        :src="appSettings.bgVideo" 
-        autoplay loop muted playsinline 
-        class="bg-item"
-      ></video>
+      <video v-if="appSettings.bgType === BGType.Video && appSettings.bgVideo" :key="appSettings.bgVideo"
+        :src="appSettings.bgVideo" autoplay loop muted playsinline class="bg-item"></video>
     </transition-group>
   </div>
-  
+
   <!-- Home Ambient Shadow Layer -->
   <div class="home-shadow-layer" v-if="route.path === '/'"></div>
 
   <!-- Global Mask Layer for Game Library Page -->
   <transition name="fade">
-    <div
-      v-if="shouldShowGlobalDimLayer"
-      class="global-dim-layer"
-      :style="{ background: globalDimLayerBackground }"
-    ></div>
+    <div v-if="shouldShowGlobalDimLayer" class="global-dim-layer" :style="{ background: globalDimLayerBackground }">
+    </div>
   </transition>
 
   <el-config-provider>
     <TitleBar />
 
     <div v-if="AppStateManager.isFirstRunOnboardingOpen.value" class="first-run-overlay">
-      <section ref="firstRunDialog" class="first-run-dialog" role="dialog" aria-modal="true" :aria-label="t('firstRun.title')">
+      <section ref="firstRunDialog" class="first-run-dialog" role="dialog" aria-modal="true"
+        :aria-label="t('firstRun.title')">
         <header>
           <div class="first-run-head-row">
             <span class="first-run-kicker">SSMT4</span>
-            <span class="first-run-step-counter">{{ t('firstRun.progress') }} · {{ firstRunStep + 1 }}/{{ firstRunStepCount }}</span>
+            <span class="first-run-step-counter">{{ t('firstRun.progress') }} · {{ firstRunStep + 1 }}/{{
+              firstRunStepCount }}</span>
           </div>
           <h2>{{ t('firstRun.title') }}</h2>
           <p>{{ t(`firstRun.steps.${currentFirstRunStep}.description`) }}</p>
         </header>
         <div class="first-run-progress" :aria-label="t('firstRun.progress')">
-          <span v-for="index in firstRunStepCount" :key="index" :class="{ 'is-active': index - 1 <= firstRunStep, 'is-current': index - 1 === firstRunStep }"></span>
+          <span v-for="index in firstRunStepCount" :key="index"
+            :class="{ 'is-active': index - 1 <= firstRunStep, 'is-current': index - 1 === firstRunStep }"></span>
         </div>
         <transition :name="firstRunTransitionName" mode="out-in">
           <div :key="currentFirstRunStep" class="first-run-body">
             <div v-if="currentFirstRunStep === 'language'" class="first-run-lang-grid">
-              <button
-                v-for="language in SSMT_LOCALE_OPTIONS"
-                :key="language.value"
-                type="button"
-                class="first-run-lang"
+              <button v-for="language in SSMT_LOCALE_OPTIONS" :key="language.value" type="button" class="first-run-lang"
                 :class="{ 'is-selected': appSettings.locale === language.value }"
-                @click="appSettings.locale = language.value"
-              >
+                @click="appSettings.locale = language.value">
                 <span class="first-run-lang-code">{{ language.badge }}</span>
                 <span class="first-run-lang-name">{{ language.label }}</span>
                 <i v-if="appSettings.locale === language.value" class="first-run-check"></i>
               </button>
             </div>
             <div v-else-if="currentFirstRunStep === 'role'" class="first-run-role-grid">
-              <button
-                v-for="role in (['author', 'player', 'both'] as const)"
-                :key="role"
-                type="button"
-                class="first-run-role"
-                :class="{ 'is-selected': selectedFirstRunRole === role }"
-                @click="selectedFirstRunRole = role"
-              >
+              <button v-for="role in (['author', 'player', 'both'] as const)" :key="role" type="button"
+                class="first-run-role" :class="{ 'is-selected': selectedFirstRunRole === role }"
+                @click="selectedFirstRunRole = role">
                 <strong>{{ t(`firstRun.roles.${role}`) }}</strong>
                 <span>{{ t(`firstRun.roleDescriptions.${role}`) }}</span>
                 <i v-if="selectedFirstRunRole === role" class="first-run-check"></i>
@@ -296,16 +277,29 @@ onUnmounted(() => {
               </div>
             </div>
             <div v-else-if="currentFirstRunStep === 'general'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.cacheDir') }}</span><div class="first-run-path"><el-input v-model="firstRunCacheDir" readonly /><el-button @click="selectFirstRunCacheDir">{{ t('firstRun.choose') }}</el-button></div></label>
-              <label class="first-run-switch"><span>{{ t('firstRun.fields.altF') }}</span><el-switch v-model="appSettings.showWindowShortcutEnabled" /></label>
+              <label><span>{{ t('firstRun.fields.cacheDir') }}</span>
+                <div class="first-run-path"><el-input v-model="firstRunCacheDir" readonly /><el-button
+                    @click="selectFirstRunCacheDir">{{ t('firstRun.choose') }}</el-button></div>
+              </label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.altF') }}</span><el-switch
+                  v-model="appSettings.showWindowShortcutEnabled" /></label>
             </div>
             <div v-else-if="currentFirstRunStep === 'authorPreferences'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.textureMarkStyle') }}</span><el-select v-model="appSettings.textureMarkStylePreference"><el-option value="Hash" label="Hash" /><el-option value="Slot" label="Slot" /><el-option value="SharedSlot" label="SharedSlot" /></el-select></label>
-              <label><span>{{ t('firstRun.fields.previewLighting') }}</span><el-select v-model="appSettings.postProcessPreviewLightingMode"><el-option value="half-lambert" :label="t('firstRun.options.halfLambert')" /><el-option value="unlit" :label="t('firstRun.options.unlit')" /><el-option value="pbr" label="PBR" /></el-select></label>
+              <label><span>{{ t('firstRun.fields.textureMarkStyle') }}</span><el-select
+                  v-model="appSettings.textureMarkStylePreference"><el-option value="Hash" label="Hash" /><el-option
+                    value="Slot" label="Slot" /><el-option value="SharedSlot" label="SharedSlot" /></el-select></label>
+              <label><span>{{ t('firstRun.fields.previewLighting') }}</span><el-select
+                  v-model="appSettings.postProcessPreviewLightingMode"><el-option value="half-lambert"
+                    :label="t('firstRun.options.halfLambert')" /><el-option value="unlit"
+                    :label="t('firstRun.options.unlit')" /><el-option value="pbr" label="PBR" /></el-select></label>
             </div>
             <div v-else-if="currentFirstRunStep === 'games'">
               <div class="first-run-game-grid">
-                <button v-for="game in orderedFirstRunGames" :key="game.name" type="button" :class="{ 'is-selected': selectedFirstRunGames.includes(game.name) }" @click="toggleFirstRunGame(game.name)"><img :src="game.iconPath" alt="" @error="useFirstRunGameIconFallback" /><span>{{ getGamePresetDisplayName(game.name, t) }}</span><i v-if="selectedFirstRunGames.includes(game.name)" class="first-run-check"></i></button>
+                <button v-for="game in orderedFirstRunGames" :key="game.name" type="button"
+                  :class="{ 'is-selected': selectedFirstRunGames.includes(game.name) }"
+                  @click="toggleFirstRunGame(game.name)"><img :src="game.iconPath" alt=""
+                    @error="useFirstRunGameIconFallback" /><span>{{ getGamePresetDisplayName(game.name, t) }}</span><i
+                    v-if="selectedFirstRunGames.includes(game.name)" class="first-run-check"></i></button>
               </div>
               <div class="first-run-game-summary">
                 <span>{{ t('firstRun.selectedCount', { count: selectedFirstRunGames.length }) }}</span>
@@ -313,32 +307,63 @@ onUnmounted(() => {
               </div>
             </div>
             <div v-else-if="currentFirstRunStep === 'd3d11'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.d3d11Source') }}</span><el-radio-group v-model="firstRunD3d11Mode"><el-radio-button v-if="selectedFirstRunRole !== 'player'" value="dev">dev</el-radio-button><el-radio-button value="play">play</el-radio-button><el-radio-button v-if="selectedFirstRunRole !== 'player'" value="ssice-a">ssice-a</el-radio-button></el-radio-group></label>
+              <label><span>{{ t('firstRun.fields.d3d11Source') }}</span><el-radio-group
+                  v-model="firstRunD3d11Mode"><el-radio-button v-if="selectedFirstRunRole !== 'player'"
+                    value="dev">dev</el-radio-button><el-radio-button
+                    value="play">play</el-radio-button><el-radio-button v-if="selectedFirstRunRole !== 'player'"
+                    value="ssice-a">ssice-a</el-radio-button></el-radio-group></label>
             </div>
             <div v-else-if="currentFirstRunStep === 'migoto'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.launchMode') }}</span><el-radio-group v-model="firstRunUseShell"><el-radio-button :value="false">{{ t('firstRun.options.normalLaunch') }}</el-radio-button><el-radio-button :value="true">Shell</el-radio-button></el-radio-group></label>
-              <label v-if="selectedFirstRunRole !== 'player'"><span>{{ t('firstRun.fields.huntingMode') }}</span><el-select v-model="firstRunHuntingMode"><el-option value="0" :label="t('gameSettingsModal.options.huntingMode.off')" /><el-option value="1" :label="t('gameSettingsModal.options.huntingMode.on')" /><el-option value="2" :label="t('gameSettingsModal.options.huntingMode.toggleByNumpad0')" /></el-select></label>
-              <label class="first-run-switch"><span>{{ t('firstRun.fields.showWarnings') }}</span><el-switch v-model="firstRunShowWarnings" /></label>
-              <label class="first-run-switch"><span>{{ t('firstRun.fields.checkDllUpdate') }}</span><el-switch v-model="firstRunCheckDllUpdate" /></label>
-              <label class="first-run-switch"><span>{{ t('firstRun.fields.checkPackageUpdate') }}</span><el-switch v-model="firstRunCheckPackageUpdate" /></label>
+              <label><span>{{ t('firstRun.fields.launchMode') }}</span><el-radio-group
+                  v-model="firstRunUseShell"><el-radio-button :value="false">{{ t('firstRun.options.normalLaunch')
+                  }}</el-radio-button><el-radio-button :value="true">Shell</el-radio-button></el-radio-group></label>
+              <label v-if="selectedFirstRunRole !== 'player'"><span>{{ t('firstRun.fields.huntingMode')
+              }}</span><el-select v-model="firstRunHuntingMode"><el-option value="0"
+                    :label="t('gameSettingsModal.options.huntingMode.off')" /><el-option value="1"
+                    :label="t('gameSettingsModal.options.huntingMode.on')" /><el-option value="2"
+                    :label="t('gameSettingsModal.options.huntingMode.toggleByNumpad0')" /></el-select></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.showWarnings') }}</span><el-switch
+                  v-model="firstRunShowWarnings" /></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.checkDllUpdate') }}</span><el-switch
+                  v-model="firstRunCheckDllUpdate" /></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.checkPackageUpdate') }}</span><el-switch
+                  v-model="firstRunCheckPackageUpdate" /></label>
             </div>
             <div v-else-if="currentFirstRunStep === 'background'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.backgroundType') }}</span><el-radio-group v-model="firstRunBackgroundType"><el-radio-button value="Video">{{ t('firstRun.options.dynamic') }}</el-radio-button><el-radio-button value="Image">{{ t('firstRun.options.static') }}</el-radio-button></el-radio-group></label>
-              <label><span>{{ t('firstRun.fields.backgroundUpdate') }}</span><el-radio-group v-model="firstRunBackgroundUpdateMode"><el-radio-button value="manual">{{ t('firstRun.options.manual') }}</el-radio-button><el-radio-button value="auto">{{ t('firstRun.options.auto') }}</el-radio-button></el-radio-group></label>
-              <label><span>{{ t('settings.personalization.backgroundMaskOpacity') }}</span><el-slider v-model="appSettings.globalDimMaskStrength" :min="0" :max="4" :step="0.1" show-input /></label>
+              <label><span>{{ t('firstRun.fields.backgroundType') }}</span><el-radio-group
+                  v-model="firstRunBackgroundType"><el-radio-button value="Video">{{ t('firstRun.options.dynamic')
+                  }}</el-radio-button><el-radio-button value="Image">{{ t('firstRun.options.static')
+                    }}</el-radio-button></el-radio-group></label>
+              <label><span>{{ t('firstRun.fields.backgroundUpdate') }}</span><el-radio-group
+                  v-model="firstRunBackgroundUpdateMode"><el-radio-button value="manual">{{ t('firstRun.options.manual')
+                  }}</el-radio-button><el-radio-button value="auto">{{ t('firstRun.options.auto')
+                    }}</el-radio-button></el-radio-group></label>
+              <label><span>{{ t('settings.personalization.backgroundMaskOpacity') }}</span><el-slider
+                  v-model="appSettings.globalDimMaskStrength" :min="0" :max="4" :step="0.1" show-input /></label>
             </div>
             <div v-else-if="currentFirstRunStep === 'nsfw'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.modBlurMode') }}</span><el-radio-group v-model="appSettings.modsManagementBlurMode"><el-radio-button value="all">{{ t('firstRun.options.blurAll') }}</el-radio-button><el-radio-button value="nsfw">{{ t('firstRun.options.blurNsfw') }}</el-radio-button><el-radio-button value="none">{{ t('firstRun.options.blurNone') }}</el-radio-button></el-radio-group></label>
-              <label class="first-run-switch"><span>{{ t('firstRun.fields.revealOnHover') }}</span><el-switch v-model="appSettings.revealBlurredImagesOnHover" /></label>
-              <label><span>{{ t('firstRun.fields.showNsfwAcquisition') }}</span><el-radio-group v-model="appSettings.gamebananaShowNsfw"><el-radio-button :value="true">{{ t('firstRun.options.show') }}</el-radio-button><el-radio-button :value="false">{{ t('firstRun.options.hide') }}</el-radio-button></el-radio-group></label>
+              <label><span>{{ t('firstRun.fields.modBlurMode') }}</span><el-radio-group
+                  v-model="appSettings.modsManagementBlurMode"><el-radio-button value="all">{{
+                    t('firstRun.options.blurAll') }}</el-radio-button><el-radio-button value="nsfw">{{
+                      t('firstRun.options.blurNsfw') }}</el-radio-button><el-radio-button value="none">{{
+                      t('firstRun.options.blurNone') }}</el-radio-button></el-radio-group></label>
+              <label class="first-run-switch"><span>{{ t('firstRun.fields.revealOnHover') }}</span><el-switch
+                  v-model="appSettings.revealBlurredImagesOnHover" /></label>
+              <label><span>{{ t('firstRun.fields.showNsfwAcquisition') }}</span><el-radio-group
+                  v-model="appSettings.gamebananaShowNsfw"><el-radio-button :value="true">{{ t('firstRun.options.show')
+                  }}</el-radio-button><el-radio-button :value="false">{{ t('firstRun.options.hide')
+                    }}</el-radio-button></el-radio-group></label>
             </div>
           </div>
         </transition>
         <footer class="first-run-actions">
           <el-button v-if="firstRunStep > 0" @click="retreatFirstRun">{{ t('firstRun.back') }}</el-button>
           <span class="first-run-actions-grow"></span>
-          <el-button v-if="firstRunStep < firstRunStepCount - 1 && currentFirstRunStep !== 'role'" text @click="advanceFirstRun">{{ t('firstRun.skip') }}</el-button>
-          <el-button v-if="firstRunStep < firstRunStepCount - 1" type="primary" :disabled="currentFirstRunStep === 'role' && !selectedFirstRunRole" @click="advanceFirstRun">{{ t('firstRun.next') }}</el-button>
+          <el-button v-if="firstRunStep < firstRunStepCount - 1 && currentFirstRunStep !== 'role'" text
+            @click="advanceFirstRun">{{ t('firstRun.skip') }}</el-button>
+          <el-button v-if="firstRunStep < firstRunStepCount - 1" type="primary"
+            :disabled="currentFirstRunStep === 'role' && !selectedFirstRunRole" @click="advanceFirstRun">{{
+              t('firstRun.next') }}</el-button>
           <el-button v-else type="primary" @click="confirmFirstRunRole">{{ t('firstRun.confirm') }}</el-button>
         </footer>
       </section>
@@ -354,7 +379,8 @@ onUnmounted(() => {
               <router-view v-slot="{ Component }">
                 <transition name="page-blur">
                   <KeepAlive>
-                    <component :is="Component" :key="`${route.fullPath}:${appSettings.CurrentGameName}:${gameSwitchRevision}`" />
+                    <component :is="Component"
+                      :key="`${route.fullPath}:${appSettings.CurrentGameName}:${gameSwitchRevision}`" />
                   </KeepAlive>
                 </transition>
               </router-view>
@@ -370,7 +396,8 @@ onUnmounted(() => {
 
 <style>
 /* Global Resets */
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -381,7 +408,7 @@ html, body {
 
   /* Cyberpunk Black Fallback: Deep dark with subtle neon glows */
   background-color: #030305;
-  background-image: 
+  background-image:
     radial-gradient(circle at 50% 50%, rgba(60, 20, 100, 0.2) 0%, transparent 60%),
     radial-gradient(circle at 50% 50%, rgba(0, 100, 180, 0.1) 0%, transparent 70%);
 
@@ -389,7 +416,8 @@ html, body {
 }
 
 /* Re-enable selection for inputs */
-input, textarea {
+input,
+textarea {
   user-select: text;
 }
 
@@ -401,6 +429,7 @@ input, textarea {
   margin: 0;
   overflow: hidden;
 }
+
 .bg-layer {
   position: fixed;
   top: 0;
@@ -428,7 +457,8 @@ input, textarea {
 /* Transition Classes */
 .bg-trans-enter-active,
 .bg-trans-leave-active {
-  transition: opacity 0.6s ease; /* Smooth 0.6s fade */
+  transition: opacity 0.6s ease;
+  /* Smooth 0.6s fade */
 }
 
 .bg-trans-enter-from,
@@ -442,17 +472,18 @@ input, textarea {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 0; /* On top of bg-layer (also 0, but later in DOM), behind app-container (1) */
+  z-index: 0;
+  /* On top of bg-layer (also 0, but later in DOM), behind app-container (1) */
   pointer-events: none;
   /* 
      Fix: Removed 'multiply' blend mode which made things look dirty.
      New Style: Clean cinematic vignette + bottom fade for UI readability.
      Keeps the center bright and clean.
   */
-  background: 
+  background:
     /* 1. Seamless smooth fade from bottom (for potential footer text) */
     linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, transparent 25%),
-    
+
     /* 2. Very subtle cinematic vignette (corners only, center is pure clean) */
     radial-gradient(circle at 50% 50%, transparent 75%, rgba(0, 0, 0, 0.4) 140%);
 }
@@ -463,10 +494,11 @@ input, textarea {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 0; /* Above bg-layer (0 via DOM order), below App Content (1) */
-  pointer-events: none; /* Let clicks pass through if needed, though standard bg doesn't need interactions */
+  z-index: 0;
+  /* Above bg-layer (0 via DOM order), below App Content (1) */
+  pointer-events: none;
+  /* Let clicks pass through if needed, though standard bg doesn't need interactions */
 }
-
 </style>
 
 <style scoped>
@@ -496,34 +528,134 @@ input, textarea {
   overflow: hidden;
 }
 
-.first-run-dialog header h2 { margin: 5px 0 8px; font-size: 22px; }
-.first-run-dialog header p { color: rgba(255,255,255,.62); line-height: 1.55; }
-.first-run-kicker { color: rgba(117,214,187,.9); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
-.first-run-head-row { display: flex; align-items: center; justify-content: space-between; }
-.first-run-step-counter { color: rgba(255,255,255,.42); font-size: 11px; font-weight: 600; letter-spacing: .05em; }
-.first-run-role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-.first-run-role, .first-run-lang {
+.first-run-dialog header h2 {
+  margin: 5px 0 8px;
+  font-size: 22px;
+}
+
+.first-run-dialog header p {
+  color: rgba(255, 255, 255, .62);
+  line-height: 1.55;
+}
+
+.first-run-kicker {
+  color: rgba(117, 214, 187, .9);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.first-run-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.first-run-step-counter {
+  color: rgba(255, 255, 255, .42);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+
+.first-run-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.first-run-role,
+.first-run-lang {
   position: relative;
   padding: 14px;
-  border: 1px solid rgba(255,255,255,.11);
+  border: 1px solid rgba(255, 255, 255, .11);
   border-radius: 12px;
-  background: rgba(255,255,255,.035);
+  background: rgba(255, 255, 255, .035);
   color: white;
   text-align: left;
   cursor: pointer;
   transition: border-color .18s ease, background .18s ease, transform .18s ease;
 }
-.first-run-role:hover, .first-run-lang:hover { border-color: rgba(255,255,255,.26); background: rgba(255,255,255,.06); }
-.first-run-role:active, .first-run-lang:active { transform: scale(.99); }
-.first-run-role { min-height: 94px; }
-.first-run-role strong, .first-run-role span { display: block; }
-.first-run-role span { margin-top: 7px; color: rgba(255,255,255,.55); font-size: 12px; line-height: 1.45; }
-.first-run-role.is-selected, .first-run-lang.is-selected { border-color: rgba(117,214,187,.65); background: rgba(117,214,187,.13); }
-.first-run-lang-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(420px, 100%); margin: 20px auto; }
-.first-run-lang { display: flex; align-items: center; gap: 12px; padding: 16px; }
-.first-run-lang-code { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,.09); font-size: 13px; font-weight: 800; }
-.first-run-lang.is-selected .first-run-lang-code { background: rgba(117,214,187,.22); color: rgba(117,214,187,1); }
-.first-run-lang-name { font-size: 14px; font-weight: 600; }
+
+.first-run-role:hover,
+.first-run-lang:hover {
+  border-color: rgba(255, 255, 255, .26);
+  background: rgba(255, 255, 255, .06);
+}
+
+.first-run-role:active,
+.first-run-lang:active {
+  transform: scale(.99);
+}
+
+.first-run-role {
+  min-height: 94px;
+}
+
+.first-run-role strong,
+.first-run-role span {
+  display: block;
+}
+
+.first-run-role span {
+  margin-top: 7px;
+  color: rgba(255, 255, 255, .55);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.first-run-role.is-selected,
+.first-run-lang.is-selected {
+  border-color: rgba(117, 214, 187, .65);
+  background: rgba(117, 214, 187, .13);
+}
+
+.first-run-lang-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: 20px 0;
+}
+
+.first-run-lang {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.first-run-lang-code {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .09);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.first-run-lang.is-selected .first-run-lang-code {
+  background: rgba(117, 214, 187, .22);
+  color: rgba(117, 214, 187, 1);
+}
+
+.first-run-lang-name {
+  min-width: 0;
+  padding-right: 16px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+}
+
 .first-run-check {
   position: absolute;
   top: 10px;
@@ -531,9 +663,10 @@ input, textarea {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: rgba(117,214,187,.92);
-  box-shadow: 0 0 8px rgba(117,214,187,.35);
+  background: rgba(117, 214, 187, .92);
+  box-shadow: 0 0 8px rgba(117, 214, 187, .35);
 }
+
 .first-run-check::after {
   content: '';
   position: absolute;
@@ -545,43 +678,230 @@ input, textarea {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.first-run-preview { padding: 14px; border-radius: 12px; background: rgba(255,255,255,.035); }
-.first-run-preview > span { color: rgba(255,255,255,.56); font-size: 12px; }
-.first-run-preview div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
-.first-run-preview em { padding: 5px 9px; border-radius: 999px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.9); font-size: 12px; font-style: normal; }
-.first-run-role-preview { grid-column: 1 / -1; }
-.first-run-role-preview p { margin: 10px 0 0; color: rgba(255,255,255,.55); font-size: 12px; }
-.first-run-form { display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
-.first-run-body { min-height: 0; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; overflow-x: hidden; padding: 4px 2px; box-sizing: border-box; }
-.first-run-form > label { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr); align-items: center; gap: 18px; min-height: 38px; }
-.first-run-form > label > span { color: rgba(255,255,255,.84); font-size: 13px; }
-.first-run-form .first-run-switch { grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr); }
-.first-run-form .first-run-switch .el-switch { justify-self: start; }
-.first-run-path { display: flex; gap: 8px; min-width: 0; }
-.first-run-path .el-input { flex: 1; }
-.first-run-game-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-height: 330px; margin: 20px 0 12px; overflow: auto; }
-.first-run-game-grid button { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(255,255,255,.03); color: rgba(255,255,255,.76); cursor: pointer; transition: border-color .18s ease, background .18s ease; }
-.first-run-game-grid button:hover { border-color: rgba(255,255,255,.24); background: rgba(255,255,255,.06); }
-.first-run-game-grid button.is-selected { order: -1; border-color: rgba(117,214,187,.58); background: rgba(117,214,187,.13); color: white; }
-.first-run-game-grid img { width: 30px; height: 30px; object-fit: contain; }
-.first-run-game-grid span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.first-run-game-grid button .first-run-check { top: 7px; right: 7px; width: 15px; height: 15px; box-shadow: none; }
-.first-run-game-grid button .first-run-check::after { left: 5px; top: 2px; width: 3px; height: 7px; }
-.first-run-game-summary { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 18px; color: rgba(255,255,255,.5); font-size: 12px; }
-.first-run-progress { display: flex; gap: 6px; margin-top: 18px; }
-.first-run-progress span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.1); transition: background .25s ease, box-shadow .25s ease; }
-.first-run-progress span.is-active { background: rgba(117,214,187,.72); }
-.first-run-progress span.is-current { background: rgba(117,214,187,.95); box-shadow: 0 0 8px rgba(117,214,187,.4); }
-.first-run-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
-.first-run-actions-grow { flex: 1; }
+
+.first-run-preview {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .035);
+}
+
+.first-run-preview>span {
+  color: rgba(255, 255, 255, .56);
+  font-size: 12px;
+}
+
+.first-run-preview div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.first-run-preview em {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: rgba(255, 255, 255, .9);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.first-run-role-preview {
+  grid-column: 1 / -1;
+}
+
+.first-run-role-preview p {
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, .55);
+  font-size: 12px;
+}
+
+.first-run-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.first-run-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 8px 4px 2px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(117, 214, 187, .42) rgba(255, 255, 255, .04);
+}
+
+.first-run-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.first-run-body::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.first-run-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(117, 214, 187, .42);
+}
+
+.first-run-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(117, 214, 187, .62);
+}
+
+.first-run-form>label {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 38px;
+}
+
+.first-run-form>label>span {
+  color: rgba(255, 255, 255, .84);
+  font-size: 13px;
+}
+
+.first-run-form .first-run-switch {
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.25fr);
+}
+
+.first-run-form .first-run-switch .el-switch {
+  justify-self: start;
+}
+
+.first-run-path {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.first-run-path .el-input {
+  flex: 1;
+}
+
+.first-run-game-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 20px 0 12px;
+}
+
+.first-run-game-grid button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  height: 48px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .03);
+  color: rgba(255, 255, 255, .76);
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.first-run-game-grid button:hover {
+  border-color: rgba(255, 255, 255, .24);
+  background: rgba(255, 255, 255, .06);
+}
+
+.first-run-game-grid button.is-selected {
+  order: -1;
+  border-color: rgba(117, 214, 187, .58);
+  background: rgba(117, 214, 187, .13);
+  color: white;
+}
+
+.first-run-game-grid img {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.first-run-game-grid span {
+  min-width: 0;
+  padding-right: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: left
+}
+
+.first-run-game-grid button .first-run-check {
+  top: 7px;
+  right: 7px;
+  width: 15px;
+  height: 15px;
+  box-shadow: none;
+}
+
+.first-run-game-grid button .first-run-check::after {
+  left: 5px;
+  top: 2px;
+  width: 3px;
+  height: 7px;
+}
+
+.first-run-game-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 2px 18px;
+  color: rgba(255, 255, 255, .5);
+  font-size: 12px;
+}
+
+.first-run-progress {
+  display: flex;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.first-run-progress span {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .1);
+  transition: background .25s ease, box-shadow .25s ease;
+}
+
+.first-run-progress span.is-active {
+  background: rgba(117, 214, 187, .72);
+}
+
+.first-run-progress span.is-current {
+  background: rgba(117, 214, 187, .95);
+  box-shadow: 0 0 8px rgba(117, 214, 187, .4);
+}
+
+.first-run-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.first-run-actions-grow {
+  flex: 1;
+}
+
 .first-run-dialog :deep(.el-radio-group) {
   display: inline-flex;
   gap: 3px;
   padding: 3px;
   border-radius: 9px;
-  background: rgba(255,255,255,.045);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  background: rgba(255, 255, 255, .045);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
 }
+
 .first-run-dialog :deep(.el-radio-button__inner) {
   min-height: 30px;
   display: flex;
@@ -598,21 +918,70 @@ input, textarea {
   box-shadow: none !important;
   transition: background .16s ease, color .16s ease, box-shadow .16s ease;
 }
-.first-run-dialog :deep(.el-radio-button__inner:hover) { color: rgba(245, 250, 253, .96) !important; background: rgba(255,255,255,.075) !important; }
+
+.first-run-dialog :deep(.el-radio-button__inner:hover) {
+  color: rgba(245, 250, 253, .96) !important;
+  background: rgba(255, 255, 255, .075) !important;
+}
+
 .first-run-dialog :deep(.el-radio-button.is-active .el-radio-button__inner),
 .first-run-dialog :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
   background: rgba(76, 155, 139, .28) !important;
   color: rgba(238, 255, 250, .98) !important;
   box-shadow: inset 0 0 0 1px rgba(117, 214, 187, .52) !important;
 }
-.first-run-forward-enter-active, .first-run-forward-leave-active,
-.first-run-backward-enter-active, .first-run-backward-leave-active { transition: opacity .2s ease, transform .2s ease; }
-.first-run-forward-enter-from { opacity: 0; transform: translateX(28px); }
-.first-run-forward-leave-to { opacity: 0; transform: translateX(-28px); }
-.first-run-backward-enter-from { opacity: 0; transform: translateX(-28px); }
-.first-run-backward-leave-to { opacity: 0; transform: translateX(28px); }
 
-@media (max-width: 620px) { .first-run-role-grid, .first-run-game-grid, .first-run-lang-grid { grid-template-columns: 1fr; } .first-run-form > label { grid-template-columns: 1fr; gap: 7px; } }
+.first-run-forward-enter-active,
+.first-run-forward-leave-active,
+.first-run-backward-enter-active,
+.first-run-backward-leave-active {
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.first-run-forward-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+.first-run-forward-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.first-run-backward-enter-from {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.first-run-backward-leave-to {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+@media (max-width: 720px) {
+  .first-run-lang-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+
+  .first-run-role-grid,
+  .first-run-game-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .first-run-form>label {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+}
+
+@media (max-width: 440px) {
+  .first-run-lang-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 .app-layout {
   display: flex;
@@ -621,8 +990,10 @@ input, textarea {
   width: 100%;
   overflow: hidden;
   position: relative;
-  z-index: 1; /* Above bg */
-  padding-top: calc(32px / var(--app-ui-scale, 1)); /* Space for fixed TitleBar */
+  z-index: 1;
+  /* Above bg */
+  padding-top: calc(32px / var(--app-ui-scale, 1));
+  /* Space for fixed TitleBar */
   box-sizing: border-box;
 }
 
@@ -641,7 +1012,8 @@ input, textarea {
   position: absolute;
   inset: calc(32px / var(--app-ui-scale, 1)) 0 0;
   min-height: 0;
-  overflow: hidden; /* Clean cut */
+  overflow: hidden;
+  /* Clean cut */
   display: flex;
   flex-direction: column;
 }
@@ -661,15 +1033,18 @@ input, textarea {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  overflow-x: hidden; /* Prevent flash of horizontal bar during transitions */
+  overflow-x: hidden;
+  /* Prevent flash of horizontal bar during transitions */
 
   /* 
   杩欓噷娉ㄦ剰鍟婏紝scrollbar-gutter鍗冧竾涓嶈鍔燽oth-edges
   鍚﹀垯浼氬鑷?宸﹀彸涓や晶鐨勬粦鏉′綅缃?琚己鍒剁┖鍑烘潵涓€鍧楀効
   瀵艰嚧瑙嗚鏁堟灉涓嶄匠
   */
-  scrollbar-gutter: stable ; /* Reserve space to avoid scrollbar flicker */
-  box-sizing: border-box; /* Ensures padding doesn't cause overflow */
+  scrollbar-gutter: stable;
+  /* Reserve space to avoid scrollbar flicker */
+  box-sizing: border-box;
+  /* Ensures padding doesn't cause overflow */
   /* position:relative intentionally NOT set here — .app-main (parent) already has it,
      and this would create a containing block that clips absolutely-positioned
      children (dropdowns, context menus) via overflow-y:auto */
@@ -688,10 +1063,12 @@ input, textarea {
   color: #ffffff;
   --el-card-bg-color: transparent;
 }
+
 :deep(.el-card__header) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
 }
+
 /* Form Labels */
 :deep(.el-form-item__label) {
   color: #e0e0e0;
@@ -700,7 +1077,8 @@ input, textarea {
 /* Page Transition Effects */
 .page-blur-enter-active,
 .page-blur-leave-active {
-  transition: all 0.2s ease-out; /* 鎭㈠ 0.2s 杩囨浮 */
+  transition: all 0.2s ease-out;
+  /* 鎭㈠ 0.2s 杩囨浮 */
   position: absolute;
   top: 0;
   left: 0;
@@ -717,7 +1095,4 @@ input, textarea {
   opacity: 0;
   transform: scale(1);
 }
-
-
 </style>
-
