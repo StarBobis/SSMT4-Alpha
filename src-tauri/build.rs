@@ -28,14 +28,25 @@ fn build_directxtex_bridge() {
             && installed.join("lib").join("DirectXTex.lib").is_file())
         .then(|| (root, installed))
     }) else {
-        let preferred = candidates
-            .last()
-            .cloned()
-            .unwrap_or_else(|| PathBuf::from("vcpkg"));
-        panic!(
-            "Native DirectXTex is required. Run: {} install directxtex[dx11]:x64-windows-static-md",
-            preferred.join("vcpkg.exe").display()
+        // The native DirectXTex bridge is optional: no Rust code depends on
+        // the `directxtex_native` cfg yet (texture conversion runs through the
+        // bundled texconv.exe). Only fail the build when the caller explicitly
+        // asks for it via SSMT_REQUIRE_NATIVE_DIRECTXTEX.
+        if env::var_os("SSMT_REQUIRE_NATIVE_DIRECTXTEX").is_some() {
+            let preferred = candidates
+                .last()
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from("vcpkg"));
+            panic!(
+                "Native DirectXTex is required. Run: {} install directxtex[dx11]:x64-windows-static-md",
+                preferred.join("vcpkg.exe").display()
+            );
+        }
+        println!(
+            "cargo:warning=DirectXTex not found; skipping the native texture encoder bridge. \
+             Install it via vcpkg (directxtex[dx11]:x64-windows-static-md) if you need it later."
         );
+        return;
     };
     println!("cargo:warning=Using DirectXTex from {}", root.display());
     let include = installed.join("include");
