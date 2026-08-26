@@ -535,7 +535,7 @@ onMounted(async () => {
     if (saved.frameStep) frameStep.value = saved.frameStep; if (saved.sizePercent) sizePercent.value = saved.sizePercent;
     if (Number.isFinite(saved.videoQuality)) videoQuality.value = Math.min(100, Math.max(1, saved.videoQuality));
     if (Number.isFinite(saved.cpuThreads)) cpuThreads.value = Math.min(cpuThreadLimit, Math.max(1, Math.round(saved.cpuThreads)));
-    if (Number.isFinite(saved.gpuWorkers)) gpuWorkers.value = Math.min(4, Math.max(1, Math.round(saved.gpuWorkers)));
+    if (Number.isFinite(saved.gpuWorkers)) gpuWorkers.value = Math.min(2, Math.max(1, Math.round(saved.gpuWorkers)));
     if (['quick','standard'].includes(saved.bc7Quality)) bc7Quality.value = saved.bc7Quality;
     if (Number.isFinite(saved.texconvBatchSize)) texconvBatchSize.value = Math.min(64, Math.max(1, Math.round(saved.texconvBatchSize)));
     if (['loop','once'].includes(saved.loopMode)) loopMode.value = saved.loopMode;
@@ -614,7 +614,7 @@ onUnmounted(() => { if (generationProgressTimer) clearInterval(generationProgres
         <label><span>{{ t('textureModMaker.size') }}</span><el-slider v-model="sizePercent" :min="10" :max="100" :step="5" show-input/></label>
         <label v-if="sourceKind === 'video'"><span>{{ t('textureModMaker.videoQuality') }}</span><el-slider v-model="videoQuality" :min="1" :max="100" show-input/></label>
         <label><span>{{ t('textureModMaker.cpuThreads') }}</span><el-input-number v-model="cpuThreads" :min="1" :max="cpuThreadLimit"/><small class="tm-thread-hint">{{ t('textureModMaker.cpuThreadsHint', { max: cpuThreadLimit }) }}</small></label>
-        <label><span>{{ t('textureModMaker.gpuWorkers') }}</span><el-input-number v-model="gpuWorkers" :min="1" :max="4"/><small class="tm-thread-hint">{{ t('textureModMaker.gpuWorkersHint') }}</small></label>
+        <label><span>{{ t('textureModMaker.gpuWorkers') }}</span><el-input-number v-model="gpuWorkers" :min="1" :max="2"/><small class="tm-thread-hint">{{ t('textureModMaker.gpuWorkersHint') }}</small></label>
         <label v-if="selectedTexture?.format.toUpperCase().startsWith('BC7')"><span>{{ t('textureModMaker.bc7Quality') }}</span><el-radio-group v-model="bc7Quality" class="tm-multi-switch"><el-radio-button value="quick">{{ t('textureModMaker.bc7QualityModes.quick') }}</el-radio-button><el-radio-button value="standard">{{ t('textureModMaker.bc7QualityModes.standard') }}</el-radio-button></el-radio-group><small class="tm-thread-hint">{{ t('textureModMaker.bc7QualityHint') }}</small></label>
         <label><span>{{ t('textureModMaker.texconvBatchSize') }}</span><el-input-number v-model="texconvBatchSize" :min="1" :max="64"/><small class="tm-thread-hint">{{ t('textureModMaker.texconvBatchSizeHint') }}</small></label>
         <label v-if="sourceKind !== 'image'"><span>{{ t('textureModMaker.loop') }}</span><el-radio-group v-model="loopMode" class="tm-multi-switch"><el-radio-button value="loop">{{ t('textureModMaker.loopModes.loop') }}</el-radio-button><el-radio-button value="once">{{ t('textureModMaker.loopModes.once') }}</el-radio-button></el-radio-group></label>

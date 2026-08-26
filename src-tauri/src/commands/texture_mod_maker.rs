@@ -18,6 +18,10 @@ use std::os::windows::process::CommandExt;
 
 use crate::config::path_manager::PathManager;
 
+struct PreparedFrame {
+    path: PathBuf,
+}
+
 static GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
 static GENERATION_PROGRESS: LazyLock<Mutex<GenerationProgress>> =
     LazyLock::new(|| Mutex::new(GenerationProgress::default()));
@@ -1048,7 +1052,11 @@ pub async fn generate_texture_mod(
             "INFO",
             format!("Output dimensions: {width}x{height}; target format: {target_format}"),
         );
-        let encode_frames = |frames: &[PathBuf]| -> Result<(), String> {
+        generation_log.write(
+            "INFO",
+            "Encoder backend: texconv DirectCompute GPU batches; transformed frames use temporary BMP files",
+        );
+        let encode_frames = |frames: &[PreparedFrame]| -> Result<(), String> {
             if frames.is_empty() {
                 return Ok(());
             }
@@ -1072,7 +1080,11 @@ pub async fn generate_texture_mod(
                 args.extend(["-bc".into(), "q".into()]);
             }
             args.push("--".into());
-            args.extend(frames.iter().map(|path| path.to_string_lossy().to_string()));
+            args.extend(
+                frames
+                    .iter()
+                    .map(|frame| frame.path.to_string_lossy().to_string()),
+            );
             generation_log.write(
                 "INFO",
                 format!("DirectXTex batch started: {} frames", frames.len()),
@@ -1091,7 +1103,7 @@ pub async fn generate_texture_mod(
                 ),
             );
             for frame in frames {
-                let _ = fs::remove_file(frame);
+                let _ = fs::remove_file(&frame.path);
             }
             Ok(())
         };
@@ -1105,13 +1117,11 @@ pub async fn generate_texture_mod(
             .map_err(|e| e.to_string())?;
         let transformed = AtomicUsize::new(0);
         let encoded = Arc::new(AtomicUsize::new(0));
-        let gpu_workers = usize::from(request.gpu_workers.clamp(1, 4));
-        // Start feeding the encoder after roughly one CPU-pool wave instead of
-        // waiting for a fixed 64-frame block. DirectXTex jobs stay small so two
-        // concurrent workers do not make progress jump by 32 frames at once.
-        let transform_batch_size = cpu_threads.clamp(8, 32);
+        // Multiple texconv processes compete for the same DirectCompute queue.
+        // More than two reduces throughput and makes completion arrive in bursts.
+        let gpu_workers = usize::from(request.gpu_workers.clamp(1, 2));
         let encode_batch_size = usize::from(request.texconv_batch_size.clamp(1, 64));
-        let (work_tx, work_rx) = mpsc::sync_channel::<Vec<PathBuf>>(gpu_workers * 2);
+        let (work_tx, work_rx) = mpsc::sync_channel::<Vec<PreparedFrame>>(gpu_workers);
         let work_rx = Arc::new(Mutex::new(work_rx));
         let pipeline_error = Arc::new(Mutex::new(None::<String>));
         let producer_result = thread::scope(|scope| -> Result<(), String> {
@@ -1127,9 +1137,6 @@ pub async fn generate_texture_mod(
                         None => break,
                     };
                     if error.lock().map(|value| value.is_some()).unwrap_or(true) {
-                        for frame in frames {
-                            let _ = fs::remove_file(frame);
-                        }
                         continue;
                     }
                     let count = frames.len();
@@ -1138,92 +1145,108 @@ pub async fn generate_texture_mod(
                         if let Ok(mut value) = error.lock() {
                             *value = Some(reason);
                         }
-                        for frame in frames {
-                            let _ = fs::remove_file(frame);
-                        }
                         continue;
                     }
                     let done = encoded.fetch_add(count, Ordering::Relaxed) + count;
                     set_generation_progress("encoding", done, total, "");
                 });
             }
-            let mut pending_encode = Vec::with_capacity(encode_batch_size + transform_batch_size);
-            for (batch_index, batch) in sources.chunks(transform_batch_size).enumerate() {
-                ensure_generation_active()?;
-                if let Some(reason) = pipeline_error.lock().ok().and_then(|value| value.clone()) {
-                    return Err(reason);
-                }
-                let batch_start = batch_index * transform_batch_size;
-                let rendered_frames: Result<Vec<PathBuf>, String> = pool.install(|| {
-                    batch
+            // Each Rayon worker publishes a frame as soon as it is ready. The
+            // collector can therefore launch texconv at exactly N completed
+            // frames instead of waiting for the slowest item in a CPU wave.
+            let total = sources.len();
+            let (frame_tx, frame_rx) = mpsc::sync_channel::<Result<PreparedFrame, String>>(2);
+            let source_frames = &sources;
+            let transform_request = &request;
+            let transform_temp = &temp;
+            let transform_counter = &transformed;
+            let transform_pool = &pool;
+            scope.spawn(move || {
+                transform_pool.install(|| {
+                    source_frames
                         .par_iter()
                         .enumerate()
-                        .map(|(local_index, source)| {
-                            ensure_generation_active()?;
-                            let index = batch_start + local_index;
-                            let readable_source = if source
-                                .extension()
-                                .is_some_and(|e| e.eq_ignore_ascii_case("dds"))
-                            {
-                                let conversion = temp.join(format!("source-dds-{index:05}"));
-                                fs::create_dir_all(&conversion).map_err(|e| e.to_string())?;
-                                let args = vec![
-                                    source.to_string_lossy().to_string(),
-                                    "-ft".into(),
-                                    "png".into(),
-                                    "-o".into(),
-                                    conversion.to_string_lossy().to_string(),
-                                    "-y".into(),
-                                ];
-                                run_generation_tool(
-                                    &PathManager::ssmt_resources_folder().join("texconv.exe"),
-                                    &args,
-                                )?;
-                                conversion
-                                    .join(source.file_stem().ok_or("DDS source has no filename")?)
-                                    .with_extension("png")
-                            } else {
-                                source.clone()
-                            };
-                            let image = image::open(&readable_source)
-                                .map_err(|e| format!("Failed to read {}: {e}", source.display()))?;
-                            let rendered = transform(
-                                image,
-                                width,
-                                height,
-                                &request.fit_mode,
-                                request.flip_horizontal,
-                                request.flip_vertical,
-                                request.rotation,
-                            );
-                            let bmp = temp.join(format!("frame_{:05}.bmp", index + 1));
-                            rendered.save(&bmp).map_err(|e| e.to_string())?;
-                            let done = transformed.fetch_add(1, Ordering::Relaxed) + 1;
-                            set_generation_progress("transforming", done, sources.len(), "");
-                            Ok(bmp)
-                        })
-                        .collect()
+                        .for_each(|(index, source)| {
+                            let result = (|| -> Result<PreparedFrame, String> {
+                                ensure_generation_active()?;
+                                let readable_source = if source
+                                    .extension()
+                                    .is_some_and(|e| e.eq_ignore_ascii_case("dds"))
+                                {
+                                    let conversion =
+                                        transform_temp.join(format!("source-dds-{index:05}"));
+                                    fs::create_dir_all(&conversion).map_err(|e| e.to_string())?;
+                                    let args = vec![
+                                        source.to_string_lossy().to_string(),
+                                        "-ft".into(),
+                                        "png".into(),
+                                        "-o".into(),
+                                        conversion.to_string_lossy().to_string(),
+                                        "-y".into(),
+                                    ];
+                                    run_generation_tool(
+                                        &PathManager::ssmt_resources_folder().join("texconv.exe"),
+                                        &args,
+                                    )?;
+                                    conversion
+                                        .join(
+                                            source
+                                                .file_stem()
+                                                .ok_or("DDS source has no filename")?,
+                                        )
+                                        .with_extension("png")
+                                } else {
+                                    source.clone()
+                                };
+                                let image = image::open(&readable_source).map_err(|e| {
+                                    format!("Failed to read {}: {e}", source.display())
+                                })?;
+                                let rendered = transform(
+                                    image,
+                                    width,
+                                    height,
+                                    &transform_request.fit_mode,
+                                    transform_request.flip_horizontal,
+                                    transform_request.flip_vertical,
+                                    transform_request.rotation,
+                                );
+                                let done = transform_counter.fetch_add(1, Ordering::Relaxed) + 1;
+                                set_generation_progress("transforming", done, total, "");
+                                let bmp =
+                                    transform_temp.join(format!("frame_{:05}.bmp", index + 1));
+                                rendered.save(&bmp).map_err(|e| e.to_string())?;
+                                Ok(PreparedFrame { path: bmp })
+                            })();
+                            let _ = frame_tx.send(result);
+                        });
                 });
-                pending_encode.extend(rendered_frames?);
-                generation_log.write(
-                    "INFO",
-                    format!(
-                        "Transformed batch completed: {}/{} frames; encoder queue has {} frames",
-                        transformed.load(Ordering::Relaxed),
-                        sources.len(),
-                        pending_encode.len()
-                    ),
-                );
-                while pending_encode.len() >= encode_batch_size {
+            });
+
+            let mut pending_encode = Vec::with_capacity(encode_batch_size);
+            let mut transform_error = None;
+            for rendered in frame_rx {
+                match rendered {
+                    Ok(frame) => pending_encode.push(frame),
+                    Err(reason) => {
+                        if transform_error.is_none() {
+                            transform_error = Some(reason);
+                        }
+                        continue;
+                    }
+                }
+                if pending_encode.len() == encode_batch_size {
                     let frames: Vec<_> = pending_encode.drain(..encode_batch_size).collect();
                     generation_log.write(
                         "INFO",
-                        format!("Queued {} frames for DirectXTex", frames.len()),
+                        format!("Queued {} frames for DirectXTex immediately after frame {}/{} completed", frames.len(), transformed.load(Ordering::Relaxed), total),
                     );
                     work_tx
                         .send(frames)
                         .map_err(|_| "DirectXTex pipeline stopped unexpectedly".to_string())?;
                 }
+            }
+            if let Some(reason) = transform_error {
+                return Err(reason);
             }
             if !pending_encode.is_empty() {
                 generation_log.write(

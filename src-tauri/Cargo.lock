@@ -4722,6 +4722,7 @@ name = "ssmt4"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
+ "cc",
  "chrono",
  "encoding_rs",
  "futures-util",
