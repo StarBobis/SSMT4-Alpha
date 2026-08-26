@@ -1403,6 +1403,20 @@
     "expandCategory": "展開分類",
     "collapseCategory": "收起分類",
     "allCategories": "全部分類",
+    "blocklist": "封鎖管理",
+    "blocked": "已加入封鎖清單",
+    "unblock": "解除封鎖",
+    "blocklistEmpty": "暫無封鎖項目",
+    "blockActions": {
+      "category": "封鎖此分類",
+      "author": "封鎖此作者",
+      "mod": "封鎖此 Mod"
+    },
+    "blocklistKinds": {
+      "categories": "分類",
+      "authors": "作者",
+      "mods": "Mod"
+    },
     "resultCount": "顯示 {count} 項 · 共 {total} 項",
     "page": "第 {current} 頁",
     "previous": "上一頁",

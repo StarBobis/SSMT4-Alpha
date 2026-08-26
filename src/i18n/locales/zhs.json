@@ -1451,6 +1451,20 @@
     "expandCategory": "展开分类",
     "collapseCategory": "收起分类",
     "allCategories": "全部分类",
+    "blocklist": "屏蔽管理",
+    "blocked": "已加入屏蔽列表",
+    "unblock": "解除屏蔽",
+    "blocklistEmpty": "暂无屏蔽项",
+    "blockActions": {
+      "category": "屏蔽该分类",
+      "author": "屏蔽该作者",
+      "mod": "屏蔽该 Mod"
+    },
+    "blocklistKinds": {
+      "categories": "分类",
+      "authors": "作者",
+      "mods": "Mod"
+    },
     "resultCount": "显示 {count} 项 · 共 {total} 项",
     "page": "第 {current} 页",
     "previous": "上一页",

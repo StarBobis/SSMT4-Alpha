@@ -206,6 +206,27 @@ const DEFAULT_GAMEBANANA_INSTALL_GAME = 'DefaultGame';
 const API_BASE = 'https://gamebanana.com/apiv11';
 const PAGE_SIZE_OPTIONS = [12, 24, 36, 48];
 const GAMEBANANA_ICON_CACHE_FOLDER = 'gamebanana-category-icons';
+const GAMEBANANA_BLOCKLIST_STORAGE = 'gamebanana:blocklist:v1';
+
+type GbBlockedItem = { key: string; label: string };
+type GbBlocklist = { categories: GbBlockedItem[]; authors: GbBlockedItem[]; mods: GbBlockedItem[] };
+type GbBlockTarget =
+  | { kind: 'category'; category: GbCategoryNode }
+  | { kind: 'author'; mod: GbModCard }
+  | { kind: 'mod'; mod: GbModCard };
+
+const loadGbBlocklist = (): GbBlocklist => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(GAMEBANANA_BLOCKLIST_STORAGE) || '{}') as Partial<GbBlocklist>;
+    return {
+      categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+      authors: Array.isArray(parsed.authors) ? parsed.authors : [],
+      mods: Array.isArray(parsed.mods) ? parsed.mods : [],
+    };
+  } catch {
+    return { categories: [], authors: [], mods: [] };
+  }
+};
 
 const gameId = ref<number | null>(DEFAULT_GAMEBANANA_ID);
 const gameTargetLabel = ref('');
@@ -221,6 +242,9 @@ const selectedCategoryId = ref<number | null>(null);
 const mods = ref<GbModCard[]>([]);
 const selectedModId = ref<number | null>(null);
 const detail = ref<GbModDetail | null>(null);
+const gbBlocklist = reactive<GbBlocklist>(loadGbBlocklist());
+const showGbBlocklist = ref(false);
+const gbBlockMenu = reactive({ visible: false, x: 0, y: 0, target: null as GbBlockTarget | null });
 const fallbackInstallGameName = ref('');
 const comments = ref<GbComment[]>([]);
 const commentsPage = ref(0);
@@ -346,10 +370,24 @@ const allCategories = computed(() => {
   visit(categoryTree.value);
   return flattened;
 });
+const categoryBlockKey = (categoryId: number) => `${gameId.value ?? 'unknown'}:${categoryId}`;
+const authorBlockKey = (mod: GbModCard) => mod.authorId !== null
+  ? `id:${mod.authorId}`
+  : `name:${mod.author.trim().toLocaleLowerCase()}`;
+const blockedCategoryKeys = computed(() => new Set(gbBlocklist.categories.map((item) => item.key)));
+const blockedAuthorKeys = computed(() => new Set(gbBlocklist.authors.map((item) => item.key)));
+const blockedModKeys = computed(() => new Set(gbBlocklist.mods.map((item) => item.key)));
+const isCategoryBlocked = (categoryId: number) => blockedCategoryKeys.value.has(categoryBlockKey(categoryId));
+const isModBlocked = (mod: GbModCard) => blockedModKeys.value.has(String(mod.id))
+  || blockedAuthorKeys.value.has(authorBlockKey(mod))
+  || (mod.categoryId !== null && isCategoryBlocked(mod.categoryId))
+  || mod.categoryTrail.some((category) => isCategoryBlocked(category._idRow));
+
 const categoryRows = computed<GbCategoryRow[]>(() => {
   const rows: GbCategoryRow[] = [];
   const visit = (nodes: GbCategoryNode[], depth: number) => {
     for (const node of nodes) {
+      if (isCategoryBlocked(node._idRow)) continue;
       rows.push({ node, depth });
       if (expandedCategoryIds.value.has(node._idRow)) visit(node.children, depth + 1);
     }
@@ -363,7 +401,7 @@ const selectedCategoryName = computed(() =>
     : allCategories.value.find((item) => item._idRow === selectedCategoryId.value)?._sName || t('gameBanana.allCategories'),
 );
 
-const visibleMods = computed(() => appSettings.gamebananaShowNsfw ? mods.value : mods.value.filter((item) => !item.isNsfw));
+const visibleMods = computed(() => mods.value.filter((item) => !isModBlocked(item) && (appSettings.gamebananaShowNsfw || !item.isNsfw)));
 const visibleCountText = computed(() => `${visibleMods.value.length}${!appSettings.gamebananaShowNsfw ? ` / ${mods.value.length}` : ''}`);
 const gameBananaBlurMode = computed({ get: () => appSettings.gamebananaBlurMode, set: (mode) => setGameBananaBlurMode(appSettings, mode) });
 const currentGameName = computed(() => appSettings.CurrentGameName?.trim() || '');
@@ -2145,8 +2183,65 @@ const onGbPanelResizeKeydown = (panel: GbResizablePanel, event: KeyboardEvent) =
   persistGbPanelWidths();
 };
 
+const persistGbBlocklist = () => {
+  localStorage.setItem(GAMEBANANA_BLOCKLIST_STORAGE, JSON.stringify(gbBlocklist));
+};
+
+const closeGbBlockMenu = () => {
+  gbBlockMenu.visible = false;
+  gbBlockMenu.target = null;
+};
+
+const openGbBlockMenu = (event: MouseEvent, target: GbBlockTarget) => {
+  event.preventDefault();
+  event.stopPropagation();
+  gbBlockMenu.target = target;
+  gbBlockMenu.x = Math.min(event.clientX, window.innerWidth - 190);
+  gbBlockMenu.y = Math.min(event.clientY, window.innerHeight - 52);
+  gbBlockMenu.visible = true;
+};
+
+const addGbBlockedItem = (collection: GbBlockedItem[], item: GbBlockedItem) => {
+  if (!collection.some((existing) => existing.key === item.key)) collection.push(item);
+  persistGbBlocklist();
+};
+
+const applyGbBlockTarget = () => {
+  const target = gbBlockMenu.target;
+  if (!target) return;
+  if (target.kind === 'category') {
+    addGbBlockedItem(gbBlocklist.categories, {
+      key: categoryBlockKey(target.category._idRow),
+      label: target.category._sName || `#${target.category._idRow}`,
+    });
+    if (selectedCategoryId.value === target.category._idRow) selectCategory(null);
+  } else if (target.kind === 'author') {
+    addGbBlockedItem(gbBlocklist.authors, { key: authorBlockKey(target.mod), label: target.mod.author });
+  } else {
+    addGbBlockedItem(gbBlocklist.mods, { key: String(target.mod.id), label: target.mod.title });
+  }
+  if (target.kind !== 'category' && selectedModId.value === target.mod.id) {
+    selectedModId.value = null;
+    detail.value = null;
+  }
+  ElMessage.success(t('gameBanana.blocked'));
+  closeGbBlockMenu();
+};
+
+const removeGbBlockedItem = (kind: keyof GbBlocklist, key: string) => {
+  const collection = gbBlocklist[kind];
+  const index = collection.findIndex((item) => item.key === key);
+  if (index >= 0) collection.splice(index, 1);
+  persistGbBlocklist();
+};
+
+const gbBlockedCount = computed(() => gbBlocklist.categories.length + gbBlocklist.authors.length + gbBlocklist.mods.length);
+const gbBlocklistKinds: Array<keyof GbBlocklist> = ['categories', 'authors', 'mods'];
+const closeGbTransientMenus = () => closeGbBlockMenu();
+
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown);
+  window.addEventListener('pointerdown', closeGbTransientMenus);
   gbPanelResizeObserver = new ResizeObserver(constrainGbPanelWidths);
   if (gbLayoutRef.value) gbPanelResizeObserver.observe(gbLayoutRef.value);
   constrainGbPanelWidths();
@@ -2159,6 +2254,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown);
+  window.removeEventListener('pointerdown', closeGbTransientMenus);
   unlistenDownloadProgress?.();
   unlistenInstallProgress?.();
   gbPanelResizeObserver?.disconnect();
@@ -2229,6 +2325,9 @@ onBeforeUnmount(() => {
       <button type="button" class="gb-button" @click="openExternal(gameUrl)">{{ t('gameBanana.openGamePage') }}</button>
       <button type="button" class="gb-button" :class="{ active: showTranslationSettings }" @click="showTranslationSettings = !showTranslationSettings">
         {{ t('gameBanana.translationSettings') }}
+      </button>
+      <button type="button" class="gb-button" @click="showGbBlocklist = true">
+        {{ t('gameBanana.blocklist') }}<span v-if="gbBlockedCount"> · {{ gbBlockedCount }}</span>
       </button>
     </section>
 
@@ -2331,6 +2430,35 @@ onBeforeUnmount(() => {
     <template #footer><el-button type="primary" @click="showTranslationSettings = false">{{ t('gameBanana.done') }}</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="showGbBlocklist" class="glass-dialog gb-blocklist-dialog" :title="t('gameBanana.blocklist')" width="560px" align-center>
+      <div class="gb-blocklist-groups">
+        <section v-for="kind in gbBlocklistKinds" :key="kind">
+          <h3>{{ t(`gameBanana.blocklistKinds.${kind}`) }} · {{ gbBlocklist[kind].length }}</h3>
+          <div v-if="gbBlocklist[kind].length" class="gb-blocklist-items">
+            <span v-for="item in gbBlocklist[kind]" :key="item.key">
+              <b>{{ item.label }}</b>
+              <button type="button" :title="t('gameBanana.unblock')" @click="removeGbBlockedItem(kind, item.key)">×</button>
+            </span>
+          </div>
+          <p v-else>{{ t('gameBanana.blocklistEmpty') }}</p>
+        </section>
+      </div>
+      <template #footer><el-button type="primary" @click="showGbBlocklist = false">{{ t('gameBanana.done') }}</el-button></template>
+    </el-dialog>
+
+    <Teleport to="body">
+      <div
+        v-if="gbBlockMenu.visible && gbBlockMenu.target"
+        class="gb-block-context-menu glass-context-menu"
+        :style="{ left: `${gbBlockMenu.x}px`, top: `${gbBlockMenu.y}px` }"
+        @pointerdown.stop
+      >
+        <button type="button" @click="applyGbBlockTarget">
+          {{ t(`gameBanana.blockActions.${gbBlockMenu.target.kind}`) }}
+        </button>
+      </div>
+    </Teleport>
+
     <p v-if="errorMessage" class="gb-error">{{ errorMessage }}</p>
 
     <main
@@ -2366,6 +2494,7 @@ onBeforeUnmount(() => {
               :class="{ active: selectedCategoryId === row.node._idRow }"
               data-gb-translate
               @click="selectCategory(row.node._idRow)"
+              @contextmenu="openGbBlockMenu($event, { kind: 'category', category: row.node })"
             >
               <img v-if="row.node._sIconUrl" class="gb-category-icon" :src="row.node._sIconUrl" alt="" loading="lazy" />
               <span>{{ row.node._sName || `#${row.node._idRow}` }}</span>
@@ -2412,6 +2541,7 @@ onBeforeUnmount(() => {
             role="button"
             tabindex="0"
             @click="selectMod(mod)"
+            @contextmenu="openGbBlockMenu($event, { kind: 'mod', mod })"
             @keydown.enter.prevent="selectMod(mod)"
             @keydown.space.prevent="selectMod(mod)"
           >
@@ -2442,7 +2572,7 @@ onBeforeUnmount(() => {
             <span class="gb-mod-copy">
               <strong :title="mod.title" data-gb-translate>{{ mod.title }}</strong>
               <small>
-                  <button type="button" class="gb-author-link" :disabled="!mod.authorId && !mod.authorUrl" data-gb-translate @click.stop="openAuthorPage(mod.authorId, mod.authorUrl, mod.author)">{{ mod.author }}</button>
+                  <button type="button" class="gb-author-link" :disabled="!mod.authorId && !mod.authorUrl" data-gb-translate @click.stop="openAuthorPage(mod.authorId, mod.authorUrl, mod.author)" @contextmenu="openGbBlockMenu($event, { kind: 'author', mod })">{{ mod.author }}</button>
               </small>
               <em v-if="mod.categoryName" data-gb-translate>{{ mod.categoryName }}</em>
               <p data-gb-translate>{{ mod.description || t('gameBanana.noDescription') }}</p>
@@ -2487,7 +2617,7 @@ onBeforeUnmount(() => {
           <div class="gb-detail-head">
             <div>
               <h2 data-gb-translate>{{ detail.title }}</h2>
-              <button type="button" class="gb-author-link" :disabled="!detail.authorId && !detail.authorUrl" data-gb-translate @click="openAuthorPage(detail.authorId, detail.authorUrl, detail.author)">
+              <button type="button" class="gb-author-link" :disabled="!detail.authorId && !detail.authorUrl" data-gb-translate @click="openAuthorPage(detail.authorId, detail.authorUrl, detail.author)" @contextmenu="openGbBlockMenu($event, { kind: 'author', mod: detail })">
                 {{ detail.author }}
               </button>
             </div>
@@ -2752,6 +2882,18 @@ onBeforeUnmount(() => {
 .gb-field>small { margin-top:1px; color:rgba(var(--theme-text-secondary-rgb),.58); font-size:9px; line-height:1.3; }
 :global(.gb-translation-dialog.el-dialog) { overflow:hidden; border:1px solid rgba(var(--theme-surface-tint-rgb),.18); border-radius:14px; background:rgba(24,28,38,.88); box-shadow:0 22px 60px rgba(0,0,0,.42); backdrop-filter:blur(24px) saturate(1.25); -webkit-backdrop-filter:blur(24px) saturate(1.25); }
 :global(.gb-translation-dialog .el-dialog__body) { max-height:min(68vh,650px); overflow:auto; padding-top:8px; }
+.gb-blocklist-groups { display:grid; gap:14px; }
+.gb-blocklist-groups section { display:grid; gap:7px; }
+.gb-blocklist-groups h3 { margin:0; color:rgba(var(--theme-text-primary-rgb),.88); font-size:12px; }
+.gb-blocklist-groups p { margin:0; color:rgba(var(--theme-text-secondary-rgb),.52); font-size:11px; }
+.gb-blocklist-items { display:flex; flex-wrap:wrap; gap:6px; }
+.gb-blocklist-items>span { display:flex; align-items:center; gap:7px; max-width:100%; padding:5px 6px 5px 9px; border:1px solid rgba(var(--theme-surface-tint-rgb),.16); border-radius:7px; background:rgba(var(--theme-surface-tint-rgb),.06); }
+.gb-blocklist-items b { overflow:hidden; color:rgba(var(--theme-text-primary-rgb),.78); font-size:11px; font-weight:500; text-overflow:ellipsis; white-space:nowrap; }
+.gb-blocklist-items button { width:20px; height:20px; padding:0; border:0; border-radius:5px; background:rgba(255,255,255,.06); color:rgba(var(--theme-text-secondary-rgb),.72); cursor:pointer; }
+.gb-blocklist-items button:hover { background:rgba(var(--theme-danger-rgb),.16); color:rgba(var(--theme-text-primary-rgb),.96); }
+:global(.gb-block-context-menu) { position:fixed; z-index:5000; min-width:178px; padding:5px; }
+:global(.gb-block-context-menu button) { width:100%; padding:8px 10px; border:0; border-radius:6px; background:transparent; color:rgba(var(--theme-text-primary-rgb),.88); font:inherit; font-size:12px; text-align:left; cursor:pointer; }
+:global(.gb-block-context-menu button:hover) { background:rgba(var(--theme-danger-rgb),.14); color:rgba(var(--theme-text-primary-rgb),.98); }
 .gb-model-control { display: flex; align-items: stretch; gap: 5px; min-width: 0; text-transform: none; }
 .gb-model-refresh { width: 30px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,.13); border-radius: 7px; background: rgba(255,255,255,.055); color: rgba(var(--theme-text-primary-rgb),.82); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }.gb-model-refresh:hover:not(:disabled) { background: rgba(var(--theme-surface-tint-rgb),.16); border-color: rgba(var(--theme-surface-tint-rgb),.38); }.gb-model-refresh:disabled { opacity:.45; cursor: default; }
 

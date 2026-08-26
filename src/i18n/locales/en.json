@@ -1451,6 +1451,20 @@
     "expandCategory": "Expand category",
     "collapseCategory": "Collapse category",
     "allCategories": "All categories",
+    "blocklist": "Blocked items",
+    "blocked": "Added to the blocklist",
+    "unblock": "Unblock",
+    "blocklistEmpty": "No blocked items",
+    "blockActions": {
+      "category": "Block this category",
+      "author": "Block this author",
+      "mod": "Block this mod"
+    },
+    "blocklistKinds": {
+      "categories": "Categories",
+      "authors": "Authors",
+      "mods": "Mods"
+    },
     "resultCount": "{count} shown · {total} total",
     "page": "Page {current}",
     "previous": "Previous",
