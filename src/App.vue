@@ -37,14 +37,14 @@ const firstRunDialog = ref<HTMLElement | null>(null);
 watch(firstRunStep, () => firstRunDialog.value?.scrollTo({ top: 0 }));
 const selectedFirstRunGames = ref<string[]>([]);
 const firstRunGamesInitialized = ref(false);
-const firstRunD3d11Mode = ref<D3d11Mode>('play');
+const firstRunD3d11Mode = ref<D3d11Mode>('dev');
 const firstRunUseShell = ref(false);
 const firstRunHuntingMode = ref<HuntingMode>('2');
 const firstRunShowWarnings = ref(true);
 const firstRunCheckDllUpdate = ref(true);
 const firstRunCheckPackageUpdate = ref(true);
-const firstRunBackgroundType = ref<'Image' | 'Video'>('Image');
-const firstRunBackgroundUpdateMode = ref<'manual' | 'auto'>('manual');
+const firstRunBackgroundType = ref<'Image' | 'Video'>('Video');
+const firstRunBackgroundUpdateMode = ref<'manual' | 'auto'>('auto');
 const orderedFirstRunGames = computed(() => [...AppStateManager.gamesList].sort((a, b) => {
   const aSelected = selectedFirstRunGames.value.includes(a.name) ? 0 : 1;
   const bSelected = selectedFirstRunGames.value.includes(b.name) ? 0 : 1;
