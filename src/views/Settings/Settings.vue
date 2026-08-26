@@ -751,6 +751,21 @@ const openUsageDocs = async () => {
   background: rgba(var(--theme-surface-tint-rgb), 0.08);
 }
 
+.settings-page {
+  padding: var(--t-page-padding);
+  color: var(--t-page-text);
+}
+
+.settings-group,
+.about-panel {
+  border: var(--t-page-panel-border);
+  border-radius: var(--t-page-panel-radius);
+  background: var(--t-page-panel-bg);
+  box-shadow: var(--t-page-panel-shadow);
+  backdrop-filter: var(--t-page-panel-blur);
+  -webkit-backdrop-filter: var(--t-page-panel-blur);
+}
+
 .settings-sidebar {
   position: sticky;
   top: 0;

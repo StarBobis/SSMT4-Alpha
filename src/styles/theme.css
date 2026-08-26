@@ -86,6 +86,24 @@
   --t-card-dark-border: 1px solid rgba(var(--crystal-rgb), 0.12);
   --t-card-dark-shadow: 0 16px 38px rgba(0, 0, 0, 0.18);
 
+  /* Shared page language — based on MarkTexture and GameBanana. */
+  --t-page-padding: 46px 18px 18px;
+  --t-page-padding-compact: 42px 10px 10px;
+  --t-page-gap: 12px;
+  --t-page-panel-radius: 12px;
+  --t-page-section-radius: 8px;
+  --t-page-panel-bg:
+    linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)),
+    rgba(255, 255, 255, 0.035);
+  --t-page-panel-border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
+  --t-page-panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
+  --t-page-panel-blur: blur(16px);
+  --t-page-text: rgba(var(--theme-text-primary-rgb), 0.90);
+  --t-page-text-muted: rgba(var(--theme-text-secondary-rgb), 0.65);
+  --t-page-control-bg: rgba(255, 255, 255, 0.055);
+  --t-page-control-hover-bg: rgba(var(--theme-surface-tint-rgb), 0.16);
+  --t-page-control-border: 1px solid rgba(255, 255, 255, 0.13);
+
   /* Semantic backgrounds */
   --t-danger-bg: rgba(var(--theme-danger-rgb), 0.08);
   --t-danger-border: rgba(var(--theme-danger-rgb), 0.18);

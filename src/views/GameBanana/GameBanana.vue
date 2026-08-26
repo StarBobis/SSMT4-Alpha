@@ -2627,20 +2627,20 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--t-page-gap);
   overflow: hidden;
-  padding: 46px 18px 18px;
-  color: rgba(var(--theme-text-primary-rgb), 0.9);
+  padding: var(--t-page-padding);
+  color: var(--t-page-text);
 }
 
 .gb-history-nav { position:absolute; top:8px; right:24px; left:24px; z-index:2; display:flex; align-items:center; gap:6px; min-width:0; }.gb-history-trail { display:flex; flex:1 1 auto; align-items:center; min-width:0; height:32px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; border:1px solid rgba(255,255,255,.1); border-radius:7px; background:rgba(15,18,31,.32); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }.gb-history-trail::-webkit-scrollbar { display:none; }.gb-history-entry { display:block; flex:0 1 auto; max-width:220px; overflow:hidden; padding:0 8px; border:0; background:transparent; color:rgba(var(--theme-text-secondary-rgb),.72); font:inherit; font-size:11px; line-height:30px; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }.gb-history-entry:hover { color:rgba(var(--theme-text-primary-rgb),.96); }.gb-history-entry.is-current { color:rgba(var(--theme-surface-tint-rgb),.96); font-weight:700; }.gb-history-separator { flex:0 0 auto; color:rgba(var(--theme-text-secondary-rgb),.38); font-size:12px; }.gb-history-button { display:grid; flex:0 0 auto; width:32px; height:32px; place-items:center; padding:0; border:1px solid rgba(255,255,255,.13); border-radius:7px; background:rgba(15,18,31,.42); color:rgba(var(--theme-text-primary-rgb),.88); cursor:pointer; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }.gb-history-button:hover:not(:disabled) { border-color:rgba(var(--theme-surface-tint-rgb),.42); background:rgba(var(--theme-surface-tint-rgb),.18); }.gb-history-button:disabled { opacity:.4; cursor:default; }.gb-history-button svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2; }
 
 .glass-panel {
-  background: linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)), rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--t-page-panel-bg);
+  border: var(--t-page-panel-border);
+  box-shadow: var(--t-page-panel-shadow);
+  backdrop-filter: var(--t-page-panel-blur);
+  -webkit-backdrop-filter: var(--t-page-panel-blur);
 }
 
 .gb-controls,
@@ -2789,7 +2789,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.gb-panel { border-radius: 12px; overflow: hidden; }
+.gb-panel { border-radius: var(--t-page-panel-radius); overflow: hidden; }
 .gb-categories { grid-area: categories; }
 .gb-results { grid-area: results; }
 .gb-detail { grid-area: detail; }
@@ -3011,7 +3011,7 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .gamebanana-page { overflow: hidden; padding: 42px 10px 10px; }
+  .gamebanana-page { overflow: hidden; padding: var(--t-page-padding-compact); }
   .gb-history-nav { right:10px; left:10px; }
   .gb-history-entry { max-width:150px; }
   .gb-controls { align-items: end; flex-wrap: wrap; }

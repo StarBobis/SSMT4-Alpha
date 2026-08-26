@@ -6536,13 +6536,9 @@ const {
 .mod-manager .key-floater,
 .mod-manager .custom-context-menu,
 .mod-manager .inline-progress {
-    background:
-        linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.065), rgba(var(--theme-surface-tint-rgb), 0.022)),
-        rgba(255, 255, 255, 0.032);
-    border-color: rgba(var(--theme-surface-tint-rgb), 0.14);
-    box-shadow:
-        0 14px 36px rgba(0, 0, 0, 0.18),
-        0 0 0 1px rgba(var(--theme-surface-tint-rgb), 0.035) inset;
+    background: var(--t-page-panel-bg);
+    border-color: rgba(var(--theme-surface-tint-rgb), 0.12);
+    box-shadow: var(--t-page-panel-shadow);
 }
 .tb-select.el-select {
     width: 110px;

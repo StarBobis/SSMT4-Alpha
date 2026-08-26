@@ -14,12 +14,12 @@
      Visual-only — no padding/border-radius so components
      with their own scoped .glass-panel can layer without bleed.  */
 .glass-panel {
-  background: var(--glass-bg-subtle);
-  border: var(--glass-border-subtle);
-  box-shadow: var(--glass-shadow-section);
+  background: var(--t-page-panel-bg);
+  border: var(--t-page-panel-border);
+  box-shadow: var(--t-page-panel-shadow);
   position: relative;
-  backdrop-filter: var(--glass-blur-minimal);
-  -webkit-backdrop-filter: var(--glass-blur-minimal);
+  backdrop-filter: var(--t-page-panel-blur);
+  -webkit-backdrop-filter: var(--t-page-panel-blur);
 }
 
 .glass-panel::before {
@@ -35,7 +35,7 @@
 
 /* ── Panel with standard padding & radius ── */
 .glass-panel--padded {
-  border-radius: var(--radius-panel);
+  border-radius: var(--t-page-panel-radius);
   padding: var(--space-panel);
 }
 .glass-panel--padded::before {

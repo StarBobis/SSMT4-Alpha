@@ -746,7 +746,8 @@ const spawnLoveExplosion = (e: MouseEvent) => {
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 32px 28px;
+    padding: var(--t-page-padding);
+    color: var(--t-page-text);
     background: transparent;
     overflow-y: auto;
     overflow-x: hidden;
@@ -762,9 +763,10 @@ const spawnLoveExplosion = (e: MouseEvent) => {
 }
 
 .game-library-context-menu {
-  background: #1e1e2e;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: var(--t-page-panel-bg);
+  border: var(--t-page-panel-border);
+  box-shadow: var(--t-page-panel-shadow);
+  backdrop-filter: var(--t-page-panel-blur);
 }
 
 .menu-item {
@@ -890,9 +892,10 @@ const spawnLoveExplosion = (e: MouseEvent) => {
 }
 
 :global(.game-library-dialog) {
-    background: #111827;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    background: var(--t-page-panel-bg);
+    border: var(--t-page-panel-border);
+    box-shadow: var(--t-page-panel-shadow);
+    backdrop-filter: var(--t-page-panel-blur);
 }
 
 :global(.game-library-select-popper.el-popper) {
