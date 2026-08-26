@@ -259,6 +259,7 @@
     "selectGame": "快捷切换游戏",
     "switchToGameLibrary": "切换到游戏库",
     "settings": "设置",
+    "hidePage": "隐藏此页面",
     "pinWindow": "点击开启窗口置顶 · Alt + F 快速唤起 SSMT",
     "unpinWindow": "点击取消窗口置顶 · Alt + F 快速唤起 SSMT",
     "nav": {

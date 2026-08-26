@@ -83,6 +83,17 @@ const STORAGE_KEY_NAV_ORDER = 'ssmt4_nav_order';
 // We rely on stable IDs
 interface NavItem { id: string; path: string; labelKey: string; iconType: string; label?: string }
 
+const visibilityKeyByNavId: Partial<Record<string, keyof typeof appSettings.pageVisibility>> = {
+    work: 'work',
+    'mark-texture-full': 'markTexture',
+    'texture-mod-maker': 'textureModMaker',
+    mods: 'mods',
+    gamebanana: 'gameBanana',
+    nexusmods: 'nexusMods',
+    xianzun: 'xianzun',
+    'ui-builder': 'uiBuilder',
+};
+
 const allNavItems = ref<NavItem[]>([
     { id: 'home', path: '/', labelKey: 'titlebar.nav.home', iconType: 'home' },
     { id: 'work', path: '/work', labelKey: 'titlebar.nav.work', iconType: 'work' },
@@ -154,16 +165,6 @@ const displayItems = computed(() => {
         }
     });
     
-    const visibilityKeyByNavId: Partial<Record<string, keyof typeof appSettings.pageVisibility>> = {
-        work: 'work',
-        'mark-texture-full': 'markTexture',
-        'texture-mod-maker': 'textureModMaker',
-        mods: 'mods',
-        gamebanana: 'gameBanana',
-        nexusmods: 'nexusMods',
-        xianzun: 'xianzun',
-        'ui-builder': 'uiBuilder',
-    };
     return result.filter(item => {
         const key = visibilityKeyByNavId[item.id];
         return !key || appSettings.pageVisibility[key];
@@ -172,11 +173,37 @@ const displayItems = computed(() => {
 
 const navControlsElement = ref<HTMLElement | null>(null);
 const isNavOverflowing = ref(false);
+const canScrollNavLeft = ref(false);
+const canScrollNavRight = ref(false);
+const navContextMenu = reactive({ visible: false, x: 0, y: 0, item: null as NavItem | null });
 let navOverflowObserver: ResizeObserver | null = null;
 
 const updateNavOverflow = () => {
     const element = navControlsElement.value;
     isNavOverflowing.value = !!element && element.scrollWidth > element.clientWidth + 1;
+    canScrollNavLeft.value = !!element && element.scrollLeft > 1;
+    canScrollNavRight.value = !!element && element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+};
+
+const onNavWheel = (event: WheelEvent) => {
+    const element = navControlsElement.value;
+    if (!element || element.scrollWidth <= element.clientWidth + 1) return;
+    event.preventDefault();
+    element.scrollLeft += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    updateNavOverflow();
+};
+
+const closeNavContextMenu = () => {
+    navContextMenu.visible = false;
+    navContextMenu.item = null;
+};
+
+const openNavContextMenu = (event: MouseEvent, item: NavItem) => {
+    if (!visibilityKeyByNavId[item.id]) return;
+    navContextMenu.item = item;
+    navContextMenu.x = Math.min(event.clientX, window.innerWidth - 170);
+    navContextMenu.y = Math.min(event.clientY, window.innerHeight - 48);
+    navContextMenu.visible = true;
 };
 
 watch(displayItems, () => {
@@ -267,6 +294,7 @@ onMounted(async () => {
     if (navControlsElement.value) {
         navOverflowObserver.observe(navControlsElement.value);
     }
+    document.addEventListener('pointerdown', closeNavContextMenu);
     // Listen to resize event to update maximized state icon
     unlistenResize = await appWindow.onResized(() => {
         checkMaximized();
@@ -292,6 +320,7 @@ onUnmounted(() => {
     navOverflowObserver?.disconnect();
     navOverflowObserver = null;
     resetNavDrag();
+    document.removeEventListener('pointerdown', closeNavContextMenu);
 });
 
 const minimize = () => appWindow.minimize();
@@ -342,6 +371,14 @@ const navTo = (path: string) => {
     router.push(path);
 };
 
+const hideNavItem = async (item: NavItem) => {
+    const key = visibilityKeyByNavId[item.id];
+    if (!key) return;
+    appSettings.pageVisibility[key] = false;
+    closeNavContextMenu();
+    await AppStateManager.saveSettingsNow();
+};
+
 const togglePin = async () => {
     const newVal = !isPinned.value;
     isPinned.value = newVal;
@@ -353,7 +390,7 @@ const togglePin = async () => {
 
 <template>
   <div class="titlebar">
-    <div ref="navControlsElement" class="nav-controls" :class="{ 'is-overflowing': isNavOverflowing }">
+    <div ref="navControlsElement" class="nav-controls" :class="{ 'is-overflowing': isNavOverflowing, 'can-scroll-left': canScrollNavLeft, 'can-scroll-right': canScrollNavRight }" @wheel="onNavWheel" @scroll="updateNavOverflow">
         <transition-group name="nav-list" tag="div" class="nav-list">
           <div
             v-for="item in displayItems"
@@ -371,6 +408,7 @@ const togglePin = async () => {
                 :data-nav-id="item.id"
                 @click="navTo(item.path)"
                 @mousedown.prevent="onNavMouseDown($event, item)"
+                @contextmenu.prevent.stop="openNavContextMenu($event, item)"
             >
                 <!-- Icons -->
                 <svg v-if="item.id === 'home'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
@@ -403,6 +441,17 @@ const togglePin = async () => {
           </div>
         </transition-group>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="navContextMenu.visible && navContextMenu.item"
+        class="titlebar-nav-context-menu"
+        :style="{ left: `${navContextMenu.x}px`, top: `${navContextMenu.y}px` }"
+        @pointerdown.stop
+      >
+        <button type="button" @click="hideNavItem(navContextMenu.item)">{{ t('titlebar.hidePage') }}</button>
+      </div>
+    </Teleport>
 
     <div class="drag-region" @mousedown="startDrag">
       <div class="title-content">
@@ -440,6 +489,7 @@ const togglePin = async () => {
           </el-option>
         </el-select>
       </div>
+      <div class="titlebar-drag-handle" data-tauri-drag-region @mousedown="startDrag"></div>
       <!-- Pin/Always-on-Top Toggle Button -->
     <el-tooltip :content="isPinned ? t('titlebar.unpinWindow') : t('titlebar.pinWindow')" placement="bottom" :show-after="250">
     <div class="control-button pin-button" :class="{ active: isPinned }" @click="togglePin">
@@ -526,16 +576,50 @@ const togglePin = async () => {
     z-index: 10001; /* Above drag region */
 }
 
-.nav-controls.is-overflowing::after {
-    content: '';
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    width: 44px;
-    height: 100%;
-    pointer-events: none;
-    background: linear-gradient(90deg, rgba(14, 12, 9, 0), rgba(14, 12, 9, 0.90));
+.nav-controls.can-scroll-right:not(.can-scroll-left) {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent 100%);
+}
+
+.nav-controls.can-scroll-left:not(.can-scroll-right) {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 100%);
+}
+
+.nav-controls.can-scroll-left.can-scroll-right {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
+}
+
+.titlebar-nav-context-menu {
+    position: fixed;
+    z-index: 20000;
+    min-width: 154px;
+    padding: 4px;
+    border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+    border-radius: 8px;
+    background: rgba(18, 17, 15, 0.97);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(16px);
+}
+
+.titlebar-nav-context-menu button {
+    width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 5px;
+    color: rgba(var(--theme-text-primary-rgb), 0.82);
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.titlebar-nav-context-menu button:hover {
+    color: rgba(var(--theme-text-primary-rgb), 0.98);
+    background: rgba(var(--theme-surface-tint-rgb), 0.10);
 }
 
 .nav-list {
@@ -558,7 +642,7 @@ const togglePin = async () => {
 .nav-button {
     display: flex;
     align-items: center;
-    padding: 0 10px;
+    padding: 0 8px;
     height: 26px;
     cursor: auto; /* It is clickable, but we set to auto to avoid global pointer. Actual clickable is fine. */
     cursor: pointer;
@@ -643,11 +727,36 @@ const togglePin = async () => {
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 7px 0 5px;
+  padding: 0 5px;
 }
 
 .titlebar-game-select {
-  width: 152px;
+  width: 144px;
+}
+
+.titlebar-drag-handle {
+  width: 72px;
+  min-width: 72px;
+  height: 100%;
+  cursor: default;
+  position: relative;
+}
+
+.titlebar-drag-handle::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 1px;
+  border-radius: 999px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.10);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.titlebar-drag-handle:hover::after {
+  opacity: 1;
 }
 
 .titlebar-game-select :deep(.el-select__wrapper) {
@@ -734,7 +843,7 @@ const togglePin = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 46px;
+  width: 40px;
   height: 100%;
   cursor: default;
   transition: background-color 0.1s;
