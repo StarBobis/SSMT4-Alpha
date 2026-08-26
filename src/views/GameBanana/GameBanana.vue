@@ -3005,9 +3005,14 @@ onBeforeUnmount(() => {
 :global(.gamebanana-select-popper .el-select-dropdown__empty) { color: rgba(255,255,255,.52); }
 
 @media (max-width: 1120px) {
-  .gb-layout { grid-template-areas: "categories results" "detail detail"; grid-template-columns: minmax(145px, .7fr) minmax(330px, 1.45fr); overflow: auto; }
+  .gb-layout {
+    grid-template-areas: "categories results" "detail detail";
+    grid-template-columns: minmax(145px, .7fr) minmax(330px, 1.45fr);
+    grid-template-rows: minmax(240px, 1fr) minmax(320px, 1fr);
+    overflow: auto;
+  }
   .gb-column-resizer { display: none; }
-  .gb-detail { min-height: 390px; }
+  .gb-detail { min-height: 0; }
 }
 
 @media (max-width: 720px) {
