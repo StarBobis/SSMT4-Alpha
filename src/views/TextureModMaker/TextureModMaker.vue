@@ -8,6 +8,7 @@ import { exists, readDir, readFile } from '@tauri-apps/plugin-fs';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { PathHelper } from '../../helper/PathHelper';
+import { AppStateManager } from '../../store/AppStateManager';
 import { Close } from '@element-plus/icons-vue';
 
 type TextureEntry = { hash: string; fileName: string; path: string; width: number; height: number; format: string };
@@ -370,6 +371,7 @@ const generate = async () => {
       gpuWorkers: gpuWorkers.value,
       bc7Quality: bc7Quality.value,
       texconvBatchSize: texconvBatchSize.value,
+      logLanguage: AppStateManager.appSettings.modelExtractionLogLanguage,
       overwrite,
     }});
     ElMessage.success(t('textureModMaker.generated'));

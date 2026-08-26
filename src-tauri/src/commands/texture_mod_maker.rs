@@ -147,14 +147,56 @@ struct TextureGenerationLog {
     started: Instant,
 }
 
+#[derive(Clone, Copy)]
+enum TextureLogLanguage {
+    Chinese,
+    English,
+}
+
+impl TextureLogLanguage {
+    fn from_input(value: Option<&str>) -> Self {
+        if value == Some("en") {
+            Self::English
+        } else {
+            Self::Chinese
+        }
+    }
+
+    fn pick<'a>(self, chinese: &'a str, english: &'a str) -> &'a str {
+        match self {
+            Self::Chinese => chinese,
+            Self::English => english,
+        }
+    }
+
+    fn is_chinese(self) -> bool {
+        matches!(self, Self::Chinese)
+    }
+}
+
 impl TextureGenerationLog {
-    fn create(app: &AppHandle) -> Result<(Self, PathBuf), String> {
-        let folder = app
-            .path()
-            .app_local_data_dir()
-            .map_err(|e| e.to_string())?
-            .join("Logs")
-            .join("TextureModMaker");
+    fn create(app: &AppHandle, target_path: &str) -> Result<(Self, PathBuf), String> {
+        // FrameAnalysis lives below <cache-root>/3Dmigoto/<game>/.... Model
+        // extraction logs live in <cache-root>/Logs, so keep author-tool logs
+        // alongside them instead of hiding them in the application data tree.
+        let target = Path::new(target_path.trim());
+        let cache_log_folder = target
+            .ancestors()
+            .find(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("3Dmigoto"))
+            })
+            .and_then(Path::parent)
+            .map(|cache_root| cache_root.join("Logs").join("TextureModMaker"));
+        let folder = match cache_log_folder {
+            Some(folder) => folder,
+            None => app
+                .path()
+                .app_local_data_dir()
+                .map_err(|e| e.to_string())?
+                .join("Logs")
+                .join("TextureModMaker"),
+        };
         fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         let stamp = chrono::Local::now().format("%Y%m%dT%H%M%S%.3f");
         let path = folder.join(format!("{stamp}-texture-mod.log"));
@@ -245,6 +287,8 @@ pub struct TextureModRequest {
     bc7_quality: String,
     #[serde(default = "default_texconv_batch_size")]
     texconv_batch_size: u16,
+    #[serde(default)]
+    log_language: Option<String>,
     #[serde(default)]
     overwrite: bool,
 }
@@ -857,6 +901,7 @@ pub async fn list_texture_mod_sequence(
         gpu_workers: 1,
         bc7_quality: "quick".into(),
         texconv_batch_size: 16,
+        log_language: None,
         overwrite: false,
     };
     Ok(collect_sequence(&request)?
@@ -893,22 +938,39 @@ pub async fn generate_texture_mod(
 ) -> Result<String, String> {
     GENERATION_CANCELLED.store(false, Ordering::Relaxed);
     set_generation_progress("preparing", 0, 0, "");
-    let (generation_log, log_path) = TextureGenerationLog::create(&app)?;
+    let log_language = TextureLogLanguage::from_input(request.log_language.as_deref());
+    let (generation_log, log_path) = TextureGenerationLog::create(&app, &request.target_path)?;
     set_generation_log_path(&log_path);
-    generation_log.write("INFO", "SSMT4 texture mod generation started");
     generation_log.write(
         "INFO",
-        format!("Target: {} ({})", request.texture_hash, request.target_path),
+        log_language.pick(
+            "SSMT4 贴图 Mod 生成开始",
+            "SSMT4 texture mod generation started",
+        ),
     );
     generation_log.write(
         "INFO",
         format!(
-            "Source: {} ({})",
+            "{}: {} ({})",
+            log_language.pick("目标贴图", "Target"),
+            request.texture_hash,
+            request.target_path
+        ),
+    );
+    generation_log.write(
+        "INFO",
+        format!(
+            "{}: {} ({})",
+            log_language.pick("源媒体", "Source"),
             request.source_kind,
             request.source_path.as_deref().unwrap_or("sequence")
         ),
     );
-    generation_log.write("INFO", format!("Settings: fit={}, rotation={}°, flip_h={}, flip_v={}, size={}%, CPU threads={}, GPU jobs={}, BC7 quality={}, texconv batch={}", request.fit_mode, request.rotation, request.flip_horizontal, request.flip_vertical, request.size_percent, request.cpu_threads, request.gpu_workers, request.bc7_quality, request.texconv_batch_size));
+    generation_log.write("INFO", if log_language.is_chinese() {
+        format!("设置: 布局={}, 旋转={}°, 左右翻转={}, 上下翻转={}, 尺寸={}%, CPU线程预算={}, GPU编码进程={}, BC7质量={}, texconv批量={}", request.fit_mode, request.rotation, request.flip_horizontal, request.flip_vertical, request.size_percent, request.cpu_threads, request.gpu_workers, request.bc7_quality, request.texconv_batch_size)
+    } else {
+        format!("Settings: fit={}, rotation={}°, flip_h={}, flip_v={}, size={}%, CPU threads={}, GPU jobs={}, BC7 quality={}, texconv batch={}", request.fit_mode, request.rotation, request.flip_horizontal, request.flip_vertical, request.size_percent, request.cpu_threads, request.gpu_workers, request.bc7_quality, request.texconv_batch_size)
+    });
     let target = PathBuf::from(request.target_path.trim());
     let (base_width, base_height) =
         dds_size(&target).ok_or("The selected target is not a valid DDS texture")?;
@@ -939,14 +1001,22 @@ pub async fn generate_texture_mod(
         generation_log.write(
             "WARN",
             format!(
-                "Clearing existing output folder: {}",
+                "{}: {}",
+                log_language.pick("正在清理已有输出目录", "Clearing existing output folder"),
                 resolved_output.display()
             ),
         );
         fs::remove_dir_all(&resolved_output).map_err(|e| e.to_string())?;
     }
     fs::create_dir_all(&output).map_err(|e| e.to_string())?;
-    generation_log.write("INFO", format!("Output folder: {}", output.display()));
+    generation_log.write(
+        "INFO",
+        format!(
+            "{}: {}",
+            log_language.pick("输出目录", "Output folder"),
+            output.display()
+        ),
+    );
     let temp = app
         .path()
         .app_cache_dir()
@@ -993,7 +1063,11 @@ pub async fn generate_texture_mod(
                     / request.frame_step.max(1) as f64)
                     .ceil() as usize;
                 set_generation_progress("extracting", 0, expected, "");
-                generation_log.write("INFO", format!("FFmpeg extraction started: expected {expected} frames, range {start}-{end}, step {}", request.frame_step.max(1)));
+                generation_log.write("INFO", if log_language.is_chinese() {
+                    format!("FFmpeg 抽帧开始: 预计 {expected} 帧，范围 {start}-{end}，步长 {}", request.frame_step.max(1))
+                } else {
+                    format!("FFmpeg extraction started: expected {expected} frames, range {start}-{end}, step {}", request.frame_step.max(1))
+                });
                 run_generation_tool(&ffmpeg, &args)?;
                 let mut paths: Vec<_> = fs::read_dir(&temp)
                     .map_err(|e| e.to_string())?
@@ -1004,7 +1078,11 @@ pub async fn generate_texture_mod(
                 paths.sort();
                 generation_log.write(
                     "INFO",
-                    format!("FFmpeg extraction completed: {} frames", paths.len()),
+                    if log_language.is_chinese() {
+                        format!("FFmpeg 抽帧完成: {} 帧", paths.len())
+                    } else {
+                        format!("FFmpeg extraction completed: {} frames", paths.len())
+                    },
                 );
                 paths
             }
@@ -1025,8 +1103,10 @@ pub async fn generate_texture_mod(
         generation_log.write(
             "INFO",
             format!(
-                "Frame transformation started: {} source frames",
-                sources.len()
+                "{}: {} {}",
+                log_language.pick("帧变换开始", "Frame transformation started"),
+                sources.len(),
+                log_language.pick("个源帧", "source frames")
             ),
         );
         let first_source = sources.first().ok_or("No source frames matched")?;
@@ -1050,11 +1130,18 @@ pub async fn generate_texture_mod(
         );
         generation_log.write(
             "INFO",
-            format!("Output dimensions: {width}x{height}; target format: {target_format}"),
+            if log_language.is_chinese() {
+                format!("输出尺寸: {width}x{height}；目标格式: {target_format}")
+            } else {
+                format!("Output dimensions: {width}x{height}; target format: {target_format}")
+            },
         );
         generation_log.write(
             "INFO",
-            "Encoder backend: texconv DirectCompute GPU batches; transformed frames use temporary BMP files",
+            log_language.pick(
+                "编码后端: texconv DirectCompute GPU 批处理；变换帧使用临时 BMP 文件",
+                "Encoder backend: texconv DirectCompute GPU batches; transformed frames use temporary BMP files",
+            ),
         );
         let encode_frames = |frames: &[PreparedFrame]| -> Result<(), String> {
             if frames.is_empty() {
@@ -1087,7 +1174,11 @@ pub async fn generate_texture_mod(
             );
             generation_log.write(
                 "INFO",
-                format!("DirectXTex batch started: {} frames", frames.len()),
+                if log_language.is_chinese() {
+                    format!("DirectXTex 批次开始: {} 帧", frames.len())
+                } else {
+                    format!("DirectXTex batch started: {} frames", frames.len())
+                },
             );
             let batch_started = Instant::now();
             run_generation_tool(
@@ -1097,8 +1188,10 @@ pub async fn generate_texture_mod(
             generation_log.write(
                 "INFO",
                 format!(
-                    "DirectXTex batch completed: {} frames in {:.3}s",
+                    "{}: {} {}，{:.3}s",
+                    log_language.pick("DirectXTex 批次完成", "DirectXTex batch completed"),
                     frames.len(),
+                    log_language.pick("帧，耗时", "frames in"),
                     batch_started.elapsed().as_secs_f64()
                 ),
             );
@@ -1130,7 +1223,20 @@ pub async fn generate_texture_mod(
         generation_log.write(
             "INFO",
             format!(
-                "Pipeline CPU budget: {cpu_budget} threads; transform workers={transform_threads}, texconv reserve={encoder_reserve}; GPU processes={gpu_workers}; warm-up batch={warmup_batch_size}, regular batch={encode_batch_size}"
+                "{}: CPU {}={}，{}={}，texconv {}={}；GPU {}={}；{}={}，{}={} ",
+                log_language.pick("流水线资源分配", "Pipeline resources"),
+                log_language.pick("线程预算", "budget"),
+                cpu_budget,
+                log_language.pick("变换线程", "transform workers"),
+                transform_threads,
+                log_language.pick("预留线程", "reserve"),
+                encoder_reserve,
+                log_language.pick("进程", "processes"),
+                gpu_workers,
+                log_language.pick("预热批量", "warm-up batch"),
+                warmup_batch_size,
+                log_language.pick("常规批量", "regular batch"),
+                encode_batch_size
             ),
         );
         let (work_tx, work_rx) = mpsc::sync_channel::<Vec<PreparedFrame>>(gpu_workers);
@@ -1258,7 +1364,11 @@ pub async fn generate_texture_mod(
                     let frames: Vec<_> = pending_encode.drain(..next_batch_size).collect();
                     generation_log.write(
                         "INFO",
-                        format!("Queued {} {} frames for DirectXTex immediately after frame {}/{} completed", frames.len(), if batches_dispatched < gpu_workers { "warm-up" } else { "regular" }, transformed.load(Ordering::Relaxed), total),
+                        if log_language.is_chinese() {
+                            format!("已向 DirectXTex 提交 {} 帧（{}批次）；变换已完成 {}/{}", frames.len(), if batches_dispatched < gpu_workers { "预热" } else { "常规" }, transformed.load(Ordering::Relaxed), total)
+                        } else {
+                            format!("Queued {} {} frames for DirectXTex immediately after frame {}/{} completed", frames.len(), if batches_dispatched < gpu_workers { "warm-up" } else { "regular" }, transformed.load(Ordering::Relaxed), total)
+                        },
                     );
                     work_tx
                         .send(frames)
@@ -1273,8 +1383,13 @@ pub async fn generate_texture_mod(
                 generation_log.write(
                     "INFO",
                     format!(
-                        "Queued final {} frames for DirectXTex",
-                        pending_encode.len()
+                        "{}: {} {}",
+                        log_language.pick(
+                            "已向 DirectXTex 提交最终批次",
+                            "Queued final batch for DirectXTex"
+                        ),
+                        pending_encode.len(),
+                        log_language.pick("帧", "frames")
                     ),
                 );
                 work_tx
@@ -1307,8 +1422,10 @@ pub async fn generate_texture_mod(
         generation_log.write(
             "INFO",
             format!(
-                "DDS verification completed: {dds_count}/{} files",
-                sources.len()
+                "{}: {dds_count}/{} {}",
+                log_language.pick("DDS 校验完成", "DDS verification completed"),
+                sources.len(),
+                log_language.pick("个文件", "files")
             ),
         );
         let animated = sources.len() > 1
@@ -1326,7 +1443,10 @@ pub async fn generate_texture_mod(
         };
         set_generation_progress("writing", sources.len(), sources.len(), "");
         fs::write(output.join("TextureMod.ini"), ini).map_err(|e| e.to_string())?;
-        generation_log.write("INFO", "TextureMod.ini written");
+        generation_log.write(
+            "INFO",
+            log_language.pick("TextureMod.ini 写入完成", "TextureMod.ini written"),
+        );
         Ok(())
     })();
     let _ = fs::remove_dir_all(&temp);
@@ -1334,11 +1454,18 @@ pub async fn generate_texture_mod(
         let _ = fs::remove_dir_all(&output);
     }
     if let Err(error) = result {
-        generation_log.write("ERROR", format!("Generation failed: {error}"));
+        generation_log.write(
+            "ERROR",
+            format!(
+                "{}: {error}",
+                log_language.pick("生成失败", "Generation failed")
+            ),
+        );
         generation_log.write(
             "INFO",
             format!(
-                "Total elapsed: {:.3}s",
+                "{}: {:.3}s",
+                log_language.pick("总耗时", "Total elapsed"),
                 generation_log.started.elapsed().as_secs_f64()
             ),
         );
@@ -1352,12 +1479,17 @@ pub async fn generate_texture_mod(
     }
     generation_log.write(
         "INFO",
-        format!("Generation completed successfully: {}", output.display()),
+        format!(
+            "{}: {}",
+            log_language.pick("生成成功完成", "Generation completed successfully"),
+            output.display()
+        ),
     );
     generation_log.write(
         "INFO",
         format!(
-            "Total elapsed: {:.3}s",
+            "{}: {:.3}s",
+            log_language.pick("总耗时", "Total elapsed"),
             generation_log.started.elapsed().as_secs_f64()
         ),
     );
