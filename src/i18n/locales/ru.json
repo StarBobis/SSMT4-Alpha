@@ -130,6 +130,7 @@
       "noDllVersionInstalled": "Установленная версия не записана",
       "availableDllVersions": "Доступные версии",
       "availableDllVersionsHint": "Список загружается из GitHub Releases. Любую версию из списка можно установить напрямую. Сначала показываются 10 самых новых версий.",
+      "identityVDllVersionCapHint": "Для пресета IdentityV d3d11.dll ограничен версией v{maxVersion}. Более новые версии могут вызывать проблемы, поэтому версии выше v{maxVersion} не предлагаются к загрузке.",
       "packageSource": "Источник 3Dmigoto Package",
       "packageSourceHint": "Автоматически используется репозиторий Package, соответствующий текущей предустановке игры. Можно напрямую установить любую доступную версию.",
       "noPackagePresetSelected": "Предустановка игры не выбрана",
@@ -239,6 +240,7 @@
       "loadingDllVersions": "Загрузка списка версий d3d11.dll...",
       "dllVersionListLoadFailed": "Не удалось загрузить список версий: {error}",
       "noDllVersionsAvailable": "Устанавливаемые версии d3d11.dll не найдены.",
+      "identityVDllVersionBlocked": "d3d11.dll v{version} не может быть установлен для пресета IdentityV. Этот пресет поддерживает максимум v{maxVersion}; более новые версии могут вызывать проблемы, поэтому загрузка заблокирована.",
       "loadingPackageVersions": "Загрузка списка версий 3Dmigoto Package...",
       "packageVersionListLoadFailed": "Не удалось загрузить список версий Package: {error}",
       "noPackageVersionsAvailable": "Устанавливаемые версии 3Dmigoto Package не найдены."
@@ -1595,6 +1597,7 @@
       "releaseDownloadUrlMissing": "URL для скачивания выбранного ресурса не найден",
       "cannotUpdateBecauseInstallDirMissing": "Невозможно обновить: installDir пуст, а резервная папка кэша недоступна.",
       "downloadFailedWithStatusAndBody": "Ошибка загрузки: {status} {body}",
+      "d3d11VersionCapExceeded": "d3d11.dll v{version} превышает максимальную версию v{maxVersion}, разрешённую для пресета IdentityV; более новые версии могут вызывать проблемы, поэтому загрузка заблокирована.",
       "requiredUpdateFileMissing": "В пакете обновления отсутствует необходимый файл: {fileName}"
     }
   }

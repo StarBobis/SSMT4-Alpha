@@ -111,6 +111,18 @@ const isIdentityVSupportedDevD3d11Version = (version: string): boolean => {
     return true;
 };
 
+const getIdentityVDevD3d11MaxVersion = (): string => (
+    `v${IDENTITY_V_MAX_DEV_D3D11_VERSION.join('.')}`
+);
+
+const isIdentityVDevD3d11Mode = (mode: D3d11Mode, gamePreset?: string | null): boolean => (
+    mode === 'dev' && isIdentityVPreset(gamePreset)
+);
+
+const isD3d11VersionAllowedForMode = (version: string, mode: D3d11Mode, gamePreset?: string | null): boolean => (
+    !isIdentityVDevD3d11Mode(mode, gamePreset) || isIdentityVSupportedDevD3d11Version(version)
+);
+
 const constrainD3d11ReleasesForGame = (
     releases: UpdateInfo[],
     mode: D3d11Mode,
@@ -908,7 +920,13 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         return installD3d11Update('dev', downloadUrl);
     }
 
-    async function installD3d11Update(mode: D3d11Mode, downloadUrl: string, gamePreset?: string): Promise<void> {
+    async function installD3d11Update(mode: D3d11Mode, downloadUrl: string, gamePreset?: string, version?: string): Promise<void> {
+        if (version && isIdentityVDevD3d11Mode(mode, gamePreset) && !isIdentityVSupportedDevD3d11Version(version)) {
+            throw new Error(t('resourceManager.messages.d3d11VersionCapExceeded', {
+                version,
+                maxVersion: getIdentityVDevD3d11MaxVersion(),
+            }));
+        }
         const resourcesDir = await GlobalConfig.SSMTResourcesFolder();
         await SSMTFileUtils.CreateFolderIfNotExists(resourcesDir);
 
@@ -1131,6 +1149,10 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         resolveD3d11SourcePathByMode,
         resolveBootDllSource,
         resolveMigotoDllSource,
+        // IdentityV d3d11.dll version cap helpers
+        isIdentityVDevD3d11Mode,
+        getIdentityVDevD3d11MaxVersion,
+        isD3d11VersionAllowedForMode,
         // Global config
         CopyGamesToGlobalConfig,
         Copy3DmigotoDllFiles,
@@ -1182,6 +1204,9 @@ export const ResourceManager = new Proxy({} as Record<string, unknown>, {
     getEffectiveD3d11Mode: (config?: Pick<GameConfig, 'd3d11Mode' | 'gamePreset'> | null) => D3d11Mode;
     getGameD3d11Mode: (gameName: string) => Promise<D3d11Mode>;
     resolveD3d11SourcePathByMode: (mode: D3d11Mode, gamePreset?: string | null) => Promise<string>;
+    isIdentityVDevD3d11Mode: (mode: D3d11Mode, gamePreset?: string | null) => boolean;
+    getIdentityVDevD3d11MaxVersion: () => string;
+    isD3d11VersionAllowedForMode: (version: string, mode: D3d11Mode, gamePreset?: string | null) => boolean;
     CopyGamesToGlobalConfig: (includeMihoyoGames?: boolean) => Promise<string>;
     resolveBootDllSource: (gamePreset?: string | null) => Promise<{ sourcePath: string; targetFileName: string; label: string }>;
     resolveMigotoDllSource: (config?: Pick<GameConfig, 'd3d11Mode' | 'gamePreset'> | null) => Promise<{ sourcePath: string; targetFileName: string; label: string; mode: D3d11Mode }>;
@@ -1196,7 +1221,7 @@ export const ResourceManager = new Proxy({} as Record<string, unknown>, {
     getD3d11ReleaseList: (mode: D3d11Mode, githubToken?: string, includePrerelease?: boolean, gamePreset?: string) => Promise<UpdateInfo[]>;
     install3DMigotoUpdate: (gameName: string, downloadUrl: string, cacheDir?: string, installDir?: string) => Promise<void>;
     installXXMILibsUpdate: (downloadUrl: string) => Promise<void>;
-    installD3d11Update: (mode: D3d11Mode, downloadUrl: string, gamePreset?: string) => Promise<void>;
+    installD3d11Update: (mode: D3d11Mode, downloadUrl: string, gamePreset?: string, version?: string) => Promise<void>;
     scanGames: () => Promise<GameInfo[]>;
     setGameVisibility: (gameName: string, visible: boolean) => Promise<void>;
     extensionFromUrl: (url: string, fallback: string) => string;

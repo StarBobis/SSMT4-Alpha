@@ -138,6 +138,7 @@
       "noDllVersionInstalled": "No installed version is recorded",
       "availableDllVersions": "Available Version List",
       "availableDllVersionsHint": "Fetched from GitHub Releases. You can install any listed version directly. The newest 10 versions are shown first.",
+      "identityVDllVersionCapHint": "With the IdentityV preset, d3d11.dll is capped at v{maxVersion}. Newer versions can cause problems, so versions above v{maxVersion} are not offered for download.",
       "packageSource": "3Dmigoto Package Source",
       "packageSourceHint": "Automatically uses the Package repository for the current game preset. Any available version can be installed directly.",
       "noPackagePresetSelected": "No game preset selected",
@@ -248,6 +249,7 @@
       "loadingDllVersions": "Loading the d3d11.dll version list...",
       "dllVersionListLoadFailed": "Failed to load the version list: {error}",
       "noDllVersionsAvailable": "No installable d3d11.dll versions were found.",
+      "identityVDllVersionBlocked": "d3d11.dll v{version} cannot be installed for the IdentityV preset. This preset only supports up to v{maxVersion}; newer versions may cause problems, so the download is blocked.",
       "loadingPackageVersions": "Loading the 3Dmigoto Package version list...",
       "packageVersionListLoadFailed": "Failed to load the Package version list: {error}",
       "noPackageVersionsAvailable": "No installable 3Dmigoto Package versions were found."
@@ -1668,6 +1670,7 @@
       "releaseDownloadUrlMissing": "No download URL found for selected asset",
       "cannotUpdateBecauseInstallDirMissing": "Cannot update: installDir is empty and fallback cache folder is unavailable.",
       "downloadFailedWithStatusAndBody": "Download failed: {status} {body}",
+      "d3d11VersionCapExceeded": "d3d11.dll v{version} exceeds the maximum v{maxVersion} allowed for the IdentityV preset; newer versions may cause problems, so the download is blocked.",
       "requiredUpdateFileMissing": "Required file missing from update package: {fileName}"
     }
   }

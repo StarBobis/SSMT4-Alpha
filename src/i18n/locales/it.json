@@ -130,6 +130,7 @@
       "noDllVersionInstalled": "Nessuna versione installata registrata",
       "availableDllVersions": "Versioni disponibili per l’installazione",
       "availableDllVersionsHint": "Recuperate da GitHub Releases. È possibile installare direttamente qualsiasi versione elencata. Vengono mostrate per prime le 10 versioni più recenti.",
+      "identityVDllVersionCapHint": "Con il preset IdentityV, d3d11.dll è limitato a v{maxVersion}. Le versioni più recenti possono causare problemi, quindi le versioni superiori a v{maxVersion} non sono offerte per il download.",
       "packageSource": "Origine di 3Dmigoto Package",
       "packageSourceHint": "Usa automaticamente il repository Package corrispondente al preset di gioco corrente. È possibile installare direttamente qualsiasi versione disponibile.",
       "noPackagePresetSelected": "Nessun preset di gioco selezionato",
@@ -239,6 +240,7 @@
       "loadingDllVersions": "Caricamento dell’elenco versioni di d3d11.dll...",
       "dllVersionListLoadFailed": "Impossibile caricare l’elenco delle versioni: {error}",
       "noDllVersionsAvailable": "Nessuna versione installabile di d3d11.dll trovata.",
+      "identityVDllVersionBlocked": "d3d11.dll v{version} non può essere installato per il preset IdentityV. Questo preset supporta solo fino a v{maxVersion}; le versioni più recenti possono causare problemi, quindi il download è bloccato.",
       "loadingPackageVersions": "Caricamento dell’elenco versioni di 3Dmigoto Package...",
       "packageVersionListLoadFailed": "Impossibile caricare l’elenco delle versioni di Package: {error}",
       "noPackageVersionsAvailable": "Nessuna versione installabile di 3Dmigoto Package trovata."
@@ -1595,6 +1597,7 @@
       "releaseDownloadUrlMissing": "Nessun URL di download trovato per l’asset selezionato",
       "cannotUpdateBecauseInstallDirMissing": "Impossibile aggiornare: installDir è vuoto e la cartella cache alternativa non è disponibile.",
       "downloadFailedWithStatusAndBody": "Download non riuscito: {status} {body}",
+      "d3d11VersionCapExceeded": "d3d11.dll v{version} supera la versione massima v{maxVersion} consentita per il preset IdentityV; le versioni più recenti possono causare problemi, quindi il download è bloccato.",
       "requiredUpdateFileMissing": "Nel pacchetto di aggiornamento manca un file necessario: {fileName}"
     }
   }

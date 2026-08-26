@@ -130,6 +130,7 @@
       "noDllVersionInstalled": "Aucune version installée enregistrée",
       "availableDllVersions": "Versions disponibles à l’installation",
       "availableDllVersionsHint": "Récupérées depuis les GitHub Releases. Vous pouvez installer directement n’importe quelle version de la liste. Les 10 versions les plus récentes sont affichées en premier.",
+      "identityVDllVersionCapHint": "Avec le préréglage IdentityV, d3d11.dll est plafonné à v{maxVersion}. Les versions plus récentes peuvent causer des problèmes, donc les versions supérieures à v{maxVersion} ne sont pas proposées au téléchargement.",
       "packageSource": "Source de 3Dmigoto Package",
       "packageSourceHint": "Utilise automatiquement le dépôt Package correspondant au préréglage du jeu actuel. Toute version disponible peut être installée directement.",
       "noPackagePresetSelected": "Aucun préréglage de jeu sélectionné",
@@ -239,6 +240,7 @@
       "loadingDllVersions": "Chargement de la liste des versions de d3d11.dll...",
       "dllVersionListLoadFailed": "Échec du chargement de la liste des versions : {error}",
       "noDllVersionsAvailable": "Aucune version installable de d3d11.dll n’a été trouvée.",
+      "identityVDllVersionBlocked": "d3d11.dll v{version} ne peut pas être installé pour le préréglage IdentityV. Ce préréglage ne prend en charge que jusqu'à v{maxVersion} ; les versions plus récentes peuvent causer des problèmes, le téléchargement est donc bloqué.",
       "loadingPackageVersions": "Chargement de la liste des versions de 3Dmigoto Package...",
       "packageVersionListLoadFailed": "Échec du chargement de la liste des versions de Package : {error}",
       "noPackageVersionsAvailable": "Aucune version installable de 3Dmigoto Package n’a été trouvée."
@@ -1595,6 +1597,7 @@
       "releaseDownloadUrlMissing": "Aucune URL de téléchargement trouvée pour l’asset sélectionné",
       "cannotUpdateBecauseInstallDirMissing": "Impossible de mettre à jour : installDir est vide et le dossier de cache de secours est indisponible.",
       "downloadFailedWithStatusAndBody": "Échec du téléchargement : {status} {body}",
+      "d3d11VersionCapExceeded": "d3d11.dll v{version} dépasse la version maximale v{maxVersion} autorisée pour le préréglage IdentityV ; les versions plus récentes peuvent causer des problèmes, le téléchargement est donc bloqué.",
       "requiredUpdateFileMissing": "Fichier requis manquant dans le paquet de mise à jour : {fileName}"
     }
   }

@@ -102,6 +102,7 @@ const currentDllMode = computed<D3d11Mode>(() => ResourceManager.getEffectiveD3d
 const isIdentityVDevMode = (mode: D3d11Mode): boolean => (
   mode === 'dev' && (config.gamePreset || '').trim().toUpperCase() === 'IDENTITYV'
 );
+const isIdentityVDevD3d11ModeRestricted = computed(() => isIdentityVDevMode(currentDllMode.value));
 const getStoredDllVersion = (mode: D3d11Mode): string => {
   if (isIdentityVDevMode(mode)) {
     return (appSettings.coreVersionIdentityVDev || '').trim();
@@ -671,6 +672,16 @@ const installDllUpdateFromInfo = async (info: UpdateInfo, mode: D3d11Mode = curr
     ElMessage.warning(t('gameSettingsModal.messages.dllUpdatesRejected'));
     return false;
   }
+
+  if (!ResourceManager.isD3d11VersionAllowedForMode(info.version, mode, config.gamePreset)) {
+    ElMessage.warning(
+      t('gameSettingsModal.messages.identityVDllVersionBlocked', {
+        version: info.version,
+        maxVersion: ResourceManager.getIdentityVDevD3d11MaxVersion(),
+      }),
+    );
+    return false;
+  }
   isLoading.value = false;
 
   const msg = t('gameSettingsModal.messages.newDllVersionFound', { version: info.version });
@@ -693,7 +704,7 @@ const installDllUpdateFromInfo = async (info: UpdateInfo, mode: D3d11Mode = curr
 
   try {
     isLoading.value = true;
-    await ResourceManager.installD3d11Update(mode, info.download_url, config.gamePreset);
+    await ResourceManager.installD3d11Update(mode, info.download_url, config.gamePreset, info.version);
     setStoredDllVersion(mode, info);
 
     ElMessage.success(t('gameSettingsModal.messages.dllUpdateSuccess', { version: info.version }));
@@ -1503,6 +1514,20 @@ defineExpose({
                 <el-checkbox v-model="config.allowDllUpdates" @change="saveConfig">
                   {{ t('gameSettingsModal.fields.allowDllUpdatesCheckbox') }}
                 </el-checkbox>
+              </div>
+
+              <!-- IdentityV dev d3d11.dll version cap notice -->
+              <div v-if="isIdentityVDevD3d11ModeRestricted" class="dll-cap-hint">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>
+                  {{ t('gameSettingsModal.fields.identityVDllVersionCapHint', {
+                    maxVersion: ResourceManager.getIdentityVDevD3d11MaxVersion(),
+                  }) }}
+                </span>
               </div>
 
               <!-- Top info bar: source selector + current version -->
@@ -2375,6 +2400,27 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* IdentityV dev d3d11.dll version cap notice */
+.dll-cap-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: rgba(255, 186, 88, 0.09);
+  border: 1px solid rgba(255, 186, 88, 0.26);
+  color: rgba(var(--theme-text-primary-rgb), 0.86);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dll-cap-hint svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #ffb95c;
 }
 
 /* Release section */
