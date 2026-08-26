@@ -36,7 +36,8 @@ export type GamePresetTranslator = (key: string) => string
 export function getGamePresetDisplayName(value: string | null | undefined, translate?: GamePresetTranslator): string {
   const normalized = (value || '').trim()
   if (!GAME_PRESET_SET.has(normalized)) return normalized
-  return translate?.(`gameNames.${normalized}`) || GAME_PRESET_DISPLAY_NAME_EN[normalized as GamePreset]
+  const displayName = translate?.(`gameNames.${normalized}`) || GAME_PRESET_DISPLAY_NAME_EN[normalized as GamePreset]
+  return `${displayName}(${normalized})`
 }
 
 const GAME_PRESET_SET: ReadonlySet<string> = new Set(GAME_PRESET_VALUES)

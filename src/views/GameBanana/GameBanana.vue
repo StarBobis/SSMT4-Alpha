@@ -12,6 +12,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { AppStateManager } from '../../store/AppStateManager';
 import { ResourceManager } from '../../store/ResourceManager';
 import { ModManager } from '../../store/ModManager';
+import { getGamePresetDisplayName } from '../../store/GamePreset';
 import { PathHelper } from '../../helper/PathHelper';
 import { gameBananaHistory, type GameBananaHistoryEntry } from './gameBananaHistory';
 import { setGameBananaBlurMode, setGameBananaShowNsfw } from './gameBananaBlurSettings';
@@ -1960,7 +1961,7 @@ const syncGameTargetOnce = async () => {
 
   const storedKey = `gamebanana:game-id:${gameName || 'default'}`;
   const storedId = Number(localStorage.getItem(storedKey));
-  gameTargetLabel.value = gameName || t('gameBanana.noGameSelected');
+  gameTargetLabel.value = gameName ? getGamePresetDisplayName(gameName, t) : t('gameBanana.noGameSelected');
   showGameIdInput.value = true;
   gameId.value = Number.isInteger(storedId) && storedId > 0 ? storedId : null;
 
@@ -1968,7 +1969,7 @@ const syncGameTargetOnce = async () => {
     gameId.value = routeGameId;
     const preset = gamebananaPresetForGameId(routeGameId);
     gameTargetLabel.value = gameName && gameName !== 'Default'
-      ? `${gameName} · ${preset || routeGameId}`
+      ? `${getGamePresetDisplayName(gameName, t)} · ${preset ? getGamePresetDisplayName(preset, t) : routeGameId}`
       : requestedGameName.value || `${t('gameBanana.game')} · ${routeGameId}`;
     await applyTarget();
     return;
@@ -1982,7 +1983,7 @@ const syncGameTargetOnce = async () => {
       if (presetGameId) {
         gameId.value = presetGameId;
         showGameIdInput.value = false;
-        gameTargetLabel.value = `${gameName} · ${preset}`;
+        gameTargetLabel.value = `${getGamePresetDisplayName(gameName, t)} · ${getGamePresetDisplayName(preset, t)}`;
       }
     } catch (error) {
       console.warn('Unable to load the current game configuration for GameBanana:', error);

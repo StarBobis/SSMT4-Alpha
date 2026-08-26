@@ -10,6 +10,7 @@ import { AppStateManager } from '../../store/AppStateManager';
 import { ModManager } from '../../store/ModManager';
 import { ResourceManager } from '../../store/ResourceManager';
 import { setGameBananaBlurMode, setGameBananaShowNsfw } from '../GameBanana/gameBananaBlurSettings';
+import { getGamePresetDisplayName } from '../../store/GamePreset';
 
 type NexusFeed = 'latest_added' | 'latest_updated' | 'trending';
 
@@ -527,7 +528,7 @@ const listenForInstallProgress = async () => {
 
 const syncGameTarget = async () => {
   const gameName = currentGameName.value;
-  gameTargetLabel.value = gameName || t('gameBanana.noGameSelected');
+  gameTargetLabel.value = gameName ? getGamePresetDisplayName(gameName, t) : t('gameBanana.noGameSelected');
   showGameDomainInput.value = true;
   gameDomain.value = appSettings.nexusModsGameDomain.trim().toLowerCase();
 
@@ -538,7 +539,7 @@ const syncGameTarget = async () => {
       const resolvedDomain = NEXUS_DOMAIN_BY_PRESET[preset];
       if (resolvedDomain) {
         gameDomain.value = resolvedDomain;
-        gameTargetLabel.value = `${gameName} · ${preset}`;
+        gameTargetLabel.value = `${getGamePresetDisplayName(gameName, t)} · ${getGamePresetDisplayName(preset, t)}`;
         showGameDomainInput.value = false;
       }
     } catch (error) {

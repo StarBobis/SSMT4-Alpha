@@ -8,7 +8,7 @@ import { AppStateManager } from '../store/AppStateManager';
 import { ResourceManager, type UpdateInfo } from '../store/ResourceManager';
 import { PathHelper } from '../helper/PathHelper';
 import { GlobalConfig } from '../store/GlobalConfig';
-import { AUTO_UPDATE_SUPPORTED_PRESET_SET, getGamePresetOptions, getGithubRepoByGamePreset } from '../store/GamePreset';
+import { AUTO_UPDATE_SUPPORTED_PRESET_SET, getGamePresetDisplayName, getGamePresetOptions, getGithubRepoByGamePreset } from '../store/GamePreset';
 import { GameConfig, GameConfigManager, type D3d11Mode, type LaunchProgramConfig } from '../store/GameConfig';
 import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
@@ -448,10 +448,10 @@ const setupBlurNotification = (message: string): (() => void) => {
 
 const check3DMigotoPackageUpdate = async (): Promise<boolean> => {
   // 1. Initial Confirmation
-  const unlisten = setupBlurNotification(t('gameSettingsModal.messages.confirmCheckUpdate', { preset: config.gamePreset }));
+  const unlisten = setupBlurNotification(t('gameSettingsModal.messages.confirmCheckUpdate', { preset: getGamePresetDisplayName(config.gamePreset, t) }));
   try {
     await ElMessageBox.confirm(
-      t('gameSettingsModal.messages.confirmCheckUpdate', { preset: config.gamePreset }),
+      t('gameSettingsModal.messages.confirmCheckUpdate', { preset: getGamePresetDisplayName(config.gamePreset, t) }),
       t('gameSettingsModal.messages.checkForUpdatesTitle'),
       {
         confirmButtonText: t('gameSettingsModal.common.confirm'),
