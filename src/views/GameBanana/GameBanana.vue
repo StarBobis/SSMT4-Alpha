@@ -2019,19 +2019,23 @@ watch(showTranslationSettings, (visible) => {
   if (visible) void fetchTranslationModels();
 });
 
-type GbResizablePanel = 'categories' | 'detail';
+type GbResizablePanel = 'categories' | 'results';
 
-const GB_COLUMN_WIDTHS_STORAGE = 'gamebanana-column-widths-v1';
-const GB_DEFAULT_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 230, detail: 360 };
-const GB_MIN_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 160, detail: 270 };
-const GB_MAX_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 420, detail: 620 };
-const GB_MIN_RESULTS_WIDTH = 310;
+const GB_COLUMN_WIDTHS_STORAGE = 'gamebanana-column-widths-v2';
+const GB_DEFAULT_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 230, results: 320 };
+const GB_MIN_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 160, results: 320 };
+const GB_MAX_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 420, results: 960 };
+const GB_MIN_DETAIL_WIDTH = 270;
 const GB_COLUMN_RESIZERS_WIDTH = 20;
+const GB_STACKED_LAYOUT_BREAKPOINT = 1120;
 
 const clampGbPanelWidth = (panel: GbResizablePanel, value: unknown) => {
   const parsed = Number(value);
   const fallback = GB_DEFAULT_PANEL_WIDTHS[panel];
-  return Math.round(Math.min(GB_MAX_PANEL_WIDTHS[panel], Math.max(GB_MIN_PANEL_WIDTHS[panel], Number.isFinite(parsed) ? parsed : fallback)));
+  const cssMinimum = panel === 'results' && gbLayoutRef.value
+    ? (Number.parseFloat(getComputedStyle(gbLayoutRef.value).fontSize) || 16) * 20
+    : GB_MIN_PANEL_WIDTHS[panel];
+  return Math.round(Math.min(GB_MAX_PANEL_WIDTHS[panel], Math.max(cssMinimum, Number.isFinite(parsed) ? parsed : fallback)));
 };
 
 const loadGbPanelWidths = (): Record<GbResizablePanel, number> => {
@@ -2039,7 +2043,7 @@ const loadGbPanelWidths = (): Record<GbResizablePanel, number> => {
     const stored = JSON.parse(localStorage.getItem(GB_COLUMN_WIDTHS_STORAGE) || '{}') as Partial<Record<GbResizablePanel, number>>;
     return {
       categories: clampGbPanelWidth('categories', stored.categories),
-      detail: clampGbPanelWidth('detail', stored.detail),
+      results: clampGbPanelWidth('results', stored.results),
     };
   } catch {
     return { ...GB_DEFAULT_PANEL_WIDTHS };
@@ -2049,10 +2053,9 @@ const loadGbPanelWidths = (): Record<GbResizablePanel, number> => {
 const gbLayoutRef = ref<HTMLElement | null>(null);
 const gbPanelWidths = reactive(loadGbPanelWidths());
 const activeGbPanelResize = ref<GbResizablePanel | null>(null);
-const isDetailFocusedLayout = computed(() => appSettings.uiScale <= 0.85);
 const gbLayoutColumnStyle = computed(() => ({
   '--gb-categories-width': `${gbPanelWidths.categories}px`,
-  '--gb-detail-width': `${gbPanelWidths.detail}px`,
+  '--gb-results-width': `${gbPanelWidths.results}px`,
 }));
 
 let gbPanelResizeObserver: ResizeObserver | null = null;
@@ -2063,45 +2066,45 @@ let gbPanelResizeStartWidth = 0;
 const getGbAvailableSidePanelWidth = () => {
   const layoutWidth = gbLayoutRef.value?.clientWidth || window.innerWidth;
   return Math.max(
-    GB_MIN_PANEL_WIDTHS.categories + GB_MIN_PANEL_WIDTHS.detail,
-    layoutWidth - GB_COLUMN_RESIZERS_WIDTH - GB_MIN_RESULTS_WIDTH,
+    GB_MIN_PANEL_WIDTHS.categories + GB_MIN_PANEL_WIDTHS.results,
+    layoutWidth - GB_COLUMN_RESIZERS_WIDTH - GB_MIN_DETAIL_WIDTH,
   );
 };
 
 const constrainGbPanelWidths = () => {
-  if (window.innerWidth <= 1040) return;
+  if (window.innerWidth <= GB_STACKED_LAYOUT_BREAKPOINT) return;
 
   gbPanelWidths.categories = clampGbPanelWidth('categories', gbPanelWidths.categories);
-  gbPanelWidths.detail = clampGbPanelWidth('detail', gbPanelWidths.detail);
+  gbPanelWidths.results = clampGbPanelWidth('results', gbPanelWidths.results);
 
   const available = getGbAvailableSidePanelWidth();
-  const currentTotal = gbPanelWidths.categories + gbPanelWidths.detail;
+  const currentTotal = gbPanelWidths.categories + gbPanelWidths.results;
   if (currentTotal <= available) return;
 
   const categoriesExtra = gbPanelWidths.categories - GB_MIN_PANEL_WIDTHS.categories;
-  const detailExtra = gbPanelWidths.detail - GB_MIN_PANEL_WIDTHS.detail;
-  const availableExtra = Math.max(0, available - GB_MIN_PANEL_WIDTHS.categories - GB_MIN_PANEL_WIDTHS.detail);
-  const extraTotal = categoriesExtra + detailExtra;
+  const resultsExtra = gbPanelWidths.results - GB_MIN_PANEL_WIDTHS.results;
+  const availableExtra = Math.max(0, available - GB_MIN_PANEL_WIDTHS.categories - GB_MIN_PANEL_WIDTHS.results);
+  const extraTotal = categoriesExtra + resultsExtra;
   const scale = extraTotal > 0 ? Math.min(1, availableExtra / extraTotal) : 0;
   gbPanelWidths.categories = Math.round(GB_MIN_PANEL_WIDTHS.categories + categoriesExtra * scale);
-  gbPanelWidths.detail = Math.round(GB_MIN_PANEL_WIDTHS.detail + detailExtra * scale);
+  gbPanelWidths.results = Math.round(GB_MIN_PANEL_WIDTHS.results + resultsExtra * scale);
 };
 
 const persistGbPanelWidths = () => {
   localStorage.setItem(GB_COLUMN_WIDTHS_STORAGE, JSON.stringify({
     categories: gbPanelWidths.categories,
-    detail: gbPanelWidths.detail,
+    results: gbPanelWidths.results,
   }));
 };
 
 const setGbPanelWidth = (panel: GbResizablePanel, requestedWidth: number) => {
-  const otherPanel: GbResizablePanel = panel === 'categories' ? 'detail' : 'categories';
+  const otherPanel: GbResizablePanel = panel === 'categories' ? 'results' : 'categories';
   const availableForPanel = Math.max(GB_MIN_PANEL_WIDTHS[panel], getGbAvailableSidePanelWidth() - gbPanelWidths[otherPanel]);
   gbPanelWidths[panel] = Math.min(clampGbPanelWidth(panel, requestedWidth), availableForPanel);
 };
 
 const startGbPanelResize = (panel: GbResizablePanel, event: PointerEvent) => {
-  if (event.button !== 0 || window.innerWidth <= 1040) return;
+  if (event.button !== 0 || window.innerWidth <= GB_STACKED_LAYOUT_BREAKPOINT) return;
   event.preventDefault();
   activeGbPanelResize.value = panel;
   gbPanelResizePointerId = event.pointerId;
@@ -2114,7 +2117,7 @@ const moveGbPanelResize = (event: PointerEvent) => {
   const panel = activeGbPanelResize.value;
   if (!panel || event.pointerId !== gbPanelResizePointerId) return;
   const pointerDelta = event.clientX - gbPanelResizeStartX;
-  setGbPanelWidth(panel, gbPanelResizeStartWidth + (panel === 'categories' ? pointerDelta : -pointerDelta));
+  setGbPanelWidth(panel, gbPanelResizeStartWidth + pointerDelta);
 };
 
 const stopGbPanelResize = (event?: PointerEvent) => {
@@ -2138,7 +2141,7 @@ const onGbPanelResizeKeydown = (panel: GbResizablePanel, event: KeyboardEvent) =
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
   event.preventDefault();
   const direction = event.key === 'ArrowRight' ? 1 : -1;
-  setGbPanelWidth(panel, gbPanelWidths[panel] + direction * (panel === 'categories' ? 16 : -16));
+  setGbPanelWidth(panel, gbPanelWidths[panel] + direction * 16);
   persistGbPanelWidths();
 };
 
@@ -2335,7 +2338,6 @@ onBeforeUnmount(() => {
       class="gb-layout"
       :class="{
         'is-resizing-columns': activeGbPanelResize,
-        'is-detail-focused': isDetailFocusedLayout,
       }"
       :style="gbLayoutColumnStyle"
     >
@@ -2462,21 +2464,21 @@ onBeforeUnmount(() => {
 
       <div
         class="gb-column-resizer gb-detail-resizer"
-        :class="{ active: activeGbPanelResize === 'detail' }"
+        :class="{ active: activeGbPanelResize === 'results' }"
         role="separator"
         tabindex="0"
         aria-orientation="vertical"
         :aria-label="`${t('gameBanana.results')} / ${t('gameBanana.detail')}`"
-        :aria-valuemin="GB_MIN_PANEL_WIDTHS.detail"
-        :aria-valuemax="GB_MAX_PANEL_WIDTHS.detail"
-        :aria-valuenow="gbPanelWidths.detail"
-        @pointerdown.stop="startGbPanelResize('detail', $event)"
+        :aria-valuemin="GB_MIN_PANEL_WIDTHS.results"
+        :aria-valuemax="GB_MAX_PANEL_WIDTHS.results"
+        :aria-valuenow="gbPanelWidths.results"
+        @pointerdown.stop="startGbPanelResize('results', $event)"
         @pointermove.stop="moveGbPanelResize"
         @pointerup.stop="stopGbPanelResize"
         @pointercancel.stop="stopGbPanelResize"
         @lostpointercapture.stop="stopGbPanelResize"
-        @dblclick.stop="resetGbPanelWidth('detail')"
-        @keydown="onGbPanelResizeKeydown('detail', $event)"
+        @dblclick.stop="resetGbPanelWidth('results')"
+        @keydown="onGbPanelResizeKeydown('results', $event)"
       ></div>
 
       <aside class="gb-panel gb-detail glass-panel">
@@ -2782,15 +2784,9 @@ onBeforeUnmount(() => {
   flex: 1;
   display: grid;
   grid-template-areas: "categories categories-resizer results detail-resizer detail";
-  grid-template-columns: var(--gb-categories-width, 230px) 10px minmax(310px, 1fr) 10px var(--gb-detail-width, 360px);
+  grid-template-columns: var(--gb-categories-width, 230px) 10px minmax(20em, var(--gb-results-width, 320px)) 10px minmax(270px, 1fr);
   column-gap: 0;
   overflow: hidden;
-}
-
-/* At small UI scales, use the expanded logical canvas for the selected mod's
-   details instead of letting the results list absorb nearly all extra width. */
-.gb-layout.is-detail-focused {
-  grid-template-columns: var(--gb-categories-width, 230px) 10px minmax(310px, .85fr) 10px minmax(var(--gb-detail-width, 360px), 1.15fr);
 }
 
 .gb-panel { border-radius: 12px; overflow: hidden; }
@@ -3008,7 +3004,7 @@ onBeforeUnmount(() => {
 :global(.gamebanana-select-popper .el-select-dropdown__item.is-selected) { background: rgba(var(--theme-surface-tint-rgb),.24); color: rgba(255,255,255,.98); }
 :global(.gamebanana-select-popper .el-select-dropdown__empty) { color: rgba(255,255,255,.52); }
 
-@media (max-width: 1040px) {
+@media (max-width: 1120px) {
   .gb-layout { grid-template-areas: "categories results" "detail detail"; grid-template-columns: minmax(145px, .7fr) minmax(330px, 1.45fr); overflow: auto; }
   .gb-column-resizer { display: none; }
   .gb-detail { min-height: 390px; }
