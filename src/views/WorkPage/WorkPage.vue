@@ -158,6 +158,7 @@ type WorkspaceDiskSpaceReport = {
 };
 
 type WorkspaceTabSaveSnapshot = {
+  gameKey: string;
   workspaceName: string;
   activeTabId: string;
   tabs: WorkspaceTabMeta[];
@@ -303,7 +304,9 @@ const getCurrentWorkspaceMemoryGameKey = (): string => {
 const getRememberedWorkspaceForCurrentGame = (): string => {
   const gameKey = getCurrentWorkspaceMemoryGameKey();
   const byGame = appSettings.CurrentWorkSpaceByGame?.[gameKey] || '';
-  return normalizeWorkspaceNameInput(byGame || appSettings.CurrentWorkSpace || '');
+  // CurrentWorkSpace is a legacy/global mirror. Falling back to it here leaks
+  // the previously selected game's workspace into a game with no memory yet.
+  return normalizeWorkspaceNameInput(byGame);
 };
 
 const rememberWorkspaceForCurrentGame = (name: string): void => {
@@ -443,8 +446,8 @@ const removeVSCheckRow = (index: number) => {
   ensureTrailingVSRow();
 };
 
-const getWorkspaceBaseDir = async () => {
-  let gameName = appSettings.CurrentGameName;
+const getWorkspaceBaseDir = async (gameKey?: string) => {
+  let gameName = gameKey ?? appSettings.CurrentGameName;
   // If no valid game selected, fallback to a global placeholder so workspaces still work
   if (!gameName || gameName === 'Default') {
     gameName = 'DefaultGame';
@@ -556,9 +559,9 @@ const createDefaultWorkspaceTabMeta = (): WorkspaceTabMeta => {
   };
 };
 
-const getWorkspaceDirPath = async (wsName: string): Promise<string | undefined> => {
+const getWorkspaceDirPath = async (wsName: string, gameKey?: string): Promise<string | undefined> => {
   if (!wsName) return undefined;
-  const baseDir = await getWorkspaceBaseDir();
+  const baseDir = await getWorkspaceBaseDir(gameKey);
   if (!baseDir) return undefined;
   return join(baseDir, wsName);
 };
@@ -566,40 +569,41 @@ const getWorkspaceDirPath = async (wsName: string): Promise<string | undefined> 
 const getWorkspaceLodDirPath = async (
   wsName: string,
   lodName: string,
+  gameKey?: string,
 ): Promise<string | undefined> => {
-  const workspaceDir = await getWorkspaceDirPath(wsName);
+  const workspaceDir = await getWorkspaceDirPath(wsName, gameKey);
   if (!workspaceDir) return undefined;
   const trimmedLodName = lodName.trim();
   if (!trimmedLodName) return undefined;
   return join(workspaceDir, trimmedLodName);
 };
 
-const getWorkspaceConfigDirPath = async (wsName: string): Promise<string | undefined> => {
-  const workspaceDir = await getWorkspaceDirPath(wsName);
+const getWorkspaceConfigDirPath = async (wsName: string, gameKey?: string): Promise<string | undefined> => {
+  const workspaceDir = await getWorkspaceDirPath(wsName, gameKey);
   if (!workspaceDir) return undefined;
   return join(workspaceDir, 'Config');
 };
 
-const getWorkspaceTabsConfigPath = async (wsName: string): Promise<string | undefined> => {
-  const configDir = await getWorkspaceConfigDirPath(wsName);
+const getWorkspaceTabsConfigPath = async (wsName: string, gameKey?: string): Promise<string | undefined> => {
+  const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
   if (!configDir) return undefined;
   return join(configDir, 'WorkPageTabs.json');
 };
 
-const getWorkspaceTabConfigPath = async (wsName: string, tabId: string): Promise<string | undefined> => {
-  const configDir = await getWorkspaceConfigDirPath(wsName);
+const getWorkspaceTabConfigPath = async (wsName: string, tabId: string, gameKey?: string): Promise<string | undefined> => {
+  const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
   if (!configDir) return undefined;
   return join(configDir, 'Tabs', `${tabId}.json`);
 };
 
-const getWorkspaceFrameAnalysisConfigPath = async (wsName: string): Promise<string | undefined> => {
-  const configDir = await getWorkspaceConfigDirPath(wsName);
+const getWorkspaceFrameAnalysisConfigPath = async (wsName: string, gameKey?: string): Promise<string | undefined> => {
+  const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
   if (!configDir) return undefined;
   return join(configDir, 'FrameAnalysisPath.json');
 };
 
-const getLegacyWorkspaceFrameAnalysisConfigPath = async (wsName: string): Promise<string | undefined> => {
-  const workspaceDir = await getWorkspaceDirPath(wsName);
+const getLegacyWorkspaceFrameAnalysisConfigPath = async (wsName: string, gameKey?: string): Promise<string | undefined> => {
+  const workspaceDir = await getWorkspaceDirPath(wsName, gameKey);
   if (!workspaceDir) return undefined;
   return join(workspaceDir, 'FrameAnalysisPathConfig.json');
 };
@@ -693,6 +697,7 @@ const createWorkspaceTabSaveSnapshot = (options?: {
   }));
 
   return {
+    gameKey: getCurrentWorkspaceMemoryGameKey(),
     workspaceName: workspaceNameSnapshot,
     activeTabId: activeTabIdSnapshot,
     tabs: tabsSnapshot,
@@ -741,9 +746,9 @@ const normalizeWorkspaceFrameAnalysisConfig = (
   selectedFrameAnalysis: (parsed?.selectedFrameAnalysis || '').trim(),
 });
 
-const readWorkspaceTabsIndexBySnapshot = async (wsName: string): Promise<WorkPageTabsIndex | undefined> => {
+const readWorkspaceTabsIndexBySnapshot = async (wsName: string, gameKey?: string): Promise<WorkPageTabsIndex | undefined> => {
   try {
-    const indexPath = await getWorkspaceTabsConfigPath(wsName);
+    const indexPath = await getWorkspaceTabsConfigPath(wsName, gameKey);
     if (!indexPath) return undefined;
     const raw = await readTextFile(indexPath);
     return JSON.parse(raw) as WorkPageTabsIndex;
@@ -754,10 +759,11 @@ const readWorkspaceTabsIndexBySnapshot = async (wsName: string): Promise<WorkPag
 
 const readWorkspaceTabConfigBySnapshot = async (
   wsName: string,
-  tabId: string
+  tabId: string,
+  gameKey?: string,
 ): Promise<WorkPageTabConfig> => {
   try {
-    const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId);
+    const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId, gameKey);
     if (!tabConfigPath) {
       return normalizeWorkspaceTabConfig();
     }
@@ -771,11 +777,12 @@ const readWorkspaceTabConfigBySnapshot = async (
 };
 
 const readWorkspaceFrameAnalysisConfigBySnapshot = async (
-  wsName: string
+  wsName: string,
+  gameKey?: string,
 ): Promise<WorkspaceFrameAnalysisConfig | undefined> => {
   const configPaths = [
-    await getWorkspaceFrameAnalysisConfigPath(wsName),
-    await getLegacyWorkspaceFrameAnalysisConfigPath(wsName),
+    await getWorkspaceFrameAnalysisConfigPath(wsName, gameKey),
+    await getLegacyWorkspaceFrameAnalysisConfigPath(wsName, gameKey),
   ].filter((path): path is string => Boolean(path));
 
   for (const configPath of configPaths) {
@@ -793,13 +800,14 @@ const readWorkspaceFrameAnalysisConfigBySnapshot = async (
 
 const withWorkspaceFrameAnalysisFallback = async (
   wsName: string,
-  config: WorkPageTabConfig
+  config: WorkPageTabConfig,
+  gameKey?: string,
 ): Promise<WorkPageTabConfig> => {
   if (config.frameAnalysisFolderPath || config.selectedFrameAnalysis) {
     return config;
   }
 
-  const frameAnalysisConfig = await readWorkspaceFrameAnalysisConfigBySnapshot(wsName);
+  const frameAnalysisConfig = await readWorkspaceFrameAnalysisConfigBySnapshot(wsName, gameKey);
   if (!frameAnalysisConfig) {
     return config;
   }
@@ -849,13 +857,14 @@ const writeWorkspaceAggregatedDrawIBConfig = async (
     tabId?: string;
     tabConfig?: WorkPageTabConfig;
     tabs?: WorkspaceTabMeta[];
+    gameKey?: string;
   }
 ): Promise<void> => {
   if (!wsName) return;
 
   const indexSnapshot = options?.tabs
     ? { activeTabId: options.tabId || '', tabs: options.tabs }
-    : await readWorkspaceTabsIndexBySnapshot(wsName);
+    : await readWorkspaceTabsIndexBySnapshot(wsName, options?.gameKey);
 
   const tabMetas = Array.isArray(indexSnapshot?.tabs) ? indexSnapshot!.tabs : [];
   const effectiveTabMetas = [...tabMetas];
@@ -879,7 +888,7 @@ const writeWorkspaceAggregatedDrawIBConfig = async (
   const targetLodName = normalizeWorkspaceTabName(targetTabMeta?.name || '');
   if (!targetLodName) return;
 
-  const targetLodDir = await getWorkspaceLodDirPath(wsName, targetLodName);
+  const targetLodDir = await getWorkspaceLodDirPath(wsName, targetLodName, options?.gameKey);
   if (!targetLodDir) return;
 
   // 收集所有与目标 LOD 名称相同的标签页配置（按标签名分组）
@@ -894,7 +903,7 @@ const writeWorkspaceAggregatedDrawIBConfig = async (
       continue;
     }
 
-    const candidateConfig = await readWorkspaceTabConfigBySnapshot(wsName, tab.id);
+    const candidateConfig = await readWorkspaceTabConfigBySnapshot(wsName, tab.id, options?.gameKey);
     configs.push(candidateConfig);
   }
 
@@ -966,14 +975,15 @@ const saveWorkspaceTabsIndex = async (): Promise<void> => {
 const saveWorkspaceTabsIndexBySnapshot = async (
   wsName: string,
   activeTabId: string,
-  tabs: WorkspaceTabMeta[]
+  tabs: WorkspaceTabMeta[],
+  gameKey = getCurrentWorkspaceMemoryGameKey(),
 ): Promise<void> => {
   if (!wsName) return;
 
   await enqueueWorkspaceSave(async () => {
     try {
-      const configDir = await getWorkspaceConfigDirPath(wsName);
-      const indexPath = await getWorkspaceTabsConfigPath(wsName);
+      const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
+      const indexPath = await getWorkspaceTabsConfigPath(wsName, gameKey);
       if (!configDir || !indexPath) return;
 
       await mkdir(configDir, { recursive: true });
@@ -996,6 +1006,7 @@ const saveWorkspaceTabConfigSnapshot = async (snapshot: WorkspaceTabSaveSnapshot
     snapshot.activeTabId,
     snapshot.tabConfig,
     snapshot.tabs,
+    snapshot.gameKey,
   );
 };
 
@@ -1003,7 +1014,8 @@ const saveWorkspaceTabConfigBySnapshot = async (
   wsName: string,
   tabId: string,
   tabConfig: WorkPageTabConfig,
-  tabs?: WorkspaceTabMeta[]
+  tabs?: WorkspaceTabMeta[],
+  gameKey = getCurrentWorkspaceMemoryGameKey(),
 ): Promise<void> => {
   if (!wsName || !tabId) return;
 
@@ -1012,9 +1024,9 @@ const saveWorkspaceTabConfigBySnapshot = async (
 
   await enqueueWorkspaceSave(async () => {
     try {
-      const configDir = await getWorkspaceConfigDirPath(wsName);
-      const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId);
-      const frameAnalysisConfigPath = await getWorkspaceFrameAnalysisConfigPath(wsName);
+      const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
+      const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId, gameKey);
+      const frameAnalysisConfigPath = await getWorkspaceFrameAnalysisConfigPath(wsName, gameKey);
       if (!configDir || !tabConfigPath) return;
 
       const tabConfigDir = await join(configDir, 'Tabs');
@@ -1039,10 +1051,10 @@ const saveWorkspaceTabConfigBySnapshot = async (
       // writeLegacyWorkspaceRuntimeFiles can resolve the LOD name from the tab name.
       let resolvedTabs = tabsSnapshot;
       if (!resolvedTabs) {
-        const indexSnapshot = await readWorkspaceTabsIndexBySnapshot(wsName);
+        const indexSnapshot = await readWorkspaceTabsIndexBySnapshot(wsName, gameKey);
         resolvedTabs = indexSnapshot?.tabs?.map((t) => ({ id: t.id, name: t.name }));
       }
-      await writeLegacyWorkspaceRuntimeFiles(wsName, configSnapshot, { tabId, tabs: resolvedTabs });
+      await writeLegacyWorkspaceRuntimeFiles(wsName, configSnapshot, { tabId, tabs: resolvedTabs, gameKey });
     } catch (err) {
       console.error('Failed to save workspace tab config', err);
     }
@@ -1058,7 +1070,13 @@ const saveCurrentWorkspaceTabConfig = async (): Promise<void> => {
   await saveWorkspaceTabConfigSnapshot(snapshot);
 };
 
-const loadWorkspaceTabConfig = async (wsName: string, tabId: string): Promise<void> => {
+const loadWorkspaceTabConfig = async (
+  wsName: string,
+  tabId: string,
+  expectedGameKey = getCurrentWorkspaceMemoryGameKey(),
+): Promise<void> => {
+  const contextIsCurrent = () => expectedGameKey === getCurrentWorkspaceMemoryGameKey();
+  if (!contextIsCurrent()) return;
   if (!wsName || !tabId) {
     await applyWorkspaceTabConfig({
       modelRows: [],
@@ -1074,27 +1092,34 @@ const loadWorkspaceTabConfig = async (wsName: string, tabId: string): Promise<vo
   }
 
   try {
-    const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId);
+    const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId, expectedGameKey);
     if (!tabConfigPath) return;
 
     const raw = await readTextFile(tabConfigPath);
+    if (!contextIsCurrent()) return;
     const parsed = JSON.parse(raw) as Partial<WorkPageTabConfig>;
 
-    await applyWorkspaceTabConfig(
-      await withWorkspaceFrameAnalysisFallback(wsName, normalizeWorkspaceTabConfig(parsed))
-    );
+    const config = await withWorkspaceFrameAnalysisFallback(wsName, normalizeWorkspaceTabConfig(parsed), expectedGameKey);
+    if (!contextIsCurrent()) return;
+    await applyWorkspaceTabConfig(config);
   } catch {
-    await applyWorkspaceTabConfig(
-      await withWorkspaceFrameAnalysisFallback(wsName, normalizeWorkspaceTabConfig())
-    );
+    if (!contextIsCurrent()) return;
+    const config = await withWorkspaceFrameAnalysisFallback(wsName, normalizeWorkspaceTabConfig(), expectedGameKey);
+    if (!contextIsCurrent()) return;
+    await applyWorkspaceTabConfig(config);
   }
 };
 
-const ensureWorkspaceTabsInitialized = async (wsName: string): Promise<void> => {
+const ensureWorkspaceTabsInitialized = async (
+  wsName: string,
+  expectedGameKey = getCurrentWorkspaceMemoryGameKey(),
+): Promise<void> => {
   if (!wsName) return;
+  const contextIsCurrent = () => expectedGameKey === getCurrentWorkspaceMemoryGameKey();
+  if (!contextIsCurrent()) return;
 
-  const configDir = await getWorkspaceConfigDirPath(wsName);
-  const indexPath = await getWorkspaceTabsConfigPath(wsName);
+  const configDir = await getWorkspaceConfigDirPath(wsName, expectedGameKey);
+  const indexPath = await getWorkspaceTabsConfigPath(wsName, expectedGameKey);
   if (!configDir || !indexPath) return;
 
   await mkdir(configDir, { recursive: true });
@@ -1102,6 +1127,7 @@ const ensureWorkspaceTabsInitialized = async (wsName: string): Promise<void> => 
 
   try {
     const raw = await readTextFile(indexPath);
+    if (!contextIsCurrent()) return;
     const parsed = JSON.parse(raw) as Partial<WorkPageTabsIndex>;
     const tabs = Array.isArray(parsed.tabs) ? parsed.tabs : [];
 
@@ -1125,8 +1151,8 @@ const ensureWorkspaceTabsInitialized = async (wsName: string): Promise<void> => 
       const defaultTab = createDefaultWorkspaceTabMeta();
       workspaceTabs.value = [defaultTab];
       activeWorkspaceTabId.value = defaultTab.id;
-      await saveWorkspaceTabsIndex();
-      await saveWorkspaceTabConfigBySnapshot(wsName, defaultTab.id, normalizeWorkspaceTabConfig(), buildWorkspaceTabsSnapshot());
+      await saveWorkspaceTabsIndexBySnapshot(wsName, defaultTab.id, buildWorkspaceTabsSnapshot(), expectedGameKey);
+      await saveWorkspaceTabConfigBySnapshot(wsName, defaultTab.id, normalizeWorkspaceTabConfig(), buildWorkspaceTabsSnapshot(), expectedGameKey);
       return;
     }
 
@@ -1135,11 +1161,12 @@ const ensureWorkspaceTabsInitialized = async (wsName: string): Promise<void> => 
       ? preferredActiveId
       : workspaceTabs.value[0].id;
   } catch {
+    if (!contextIsCurrent()) return;
     const defaultTab = createDefaultWorkspaceTabMeta();
     workspaceTabs.value = [defaultTab];
     activeWorkspaceTabId.value = defaultTab.id;
-    await saveWorkspaceTabsIndex();
-    await saveWorkspaceTabConfigBySnapshot(wsName, defaultTab.id, normalizeWorkspaceTabConfig(), buildWorkspaceTabsSnapshot());
+    await saveWorkspaceTabsIndexBySnapshot(wsName, defaultTab.id, buildWorkspaceTabsSnapshot(), expectedGameKey);
+    await saveWorkspaceTabConfigBySnapshot(wsName, defaultTab.id, normalizeWorkspaceTabConfig(), buildWorkspaceTabsSnapshot(), expectedGameKey);
   }
 };
 
@@ -1172,6 +1199,8 @@ let frameAnalysisPathSaveTimer: ReturnType<typeof setTimeout>;
 let frameAnalysisValidateTimer: ReturnType<typeof setTimeout>;
 let unlistenNativeDrop: UnlistenFn | null = null;
 let unlistenWorkspaceUploadProgress: UnlistenFn | null = null;
+let workspaceContextRevision = 0;
+let workspaceSwitchRevision = 0;
 
 const clearPendingSaveTimers = () => {
   clearTimeout(saveTimer);
@@ -1193,6 +1222,12 @@ const flushCurrentWorkspaceTabConfig = async (snapshot?: WorkspaceTabSaveSnapsho
 };
 
 const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
+  const expectedGameKey = getCurrentWorkspaceMemoryGameKey();
+  const expectedContextRevision = workspaceContextRevision;
+  let expectedSwitchRevision = workspaceSwitchRevision;
+  const contextIsCurrent = () => expectedGameKey === getCurrentWorkspaceMemoryGameKey()
+    && expectedContextRevision === workspaceContextRevision
+    && expectedSwitchRevision === workspaceSwitchRevision;
   const resolvedWorkspaceName = findExistingWorkspaceOption(targetWorkspaceName)
     ?? normalizeWorkspaceNameInput(targetWorkspaceName);
   const currentWorkspaceName = normalizeWorkspaceNameInput(workspaceName.value);
@@ -1226,6 +1261,7 @@ const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
   if (resolvedWorkspaceName === currentWorkspaceName) {
     return;
   }
+  expectedSwitchRevision = ++workspaceSwitchRevision;
 
   const previousSnapshot = currentWorkspaceName && activeWorkspaceTabId.value && !isWorkspaceTabConfigLoading.value
     ? createWorkspaceTabSaveSnapshot({
@@ -1246,6 +1282,7 @@ const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
     if (previousSnapshot) {
       await saveWorkspaceTabConfigSnapshot(previousSnapshot);
     }
+    if (!contextIsCurrent()) return;
 
     resetLeftThreeLists();
     workspaceTabs.value = [];
@@ -1256,15 +1293,24 @@ const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
     workspaceName.value = resolvedWorkspaceName;
     rememberWorkspaceForCurrentGame(resolvedWorkspaceName);
     await loadWorkspaceProvenance(resolvedWorkspaceName);
-    await ensureWorkspaceTabsInitialized(resolvedWorkspaceName);
-    await saveWorkspaceTabsIndex();
-    await loadWorkspaceTabConfig(resolvedWorkspaceName, activeWorkspaceTabId.value);
+    if (!contextIsCurrent()) return;
+    await ensureWorkspaceTabsInitialized(resolvedWorkspaceName, expectedGameKey);
+    if (!contextIsCurrent()) return;
+    await saveWorkspaceTabsIndexBySnapshot(
+      resolvedWorkspaceName,
+      activeWorkspaceTabId.value,
+      buildWorkspaceTabsSnapshot(),
+      expectedGameKey,
+    );
+    if (!contextIsCurrent()) return;
+    await loadWorkspaceTabConfig(resolvedWorkspaceName, activeWorkspaceTabId.value, expectedGameKey);
+    if (!contextIsCurrent()) return;
     shouldReleaseLoadingState = false;
   } finally {
-    if (shouldReleaseLoadingState) {
+    if (shouldReleaseLoadingState && contextIsCurrent()) {
       setAllConfigLoading(false);
     }
-    isWorkspaceTransitioning.value = false;
+    if (contextIsCurrent()) isWorkspaceTransitioning.value = false;
   }
 };
 
@@ -1419,6 +1465,7 @@ watch(selectedFrameAnalysis, () => {
 });
 
 watch(() => appSettings.CurrentGameName, () => {
+  workspaceContextRevision += 1;
   workspaceOptions.value = [];
   workspaceModifiedTimes.value = {};
   workspaceName.value = '';
@@ -2586,6 +2633,7 @@ const writeLegacyWorkspaceRuntimeFiles = async (
     tabId?: string;
     tabs?: WorkspaceTabMeta[];
     drawIBScope?: 'aggregated' | 'active-tab';
+    gameKey?: string;
   }
 ): Promise<void> => {
   if (!wsName) return;
@@ -2596,14 +2644,14 @@ const writeLegacyWorkspaceRuntimeFiles = async (
     : '';
   if (!lodName) return;
 
-  const workspaceDir = await getWorkspaceDirPath(wsName);
-  const lodWorkspaceDir = await getWorkspaceLodDirPath(wsName, lodName);
+  const workspaceDir = await getWorkspaceDirPath(wsName, options?.gameKey);
+  const lodWorkspaceDir = await getWorkspaceLodDirPath(wsName, lodName, options?.gameKey);
   if (!workspaceDir || !lodWorkspaceDir) return;
 
-  const configDir = await getWorkspaceConfigDirPath(wsName);
-  const tabsIndexPath = await getWorkspaceTabsConfigPath(wsName);
+  const configDir = await getWorkspaceConfigDirPath(wsName, options?.gameKey);
+  const tabsIndexPath = await getWorkspaceTabsConfigPath(wsName, options?.gameKey);
   const activeTabConfigPath = options?.tabId
-    ? await getWorkspaceTabConfigPath(wsName, options.tabId)
+    ? await getWorkspaceTabConfigPath(wsName, options.tabId, options?.gameKey)
     : undefined;
 
   await mkdir(workspaceDir, { recursive: true });
@@ -2647,6 +2695,7 @@ const writeLegacyWorkspaceRuntimeFiles = async (
       tabId: options?.tabId,
       tabConfig,
       tabs: options?.tabs,
+      gameKey: options?.gameKey,
     });
   }
 

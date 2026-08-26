@@ -282,6 +282,10 @@ export const useAppStateStore = defineStore('appState', () => {
 
   function switchToGame(game: GameInfo) {
     appSettings.CurrentGameName = game.name
+    // Keep the legacy/global mirror aligned with the selected game. Consumers
+    // that still read CurrentWorkSpace must never observe the previous game's
+    // workspace during a game switch.
+    appSettings.CurrentWorkSpace = appSettings.CurrentWorkSpaceByGame?.[game.name] || ''
     const useVideo = game.bgType === BGType.Video
 
     if (useVideo && game.bgVideoPath) {
