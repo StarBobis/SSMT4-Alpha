@@ -1110,17 +1110,29 @@ pub async fn generate_texture_mod(
         let max_threads = thread::available_parallelism()
             .map(|v| v.get())
             .unwrap_or(1);
-        let cpu_threads = usize::from(request.cpu_threads.max(1)).min(max_threads);
+        let cpu_budget = usize::from(request.cpu_threads.max(1)).min(max_threads);
+        // texconv still performs image loading, upload preparation, readback,
+        // and DDS writing on the CPU. Keep part of the user's total budget out
+        // of Rayon so those stages can continuously feed DirectCompute.
+        let gpu_workers = usize::from(request.gpu_workers.clamp(1, 2));
+        let encoder_reserve = (gpu_workers * 2).min(cpu_budget.saturating_sub(1));
+        let transform_threads = cpu_budget.saturating_sub(encoder_reserve).max(1);
         let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(cpu_threads)
+            .num_threads(transform_threads)
             .build()
             .map_err(|e| e.to_string())?;
         let transformed = AtomicUsize::new(0);
         let encoded = Arc::new(AtomicUsize::new(0));
         // Multiple texconv processes compete for the same DirectCompute queue.
         // More than two reduces throughput and makes completion arrive in bursts.
-        let gpu_workers = usize::from(request.gpu_workers.clamp(1, 2));
         let encode_batch_size = usize::from(request.texconv_batch_size.clamp(1, 64));
+        let warmup_batch_size = (encode_batch_size / 2).max(1);
+        generation_log.write(
+            "INFO",
+            format!(
+                "Pipeline CPU budget: {cpu_budget} threads; transform workers={transform_threads}, texconv reserve={encoder_reserve}; GPU processes={gpu_workers}; warm-up batch={warmup_batch_size}, regular batch={encode_batch_size}"
+            ),
+        );
         let (work_tx, work_rx) = mpsc::sync_channel::<Vec<PreparedFrame>>(gpu_workers);
         let work_rx = Arc::new(Mutex::new(work_rx));
         let pipeline_error = Arc::new(Mutex::new(None::<String>));
@@ -1210,11 +1222,13 @@ pub async fn generate_texture_mod(
                                     transform_request.flip_vertical,
                                     transform_request.rotation,
                                 );
-                                let done = transform_counter.fetch_add(1, Ordering::Relaxed) + 1;
-                                set_generation_progress("transforming", done, total, "");
                                 let bmp =
                                     transform_temp.join(format!("frame_{:05}.bmp", index + 1));
                                 rendered.save(&bmp).map_err(|e| e.to_string())?;
+                                // A frame is transformed only when the file the
+                                // encoder consumes is fully written and ready.
+                                let done = transform_counter.fetch_add(1, Ordering::Relaxed) + 1;
+                                set_generation_progress("transforming", done, total, "");
                                 Ok(PreparedFrame { path: bmp })
                             })();
                             let _ = frame_tx.send(result);
@@ -1224,6 +1238,7 @@ pub async fn generate_texture_mod(
 
             let mut pending_encode = Vec::with_capacity(encode_batch_size);
             let mut transform_error = None;
+            let mut batches_dispatched = 0_usize;
             for rendered in frame_rx {
                 match rendered {
                     Ok(frame) => pending_encode.push(frame),
@@ -1234,15 +1249,21 @@ pub async fn generate_texture_mod(
                         continue;
                     }
                 }
-                if pending_encode.len() == encode_batch_size {
-                    let frames: Vec<_> = pending_encode.drain(..encode_batch_size).collect();
+                let next_batch_size = if batches_dispatched < gpu_workers {
+                    warmup_batch_size
+                } else {
+                    encode_batch_size
+                };
+                if pending_encode.len() >= next_batch_size {
+                    let frames: Vec<_> = pending_encode.drain(..next_batch_size).collect();
                     generation_log.write(
                         "INFO",
-                        format!("Queued {} frames for DirectXTex immediately after frame {}/{} completed", frames.len(), transformed.load(Ordering::Relaxed), total),
+                        format!("Queued {} {} frames for DirectXTex immediately after frame {}/{} completed", frames.len(), if batches_dispatched < gpu_workers { "warm-up" } else { "regular" }, transformed.load(Ordering::Relaxed), total),
                     );
                     work_tx
                         .send(frames)
                         .map_err(|_| "DirectXTex pipeline stopped unexpectedly".to_string())?;
+                    batches_dispatched += 1;
                 }
             }
             if let Some(reason) = transform_error {
