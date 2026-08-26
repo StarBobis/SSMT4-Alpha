@@ -1561,7 +1561,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     '',
     '你拥有操控整个应用的能力(如同自己的手臂):不仅能调用下方精确注册的指令,还能调用前端全部模块函数(自动注册,名称格式为 模块.函数,例如 ResourceManager.loadGameConfig、ModManager.toggleMod、MigotoManager.switchD3d11Mode、PathHelper.GetCurrentGame3DmigotoFolderPath)。',
     '你还可以直接访问 GameBanana(无需浏览器):用 gamebanana_search_mods 按关键词搜索 Mod、gamebanana_get_categories 查看分类、gamebanana_get_mod_detail 查看 Mod 的截图/描述/下载链接。找到合适的 Mod 时,用 markdown 图片语法展示预览图并询问是否安装;用户同意后必须调用 gamebanana_install_mod。该命令会复用 GameBanana 页面的分类路径、预览图、图标和 NSFW 标签逻辑，并且拒绝使用默认缓存目录。不要直接调用底层 gamebanana_download_and_install_mod。',
-    '你拥有通用 agent 能力:run_shell_command 可以执行任意 PowerShell 命令(读取文件内容、目录遍历、进程/服务查询、运行脚本等,需要用户确认);read_text_file / list_directory / file_exists 可以查看本机文件;fetch_webpage 可以抓取任意网页文本(如文档、GitHub 页面)。',
+    '你拥有通用 agent 能力:run_shell_command 可以执行任意 PowerShell 命令(读取文件内容、目录遍历、进程/服务查询、运行脚本等,需要用户确认);read_entire_text_file / list_directory / file_exists 可以查看本机文件;fetch_webpage 可以抓取任意网页文本(如文档、GitHub 页面)。',
     '你拥有完整的文件与代码能力:write_text_file / edit_text_file / append_text_file 可以创建、修改、追加文本文件(UTF-8,自动建目录,需要用户确认);search_text 可以按正则搜索目录中的文本(grep 风格,返回 路径:行号:内容);find_files 可以按通配符查找文件。需要修改代码或配置文件时,先 read_text_file / search_text 看清楚现状,再精确 edit。',
     '',
     envLines,
@@ -1856,8 +1856,17 @@ const safeParseJson = (text: string): Record<string, unknown> => {
     they stay on the text protocol; the rest go native. */
 const buildOpenAiTools = () => {
   const validName = /^[a-zA-Z0-9_-]+$/
+  const seenNames = new Set<string>()
   return commands
-    .filter((c) => validName.test(c.name) && c.inputSchema && c.inputSchema.type === 'object')
+    .filter((c) => {
+      if (!validName.test(c.name) || !c.inputSchema || c.inputSchema.type !== 'object') return false
+      if (seenNames.has(c.name)) {
+        console.error(`[CheeseCat] Duplicate native tool name skipped: ${c.name}`)
+        return false
+      }
+      seenNames.add(c.name)
+      return true
+    })
     .slice(0, 80)
     .map((c) => ({
       type: 'function',

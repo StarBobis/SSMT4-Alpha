@@ -84,7 +84,7 @@ export const agentTools: McpTool[] = [
     },
   },
   {
-    name: 'read_text_file',
+    name: 'read_entire_text_file',
     description:
       '读取一个文本文件的全部内容(限应用有读取权限的目录:用户主目录、桌面、文档、下载、应用数据等)。',
     category: '通用能力',
