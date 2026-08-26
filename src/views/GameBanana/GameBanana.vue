@@ -2027,7 +2027,7 @@ const GB_MIN_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 160,
 const GB_MAX_PANEL_WIDTHS: Record<GbResizablePanel, number> = { categories: 420, results: 960 };
 const GB_MIN_DETAIL_WIDTH = 270;
 const GB_COLUMN_RESIZERS_WIDTH = 20;
-const GB_STACKED_LAYOUT_BREAKPOINT = 1120;
+const gbUsesStackedLayout = () => window.matchMedia('(max-width: 70em)').matches;
 
 const clampGbPanelWidth = (panel: GbResizablePanel, value: unknown) => {
   const parsed = Number(value);
@@ -2072,7 +2072,7 @@ const getGbAvailableSidePanelWidth = () => {
 };
 
 const constrainGbPanelWidths = () => {
-  if (window.innerWidth <= GB_STACKED_LAYOUT_BREAKPOINT) return;
+  if (gbUsesStackedLayout()) return;
 
   gbPanelWidths.categories = clampGbPanelWidth('categories', gbPanelWidths.categories);
   gbPanelWidths.results = clampGbPanelWidth('results', gbPanelWidths.results);
@@ -2104,7 +2104,7 @@ const setGbPanelWidth = (panel: GbResizablePanel, requestedWidth: number) => {
 };
 
 const startGbPanelResize = (panel: GbResizablePanel, event: PointerEvent) => {
-  if (event.button !== 0 || window.innerWidth <= GB_STACKED_LAYOUT_BREAKPOINT) return;
+  if (event.button !== 0 || gbUsesStackedLayout()) return;
   event.preventDefault();
   activeGbPanelResize.value = panel;
   gbPanelResizePointerId = event.pointerId;
@@ -2882,11 +2882,21 @@ onBeforeUnmount(() => {
 .gb-category:hover { background: rgba(255,255,255,0.06); color: rgba(var(--theme-text-primary-rgb), 0.94); }
 .gb-category.active { background: rgba(var(--theme-surface-tint-rgb), 0.16); color: rgba(var(--theme-surface-tint-rgb), 0.98); font-weight: 700; }
 
-.gb-mod-list { flex: 1; padding: 7px; }
+.gb-mod-list {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  flex: 1;
+  overflow-x: hidden;
+  padding: 7px;
+}
 .gb-mod-card {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   gap: 10px;
   padding: 8px;
   border: 1px solid transparent;
@@ -3004,18 +3014,19 @@ onBeforeUnmount(() => {
 :global(.gamebanana-select-popper .el-select-dropdown__item.is-selected) { background: rgba(var(--theme-surface-tint-rgb),.24); color: rgba(255,255,255,.98); }
 :global(.gamebanana-select-popper .el-select-dropdown__empty) { color: rgba(255,255,255,.52); }
 
-@media (max-width: 1120px) {
+@media (max-width: 70em) {
   .gb-layout {
     grid-template-areas: "categories results" "detail detail";
     grid-template-columns: minmax(145px, .7fr) minmax(330px, 1.45fr);
     grid-template-rows: minmax(240px, 1fr) minmax(320px, 1fr);
+    gap: var(--t-page-gap);
     overflow: auto;
   }
   .gb-column-resizer { display: none; }
   .gb-detail { min-height: 0; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 45em) {
   .gamebanana-page { overflow: hidden; padding: var(--t-page-padding-compact); }
   .gb-history-nav { right:10px; left:10px; }
   .gb-history-entry { max-width:150px; }
