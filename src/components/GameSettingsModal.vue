@@ -99,12 +99,13 @@ const tabs = computed(() => [
 const isForcedSsiceADllMode = computed(() => (config.gamePreset || '').trim().toUpperCase() === 'NTEMI');
 const isWWMIPreset = computed(() => (config.gamePreset || '').trim().toUpperCase() === 'WWMI');
 const currentDllMode = computed<D3d11Mode>(() => ResourceManager.getEffectiveD3d11Mode(config));
-const isIdentityVDevMode = (mode: D3d11Mode): boolean => (
-  mode === 'dev' && (config.gamePreset || '').trim().toUpperCase() === 'IDENTITYV'
+const CAPPED_DEV_D3D11_PRESETS = new Set(['IDENTITYV', 'NARAKA', 'NARAKAM']);
+const isCappedDevD3d11Mode = (mode: D3d11Mode): boolean => (
+  mode === 'dev' && CAPPED_DEV_D3D11_PRESETS.has((config.gamePreset || '').trim().toUpperCase())
 );
-const isIdentityVDevD3d11ModeRestricted = computed(() => isIdentityVDevMode(currentDllMode.value));
+const isCappedDevD3d11ModeRestricted = computed(() => isCappedDevD3d11Mode(currentDllMode.value));
 const getStoredDllVersion = (mode: D3d11Mode): string => {
-  if (isIdentityVDevMode(mode)) {
+  if (isCappedDevD3d11Mode(mode)) {
     return (appSettings.coreVersionIdentityVDev || '').trim();
   }
   if (mode === 'play') {
@@ -119,7 +120,7 @@ const getStoredDllVersion = (mode: D3d11Mode): string => {
 };
 
 const setStoredDllVersion = (mode: D3d11Mode, info: UpdateInfo) => {
-  if (isIdentityVDevMode(mode)) {
+  if (isCappedDevD3d11Mode(mode)) {
     appSettings.coreVersionIdentityVDev = info.version;
     appSettings.coreReleaseDescriptionIdentityVDev = info.description;
   } else if (mode === 'play') {
@@ -133,9 +134,9 @@ const setStoredDllVersion = (mode: D3d11Mode, info: UpdateInfo) => {
     appSettings.coreReleaseDescriptionDev = info.description;
   }
 
-  // These legacy fields mirror the shared DLL selection. IdentityV owns a
+  // These legacy fields mirror the shared DLL selection. Capped presets own a
   // separate cache and must not change the version seen by other games.
-  if (!isIdentityVDevMode(mode)) {
+  if (!isCappedDevD3d11Mode(mode)) {
     appSettings.coreVersion = info.version;
     appSettings.coreReleaseDescription = info.description;
   }
@@ -677,7 +678,7 @@ const installDllUpdateFromInfo = async (info: UpdateInfo, mode: D3d11Mode = curr
     ElMessage.warning(
       t('gameSettingsModal.messages.identityVDllVersionBlocked', {
         version: info.version,
-        maxVersion: ResourceManager.getIdentityVDevD3d11MaxVersion(),
+        maxVersion: ResourceManager.getCappedDevD3d11MaxVersion(),
       }),
     );
     return false;
@@ -950,7 +951,7 @@ const moveExtraDll = (index: number, direction: -1 | 1) => {
 watch(() => props.modelValue, (val) => {
   if (val) {
     activeTab.value = 'basic'; // Reset to first tab
-    // Release candidates are game-specific (IdentityV in particular caps the
+    // Release candidates are game-specific (IdentityV/Naraka/NarakaM in particular cap the
     // Dev DLL at v0.9.2), so never reuse another game's cached list.
     resetDllReleaseListState();
     resetPackageReleaseListState();
@@ -1516,8 +1517,8 @@ defineExpose({
                 </el-checkbox>
               </div>
 
-              <!-- IdentityV dev d3d11.dll version cap notice -->
-              <div v-if="isIdentityVDevD3d11ModeRestricted" class="dll-cap-hint">
+              <!-- Capped dev d3d11.dll version cap notice -->
+              <div v-if="isCappedDevD3d11ModeRestricted" class="dll-cap-hint">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"/>
                   <line x1="12" y1="8" x2="12" y2="12"/>
@@ -1525,7 +1526,7 @@ defineExpose({
                 </svg>
                 <span>
                   {{ t('gameSettingsModal.fields.identityVDllVersionCapHint', {
-                    maxVersion: ResourceManager.getIdentityVDevD3d11MaxVersion(),
+                    maxVersion: ResourceManager.getCappedDevD3d11MaxVersion(),
                   }) }}
                 </span>
               </div>
@@ -2402,7 +2403,7 @@ defineExpose({
   text-overflow: ellipsis;
 }
 
-/* IdentityV dev d3d11.dll version cap notice */
+/* Capped dev d3d11.dll version cap notice */
 .dll-cap-hint {
   display: flex;
   align-items: flex-start;

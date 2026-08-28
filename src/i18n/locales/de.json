@@ -130,7 +130,7 @@
       "noDllVersionInstalled": "Keine installierte Version verzeichnet",
       "availableDllVersions": "Verfügbare Versionen",
       "availableDllVersionsHint": "Wird aus GitHub Releases abgerufen. Jede aufgeführte Version kann direkt installiert werden. Die 10 neuesten Versionen werden zuerst angezeigt.",
-      "identityVDllVersionCapHint": "Beim IdentityV-Preset ist d3d11.dll auf v{maxVersion} begrenzt. Neuere Versionen können Probleme verursachen, daher werden Versionen über v{maxVersion} nicht zum Download angeboten.",
+      "identityVDllVersionCapHint": "Beim aktuellen Preset ist d3d11.dll auf v{maxVersion} begrenzt. Neuere Versionen können Probleme verursachen, daher werden Versionen über v{maxVersion} nicht zum Download angeboten.",
       "packageSource": "Quelle für 3Dmigoto Package",
       "packageSourceHint": "Verwendet automatisch das zum aktuellen Spiel-Preset gehörende Package-Repository. Jede verfügbare Version kann direkt installiert werden.",
       "noPackagePresetSelected": "Kein Spiel-Preset ausgewählt",
@@ -240,7 +240,7 @@
       "loadingDllVersions": "d3d11.dll-Versionsliste wird geladen...",
       "dllVersionListLoadFailed": "Versionsliste konnte nicht geladen werden: {error}",
       "noDllVersionsAvailable": "Keine installierbare d3d11.dll-Version gefunden.",
-      "identityVDllVersionBlocked": "d3d11.dll v{version} kann nicht für das IdentityV-Preset installiert werden. Dieses Preset unterstützt maximal v{maxVersion}; neuere Versionen können Probleme verursachen, daher ist der Download blockiert.",
+      "identityVDllVersionBlocked": "d3d11.dll v{version} kann nicht für das aktuelle Preset installiert werden. Dieses Preset unterstützt maximal v{maxVersion}; neuere Versionen können Probleme verursachen, daher ist der Download blockiert.",
       "loadingPackageVersions": "Versionsliste von 3Dmigoto Package wird geladen...",
       "packageVersionListLoadFailed": "Package-Versionsliste konnte nicht geladen werden: {error}",
       "noPackageVersionsAvailable": "Keine installierbare Version von 3Dmigoto Package gefunden."
@@ -1597,7 +1597,7 @@
       "releaseDownloadUrlMissing": "Keine Download-URL für das ausgewählte Asset gefunden",
       "cannotUpdateBecauseInstallDirMissing": "Aktualisierung nicht möglich: installDir ist leer und der alternative Cache-Ordner ist nicht verfügbar.",
       "downloadFailedWithStatusAndBody": "Download fehlgeschlagen: {status} {body}",
-      "d3d11VersionCapExceeded": "d3d11.dll v{version} überschreitet die für das IdentityV-Preset erlaubte Höchstversion v{maxVersion}; neuere Versionen können Probleme verursachen, daher ist der Download blockiert.",
+      "d3d11VersionCapExceeded": "d3d11.dll v{version} überschreitet die für das aktuelle Preset erlaubte Höchstversion v{maxVersion}; neuere Versionen können Probleme verursachen, daher ist der Download blockiert.",
       "requiredUpdateFileMissing": "Erforderliche Datei fehlt im Update-Paket: {fileName}"
     }
   }

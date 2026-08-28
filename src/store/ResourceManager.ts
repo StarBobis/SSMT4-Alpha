@@ -82,45 +82,47 @@ const fixedBackgroundSources: Record<string, FixedBackgroundSource> = {
 const PLAY_D3D11_FILE_NAME = 'd3d11.play.dll';
 const DEV_D3D11_FILE_NAME = 'd3d11.dev.dll';
 const IDENTITY_V_DEV_D3D11_FILE_NAME = 'd3d11.identityv.dev.dll';
+const CAPPED_DEV_D3D11_FILE_NAME = IDENTITY_V_DEV_D3D11_FILE_NAME;
 const SSICE_A_D3D11_FILE_NAME = 'd3d11.ssice-a.dll';
 const D3DCOMPILER_FILE_NAME = 'd3dcompiler_47.dll';
 const DX12_PRESET = 'ZZMIDX12';
 const DX12_D3D12_FILE_NAME = 'd3d12.dll';
-const IDENTITY_V_PRESET = 'IDENTITYV';
-const IDENTITY_V_MAX_DEV_D3D11_VERSION = [0, 9, 2] as const;
+const CAPPED_DEV_D3D11_PRESETS = ['IDENTITYV', 'NARAKA', 'NARAKAM'] as const;
+const CAPPED_DEV_D3D11_PRESET_SET: ReadonlySet<string> = new Set(CAPPED_DEV_D3D11_PRESETS);
+const CAPPED_DEV_D3D11_MAX_VERSION = [0, 9, 2] as const;
 
-const isIdentityVPreset = (gamePreset?: string | null): boolean => (
-    gamePreset?.trim().toUpperCase() === IDENTITY_V_PRESET
+const isCappedDevD3d11Preset = (gamePreset?: string | null): boolean => (
+    CAPPED_DEV_D3D11_PRESET_SET.has((gamePreset || '').trim().toUpperCase())
 );
 
 const getD3d11CacheFileName = (mode: D3d11Mode, gamePreset?: string | null): string => (
-    mode === 'dev' && isIdentityVPreset(gamePreset)
-        ? IDENTITY_V_DEV_D3D11_FILE_NAME
+    mode === 'dev' && isCappedDevD3d11Preset(gamePreset)
+        ? CAPPED_DEV_D3D11_FILE_NAME
         : D3D11_RELEASE_SOURCES[mode].cacheFileName
 );
 
-const isIdentityVSupportedDevD3d11Version = (version: string): boolean => {
+const isCappedDevD3d11VersionSupported = (version: string): boolean => {
     const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
     if (!match) return false;
 
     const candidate = match.slice(1).map(part => Number.parseInt(part, 10));
-    for (let index = 0; index < IDENTITY_V_MAX_DEV_D3D11_VERSION.length; index += 1) {
-        if (candidate[index] < IDENTITY_V_MAX_DEV_D3D11_VERSION[index]) return true;
-        if (candidate[index] > IDENTITY_V_MAX_DEV_D3D11_VERSION[index]) return false;
+    for (let index = 0; index < CAPPED_DEV_D3D11_MAX_VERSION.length; index += 1) {
+        if (candidate[index] < CAPPED_DEV_D3D11_MAX_VERSION[index]) return true;
+        if (candidate[index] > CAPPED_DEV_D3D11_MAX_VERSION[index]) return false;
     }
     return true;
 };
 
-const getIdentityVDevD3d11MaxVersion = (): string => (
-    `v${IDENTITY_V_MAX_DEV_D3D11_VERSION.join('.')}`
+const getCappedDevD3d11MaxVersion = (): string => (
+    `v${CAPPED_DEV_D3D11_MAX_VERSION.join('.')}`
 );
 
-const isIdentityVDevD3d11Mode = (mode: D3d11Mode, gamePreset?: string | null): boolean => (
-    mode === 'dev' && isIdentityVPreset(gamePreset)
+const isCappedDevD3d11Mode = (mode: D3d11Mode, gamePreset?: string | null): boolean => (
+    mode === 'dev' && isCappedDevD3d11Preset(gamePreset)
 );
 
 const isD3d11VersionAllowedForMode = (version: string, mode: D3d11Mode, gamePreset?: string | null): boolean => (
-    !isIdentityVDevD3d11Mode(mode, gamePreset) || isIdentityVSupportedDevD3d11Version(version)
+    !isCappedDevD3d11Mode(mode, gamePreset) || isCappedDevD3d11VersionSupported(version)
 );
 
 const constrainD3d11ReleasesForGame = (
@@ -128,12 +130,12 @@ const constrainD3d11ReleasesForGame = (
     mode: D3d11Mode,
     gamePreset?: string,
 ): UpdateInfo[] => {
-    if (mode !== 'dev' || !isIdentityVPreset(gamePreset)) {
+    if (mode !== 'dev' || !isCappedDevD3d11Preset(gamePreset)) {
         return releases;
     }
 
     return releases
-        .filter(release => isIdentityVSupportedDevD3d11Version(release.version))
+        .filter(release => isCappedDevD3d11VersionSupported(release.version))
         .map((release, index) => ({ ...release, is_latest: index === 0 }));
 };
 
@@ -921,10 +923,10 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
     }
 
     async function installD3d11Update(mode: D3d11Mode, downloadUrl: string, gamePreset?: string, version?: string): Promise<void> {
-        if (version && isIdentityVDevD3d11Mode(mode, gamePreset) && !isIdentityVSupportedDevD3d11Version(version)) {
+        if (version && isCappedDevD3d11Mode(mode, gamePreset) && !isCappedDevD3d11VersionSupported(version)) {
             throw new Error(t('resourceManager.messages.d3d11VersionCapExceeded', {
                 version,
-                maxVersion: getIdentityVDevD3d11MaxVersion(),
+                maxVersion: getCappedDevD3d11MaxVersion(),
             }));
         }
         const resourcesDir = await GlobalConfig.SSMTResourcesFolder();
@@ -1149,9 +1151,9 @@ export const useResourceManagerStore = defineStore('resourceManager', () => {
         resolveD3d11SourcePathByMode,
         resolveBootDllSource,
         resolveMigotoDllSource,
-        // IdentityV d3d11.dll version cap helpers
-        isIdentityVDevD3d11Mode,
-        getIdentityVDevD3d11MaxVersion,
+        // Capped dev d3d11.dll version cap helpers
+        isCappedDevD3d11Mode,
+        getCappedDevD3d11MaxVersion,
         isD3d11VersionAllowedForMode,
         // Global config
         CopyGamesToGlobalConfig,
@@ -1204,8 +1206,8 @@ export const ResourceManager = new Proxy({} as Record<string, unknown>, {
     getEffectiveD3d11Mode: (config?: Pick<GameConfig, 'd3d11Mode' | 'gamePreset'> | null) => D3d11Mode;
     getGameD3d11Mode: (gameName: string) => Promise<D3d11Mode>;
     resolveD3d11SourcePathByMode: (mode: D3d11Mode, gamePreset?: string | null) => Promise<string>;
-    isIdentityVDevD3d11Mode: (mode: D3d11Mode, gamePreset?: string | null) => boolean;
-    getIdentityVDevD3d11MaxVersion: () => string;
+    isCappedDevD3d11Mode: (mode: D3d11Mode, gamePreset?: string | null) => boolean;
+    getCappedDevD3d11MaxVersion: () => string;
     isD3d11VersionAllowedForMode: (version: string, mode: D3d11Mode, gamePreset?: string | null) => boolean;
     CopyGamesToGlobalConfig: (includeMihoyoGames?: boolean) => Promise<string>;
     resolveBootDllSource: (gamePreset?: string | null) => Promise<{ sourcePath: string; targetFileName: string; label: string }>;

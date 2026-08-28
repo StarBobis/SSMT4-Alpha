@@ -137,7 +137,7 @@
       "noDllVersionInstalled": "未记录已安装版本",
       "availableDllVersions": "可安装版本列表",
       "availableDllVersionsHint": "从 GitHub Release 拉取，可直接安装指定版本。默认先显示最近 10 个版本。",
-      "identityVDllVersionCapHint": "IdentityV 预设下 d3d11.dll 最高支持到 v{maxVersion}。更高版本可能导致问题，因此 v{maxVersion} 以上版本不提供下载。",
+      "identityVDllVersionCapHint": "当前预设下 d3d11.dll 最高支持到 v{maxVersion}。更高版本可能导致问题，因此 v{maxVersion} 以上版本不提供下载。",
       "packageSource": "3Dmigoto Package 来源",
       "packageSourceHint": "根据当前游戏预设自动选择对应的 Package 仓库，可直接安装任意可用版本。",
       "noPackagePresetSelected": "未选择游戏预设",
@@ -248,7 +248,7 @@
       "loadingDllVersions": "正在拉取 d3d11.dll 版本列表...",
       "dllVersionListLoadFailed": "拉取版本列表失败: {error}",
       "noDllVersionsAvailable": "未找到可安装的 d3d11.dll 版本。",
-      "identityVDllVersionBlocked": "d3d11.dll v{version} 无法在 IdentityV 预设下安装。该预设最高支持 v{maxVersion}，更高版本可能导致问题，已禁止下载。",
+      "identityVDllVersionBlocked": "d3d11.dll v{version} 无法在当前预设下安装。该预设最高支持 v{maxVersion}，更高版本可能导致问题，已禁止下载。",
       "loadingPackageVersions": "正在拉取 3Dmigoto Package 版本列表...",
       "packageVersionListLoadFailed": "拉取 Package 版本列表失败: {error}",
       "noPackageVersionsAvailable": "未找到可安装的 3Dmigoto Package 版本。"
@@ -1670,7 +1670,7 @@
       "releaseDownloadUrlMissing": "未找到所选资产的下载地址",
       "cannotUpdateBecauseInstallDirMissing": "无法更新：installDir 为空且回退缓存目录不可用。",
       "downloadFailedWithStatusAndBody": "下载失败：{status} {body}",
-      "d3d11VersionCapExceeded": "d3d11.dll v{version} 超过了 IdentityV 预设允许的最高版本 v{maxVersion}；更高版本可能导致问题，已禁止下载。",
+      "d3d11VersionCapExceeded": "d3d11.dll v{version} 超过了当前预设允许的最高版本 v{maxVersion}；更高版本可能导致问题，已禁止下载。",
       "requiredUpdateFileMissing": "更新包中缺少必要文件：{fileName}"
     }
   }

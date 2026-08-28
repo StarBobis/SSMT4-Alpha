@@ -90,12 +90,13 @@ const getD3d11ModeLabel = (mode: D3d11Mode): string => {
   return 'Dev'
 }
 
-const isIdentityVDevMode = (mode: D3d11Mode, gamePreset?: string): boolean => (
-  mode === 'dev' && (gamePreset || '').trim().toUpperCase() === 'IDENTITYV'
+const CAPPED_DEV_D3D11_PRESETS = new Set(['IDENTITYV', 'NARAKA', 'NARAKAM'])
+const isCappedDevD3d11Mode = (mode: D3d11Mode, gamePreset?: string): boolean => (
+  mode === 'dev' && CAPPED_DEV_D3D11_PRESETS.has((gamePreset || '').trim().toUpperCase())
 )
 
 const getStoredDllVersion = (mode: D3d11Mode, gamePreset?: string): string => {
-  if (isIdentityVDevMode(mode, gamePreset)) {
+  if (isCappedDevD3d11Mode(mode, gamePreset)) {
     return (appSettings.coreVersionIdentityVDev || '').trim()
   }
   if (mode === 'play') {
@@ -110,7 +111,7 @@ const getStoredDllVersion = (mode: D3d11Mode, gamePreset?: string): string => {
 }
 
 const getStoredDllReleaseDescription = (mode: D3d11Mode, gamePreset?: string): string => {
-  if (isIdentityVDevMode(mode, gamePreset)) {
+  if (isCappedDevD3d11Mode(mode, gamePreset)) {
     return (appSettings.coreReleaseDescriptionIdentityVDev || '').trim()
   }
   if (mode === 'play') {
