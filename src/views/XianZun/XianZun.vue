@@ -9,6 +9,7 @@ import {
   CopyDocument,
   Delete,
   Document,
+  Download,
   EditPen,
   Link as LinkIcon,
   List,
@@ -1135,6 +1136,20 @@ const settingsOpen = ref(false)
 const testing = ref(false)
 const loadingModels = ref(false)
 const modelsStatus = ref('')
+type CcswitchProviderImport = {
+  id: string
+  name: string
+  appType: string
+  protocol: 'openai' | 'anthropic'
+  anthropicAuth: 'bearer' | 'x-api-key'
+  baseUrl: string
+  apiKey: string
+  model: string
+}
+const ccswitchProviders = ref<CcswitchProviderImport[]>([])
+const ccswitchLoading = ref(false)
+const ccswitchSelectedId = ref('')
+const ccswitchStatus = ref('')
 const droppedAttachments = ref<string[]>([])
 const expandedTools = ref<string[]>([])
 const previewImage = ref('')
@@ -2621,6 +2636,52 @@ const testConnection = async () => {
   } finally {
     testing.value = false
   }
+}
+
+const loadCcswitchProviders = async () => {
+  ccswitchLoading.value = true
+  ccswitchStatus.value = ''
+  try {
+    const providers = await invoke<CcswitchProviderImport[]>('import_ccswitch_providers')
+    ccswitchProviders.value = providers
+    ccswitchSelectedId.value = providers[0]?.id ?? ''
+    ccswitchStatus.value = providers.length > 0
+      ? `已找到 ${providers.length} 个可导入供应商。`
+      : 'CCSwitch 数据库中没有可导入的 API 供应商。'
+    if (providers.length > 0) ElMessage.success(ccswitchStatus.value)
+  } catch (err) {
+    ccswitchProviders.value = []
+    ccswitchSelectedId.value = ''
+    ccswitchStatus.value = String(err)
+    ElMessage.error(`读取 CCSwitch 配置失败：${String(err)}`)
+  } finally {
+    ccswitchLoading.value = false
+  }
+}
+
+const importSelectedCcswitchProvider = async () => {
+  const imported = ccswitchProviders.value.find((provider) => provider.id === ccswitchSelectedId.value)
+  if (!imported) {
+    ElMessage.warning('请先选择要导入的 CCSwitch 供应商。')
+    return
+  }
+  const provider: XianZunProvider = {
+    id: `xz-provider-ccswitch-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    name: imported.name || `CCSwitch ${imported.appType}`,
+    protocol: imported.protocol,
+    baseUrl: imported.baseUrl,
+    apiKey: imported.apiKey,
+    model: imported.model,
+    models: imported.model ? [imported.model] : [],
+    anthropicAuth: imported.anthropicAuth,
+    presetId: 'ccswitch',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  appSettings.xianzunProviders.push(provider)
+  appSettings.xianzunActiveProviderId = provider.id
+  await AppStateManager.saveSettingsNow()
+  ElMessage.success(`已导入供应商“${provider.name}”。`)
 }
 
 const refreshModelList = async () => {
@@ -4605,7 +4666,8 @@ onUnmounted(() => {
       width="540px"
       align-center
     >
-      <div class="xz-settings">
+      <div class="xz-settings-scroll">
+        <div class="xz-settings">
         <label class="xz-field">
           <span class="xz-field-label">当前供应商</span>
           <div class="xz-provider-row">
@@ -4641,6 +4703,34 @@ onUnmounted(() => {
             </el-button>
           </div>
         </label>
+
+        <div class="xz-ccswitch-import">
+          <div class="xz-ccswitch-import-head">
+            <div>
+              <span class="xz-field-label">从 CCSwitch 导入</span>
+              <span class="xz-field-hint">读取本机 CCSwitch 数据库中的供应商配置</span>
+            </div>
+            <el-button :loading="ccswitchLoading" :disabled="ccswitchLoading" @click="loadCcswitchProviders">
+              <el-icon v-if="!ccswitchLoading"><Download /></el-icon>
+              <span>读取配置</span>
+            </el-button>
+          </div>
+          <div v-if="ccswitchProviders.length" class="xz-provider-row">
+            <el-select v-model="ccswitchSelectedId" class="xz-provider-select" filterable>
+              <el-option
+                v-for="provider in ccswitchProviders"
+                :key="provider.id"
+                :label="`${provider.name} (${provider.appType})`"
+                :value="provider.id"
+              />
+            </el-select>
+            <el-button type="primary" @click="importSelectedCcswitchProvider">
+              <el-icon><Download /></el-icon>
+              <span>导入</span>
+            </el-button>
+          </div>
+          <span v-if="ccswitchStatus" class="xz-field-hint">{{ ccswitchStatus }}</span>
+        </div>
 
         <label class="xz-field">
           <span class="xz-field-label">供应商名称</span>
@@ -4753,11 +4843,12 @@ onUnmounted(() => {
 
         <p class="xz-settings-note">{{ t('xianzun.settingsNote') }}</p>
 
-        <div class="xz-settings-actions">
-          <el-button size="small" @click="promptDialogOpen = true">
-            <el-icon><Document /></el-icon>
-            <span>{{ t('xianzun.viewSystemPrompt') }}</span>
-          </el-button>
+          <div class="xz-settings-actions">
+            <el-button size="small" @click="promptDialogOpen = true">
+              <el-icon><Document /></el-icon>
+              <span>{{ t('xianzun.viewSystemPrompt') }}</span>
+            </el-button>
+          </div>
         </div>
       </div>
 
@@ -6801,6 +6892,72 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.xz-settings-scroll {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 10px 4px 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--theme-surface-tint-rgb), 0.42) transparent;
+}
+
+.xz-settings-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xz-settings-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xz-settings-scroll::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.42);
+}
+
+.xz-settings-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.62);
+}
+
+:global(.xz-settings-dialog) {
+  height: 70vh;
+  max-height: 70vh;
+  box-sizing: border-box;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+:global(.xz-settings-dialog .el-dialog__body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.xz-ccswitch-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
+  border-radius: 8px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.045);
+}
+
+.xz-ccswitch-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.xz-ccswitch-import-head > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .xz-field {

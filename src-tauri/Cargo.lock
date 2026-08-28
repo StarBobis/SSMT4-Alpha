@@ -4751,6 +4751,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "tokio",
+ "toml 0.8.2",
  "trash",
  "unrar",
  "zip 0.6.6",
