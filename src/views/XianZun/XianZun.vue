@@ -16,6 +16,7 @@ import {
   Menu,
   Plus,
   Promotion,
+  Refresh,
   Setting,
   Tickets,
   VideoPause,
@@ -56,6 +57,7 @@ import {
   type XianZunProvider,
 } from '../../store/XianZunProviders'
 import { streamXianZunAnthropic, testXianZunProvider } from '../../store/XianZunAnthropic'
+import { fetchXianZunModels, xianZunEndpoint } from '../../store/XianZunApi'
 import Vditor from 'vditor'
 import vditorLutePath from 'vditor/dist/js/lute/lute.min.js?url'
 import mathJaxBundleUrl from 'vditor/dist/js/mathjax/tex-svg-full.js?url'
@@ -1131,6 +1133,8 @@ let composerResizeObserver: ResizeObserver | null = null
 const isStreaming = ref(false)
 const settingsOpen = ref(false)
 const testing = ref(false)
+const loadingModels = ref(false)
+const modelsStatus = ref('')
 const droppedAttachments = ref<string[]>([])
 const expandedTools = ref<string[]>([])
 const previewImage = ref('')
@@ -1652,93 +1656,76 @@ const streamChatCompletion = async (opts: {
     })
   }
 
-  const base = opts.apiUrl.trim().replace(/\/+$/, '')
-  const url = `${base}/chat/completions`
+  const url = xianZunEndpoint(opts.apiUrl, 'chat/completions')
+  const reasoningModel = /(?:reasoner|reasoning|think|^o[1-9])/i.test(opts.model)
 
-  const buildBody = (): Record<string, unknown> => {
+  const buildBody = (features: {
+    tools: boolean
+    reasoning: boolean
+    temperature: boolean
+  }): Record<string, unknown> => {
     const body: Record<string, unknown> = {
       model: opts.model,
       messages: opts.messages,
       stream: true,
-      temperature: STREAM_TEMPERATURE,
     }
+    // Reasoning models and several OpenAI-compatible gateways reject
+    // temperature even though the field is valid for ordinary chat models.
+    if (features.temperature) body.temperature = STREAM_TEMPERATURE
     // reasoning_effort is only sent when explicitly configured; 'auto' means
     // let the endpoint decide (avoids 400 on endpoints without the field).
-    if (opts.reasoningEffort && opts.reasoningEffort !== 'auto') {
+    if (features.reasoning && opts.reasoningEffort && opts.reasoningEffort !== 'auto') {
       body.reasoning_effort = opts.reasoningEffort
     }
-    if (opts.tools && opts.tools.length > 0) {
+    if (features.tools && opts.tools && opts.tools.length > 0) {
       body.tools = opts.tools
     }
     return body
   }
 
-  let res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${opts.apiKey}`,
-    },
-    body: JSON.stringify(buildBody()),
-    signal: opts.signal,
-    connectTimeout: 60000,
-  })
+  const initialFeatures = {
+    tools: Boolean(opts.tools?.length),
+    reasoning: Boolean(opts.reasoningEffort && opts.reasoningEffort !== 'auto'),
+    temperature: !reasoningModel,
+  }
+  const featureVariants = [
+    initialFeatures,
+    { ...initialFeatures, temperature: false },
+    { ...initialFeatures, reasoning: false },
+    { ...initialFeatures, tools: false, reasoning: false, temperature: false },
+  ]
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${opts.apiKey}`,
+  }
+  let res: Response | null = null
+  let detail = ''
+  for (let variantIndex = 0; variantIndex < featureVariants.length; variantIndex += 1) {
+    const variant = featureVariants[variantIndex]
+    res = await fetch(url, {
+      method: 'POST',
+      headers: requestHeaders,
+      body: JSON.stringify(buildBody(variant)),
+      signal: opts.signal,
+      connectTimeout: 60000,
+    })
+    if (res.ok) break
 
-  if (!res.ok) {
-    let detail = ''
+    const raw = await res.text().catch(() => '')
     try {
-      const raw = await res.text()
-      try {
-        const parsed = JSON.parse(raw) as { error?: { message?: string } }
-        detail = parsed.error?.message ?? raw
-      } catch {
-        detail = raw
-      }
-      // Some OpenAI-compatible endpoints reject the native `tools` parameter.
-      // Retry once without it so the text-protocol fallback still works.
-      if (
-        opts.tools &&
-        opts.tools.length > 0 &&
-        res.status === 400 &&
-        /tools|function|parameters/i.test(detail)
-      ) {
-        const retryBody = buildBody()
-        delete retryBody.tools
-        const retryRes = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${opts.apiKey}`,
-          },
-          body: JSON.stringify(retryBody),
-          signal: opts.signal,
-          connectTimeout: 60000,
-        })
-        if (retryRes.ok) {
-          res = retryRes
-        } else {
-          let retryDetail = ''
-          try {
-            const raw2 = await retryRes.text()
-            try {
-              const parsed2 = JSON.parse(raw2) as { error?: { message?: string } }
-              retryDetail = parsed2.error?.message ?? raw2
-            } catch {
-              retryDetail = raw2
-            }
-          } catch {
-            // keep empty
-          }
-          throw new Error(`HTTP ${retryRes.status}${retryDetail ? ` — ${retryDetail}` : ''}`)
-        }
-      }
-    } catch (err) {
-      if (err instanceof Error && err.message.startsWith('HTTP')) throw err
-      // fall through to the generic error below
+      const parsed = JSON.parse(raw) as { error?: { message?: string }; message?: string }
+      detail = parsed.error?.message ?? parsed.message ?? raw
+    } catch {
+      detail = raw
     }
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}${detail ? ` — ${detail}` : ''}`)
-    }
+
+    const retryable400 = res.status === 400 && (
+      !detail || /tool|function|parameter|temperature|reasoning|unsupported|unknown field|not supported|stream/i.test(detail)
+    )
+    if (!retryable400 || variantIndex === featureVariants.length - 1) break
+  }
+  if (!res || !res.ok) {
+    throw new Error(`HTTP ${res?.status ?? 500}${detail ? ` — ${detail}` : ''}`)
   }
 
   const reader = res.body?.getReader()
@@ -2207,11 +2194,12 @@ const runAgentTurn = async () => {
 
   const provider = activeProvider.value
   const apiKey = provider?.apiKey.trim() || ''
-  if (!apiKey) {
+  const apiUrl = provider?.baseUrl.trim() || ''
+  if (!apiKey || !apiUrl) {
     messages.value.push({
       id: nextId(),
       role: 'error',
-      content: t('xianzun.missingKey'),
+      content: !apiKey ? t('xianzun.missingKey') : '请先配置 API 地址。',
       createdAt: Date.now(),
     })
     settingsOpen.value = true
@@ -2250,7 +2238,7 @@ const runAgentTurn = async () => {
     mode: appSettings.xianzunApprovalMode,
     protocol: provider.protocol,
     anthropicAuth: provider.anthropicAuth,
-    apiUrl: provider.baseUrl,
+    apiUrl,
     apiKey,
     model,
     reasoningEffort,
@@ -2303,7 +2291,7 @@ const runAgentTurn = async () => {
       const raw = await streamChatCompletion({
         protocol: provider.protocol,
         anthropicAuth: provider.anthropicAuth,
-        apiUrl: provider.baseUrl,
+        apiUrl,
         apiKey,
         model,
         messages: history,
@@ -2616,13 +2604,14 @@ const testConnection = async () => {
   try {
     const provider = activeProvider.value
     const apiKey = provider?.apiKey.trim() || ''
-    if (!apiKey) {
-      ElMessage.warning(t('xianzun.missingKey'))
+    const apiUrl = provider?.baseUrl.trim() || ''
+    if (!apiKey || !apiUrl) {
+      ElMessage.warning(!apiKey ? t('xianzun.missingKey') : '请先配置 API 地址。')
       return
     }
     await testXianZunProvider({
       protocol: provider.protocol,
-      baseUrl: provider.baseUrl,
+      baseUrl: apiUrl,
       apiKey,
       auth: provider.anthropicAuth,
     })
@@ -2631,6 +2620,46 @@ const testConnection = async () => {
     ElMessage.error(t('xianzun.connectFail', { error: errorText(err) }))
   } finally {
     testing.value = false
+  }
+}
+
+const refreshModelList = async () => {
+  const provider = activeProvider.value
+  const apiKey = provider?.apiKey.trim() || ''
+  const baseUrl = provider?.baseUrl.trim() || ''
+  if (!provider || !apiKey || !baseUrl) {
+    modelsStatus.value = '请先填写 API 地址和 Key，再获取模型列表。'
+    ElMessage.warning(modelsStatus.value)
+    return
+  }
+
+  loadingModels.value = true
+  modelsStatus.value = '正在获取模型列表…'
+  try {
+    const options = await fetchXianZunModels({
+      protocol: provider.protocol,
+      baseUrl,
+      apiKey,
+      auth: provider.anthropicAuth,
+    })
+    const currentModel = provider.model.trim()
+    if (options.length > 0) {
+      const modelIds = options.map((option) => option.id)
+      if (currentModel && !modelIds.includes(currentModel)) modelIds.push(currentModel)
+      provider.models = Array.from(new Set(modelIds))
+    }
+    if (!currentModel && provider.models.length > 0) provider.model = provider.models[0]
+    provider.updatedAt = Date.now()
+    await AppStateManager.saveSettingsNow()
+    modelsStatus.value = options.length > 0
+      ? `已获取 ${options.length} 个模型。`
+      : '接口返回成功，但没有可用模型。'
+    if (options.length > 0) ElMessage.success(modelsStatus.value)
+  } catch (err) {
+    modelsStatus.value = `获取模型列表失败：${errorText(err)}`
+    ElMessage.error(modelsStatus.value)
+  } finally {
+    loadingModels.value = false
   }
 }
 
@@ -4125,6 +4154,18 @@ onUnmounted(() => {
           <el-option v-for="model in activeProvider.models" :key="model" :label="model" :value="model" />
         </el-select>
 
+        <el-tooltip content="从供应商获取模型列表" placement="bottom" :show-after="250">
+          <button
+            type="button"
+            class="xz-icon-btn"
+            :disabled="loadingModels"
+            title="获取模型列表"
+            @click="refreshModelList"
+          >
+            <el-icon><Refresh /></el-icon>
+          </button>
+        </el-tooltip>
+
         <el-tooltip :content="t('xianzun.approvalMode')" placement="bottom" :show-after="250">
           <el-select v-model="appSettings.xianzunApprovalMode" class="xz-approval-select">
             <el-option
@@ -4648,15 +4689,29 @@ onUnmounted(() => {
 
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.model') }}</span>
-          <el-select
-            v-model="activeProvider.model"
-            filterable
-            allow-create
-            default-first-option
-            class="xz-settings-model"
-          >
-            <el-option v-for="model in activeProvider.models" :key="model" :label="model" :value="model" />
-          </el-select>
+          <div class="xz-model-control-row">
+            <el-select
+              v-model="activeProvider.model"
+              filterable
+              allow-create
+              default-first-option
+              class="xz-settings-model"
+            >
+              <el-option v-for="model in activeProvider.models" :key="model" :label="model" :value="model" />
+            </el-select>
+            <el-tooltip content="从供应商获取模型列表" placement="top">
+              <el-button
+                :loading="loadingModels"
+                :disabled="loadingModels"
+                title="获取模型列表"
+                @click="refreshModelList"
+              >
+                <el-icon v-if="!loadingModels"><Refresh /></el-icon>
+                <span>获取模型</span>
+              </el-button>
+            </el-tooltip>
+          </div>
+          <span v-if="modelsStatus" class="xz-field-hint">{{ modelsStatus }}</span>
         </label>
 
         <label class="xz-field">
@@ -4745,6 +4800,14 @@ onUnmounted(() => {
 
 .xz-provider-select {
   min-width: 0;
+  width: 100%;
+}
+
+.xz-model-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
   width: 100%;
 }
 
@@ -6754,6 +6817,10 @@ onUnmounted(() => {
 
 .xz-settings-model {
   width: 100%;
+}
+
+.xz-model-control-row .xz-settings-model {
+  min-width: 0;
 }
 
 .xz-mode-switch {

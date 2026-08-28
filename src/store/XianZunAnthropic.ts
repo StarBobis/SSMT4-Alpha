@@ -1,5 +1,6 @@
 import { fetch } from '@tauri-apps/plugin-http'
 import type { XianZunAnthropicAuth } from './XianZunProviders'
+import { xianZunEndpoint } from './XianZunApi'
 
 export interface XianZunApiMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -60,8 +61,7 @@ const headersFor = (apiKey: string, auth: XianZunAnthropicAuth): Record<string, 
 })
 
 const anthropicEndpoint = (baseUrl: string, resource: 'messages' | 'models'): string => {
-  const base = baseUrl.trim().replace(/\/+$/, '')
-  return `${base}${/\/v1$/i.test(base) ? '' : '/v1'}/${resource}`
+  return xianZunEndpoint(baseUrl, resource, 'anthropic')
 }
 
 export const streamXianZunAnthropic = async (options: {
@@ -202,11 +202,13 @@ export const testXianZunProvider = async (options: {
   apiKey: string
   auth: XianZunAnthropicAuth
 }): Promise<void> => {
-  const base = options.baseUrl.trim().replace(/\/+$/, '')
   const anthropic = options.protocol === 'anthropic'
-  const response = await fetch(anthropic ? anthropicEndpoint(base, 'models') : `${base}/models`, {
-    headers: anthropic ? headersFor(options.apiKey, options.auth) : { Authorization: `Bearer ${options.apiKey}` },
-    signal: AbortSignal.timeout(15000),
-  })
+  const response = await fetch(
+    anthropic ? anthropicEndpoint(options.baseUrl, 'models') : xianZunEndpoint(options.baseUrl, 'models'),
+    {
+      headers: anthropic ? headersFor(options.apiKey, options.auth) : { Authorization: `Bearer ${options.apiKey}` },
+      signal: AbortSignal.timeout(15000),
+    },
+  )
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
 }
