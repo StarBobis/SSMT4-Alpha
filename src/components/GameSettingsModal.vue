@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { h, ref, watch, reactive, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -3070,6 +3070,25 @@ defineExpose({
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   letter-spacing: 0.01em;
+}
+
+/* 游戏预设名较长（如 "Zenless Zone Zero(ZZMI)"）：选中值进入正常文档流并换行，
+   输入框随内容自动变高，完整显示预设名而不是单行省略 */
+.custom-select :deep(.el-select__placeholder) {
+  position: relative;
+  top: auto;
+  transform: none;
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  overflow: visible;
+  line-height: 1.3;
+}
+
+.custom-select :deep(.el-select__wrapper) {
+  height: auto;
 }
 
 .settings-card-header svg {

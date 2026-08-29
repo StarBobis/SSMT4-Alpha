@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, reactive, type CSSProperties, ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { AppStateManager, type GameInfo } from '../../store/AppStateManager';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -716,7 +716,7 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                             </div>
                             <div class="dialog-row">
                                 <label class="dialog-label" for="new-config-preset">{{ t('gameLibrary.dialog.gamePreset') }}</label>
-                                <el-select id="new-config-preset" v-model="newConfigPreset" popper-class="game-library-select-popper" :placeholder="t('gameLibrary.dialog.selectPreset')" style="width: 100%">
+                                <el-select id="new-config-preset" class="game-preset-select" v-model="newConfigPreset" popper-class="game-library-select-popper" :placeholder="t('gameLibrary.dialog.selectPreset')" style="width: 100%">
                                     <el-option
                                         v-for="opt in presetOptions"
                                         :key="opt.value"
@@ -883,7 +883,10 @@ const spawnLoveExplosion = (e: MouseEvent) => {
     text-align: center;
     cursor: pointer;
     transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease, filter 0.4s ease;
-    width: 100px;
+    /* 预设名较长时卡片随文字自动变宽/变高，不再截断省略 */
+    width: auto;
+    min-width: 100px;
+    max-width: 190px;
     opacity: 0.75;
     filter: brightness(0.7) grayscale(0.25);
     transform-origin: center center;
@@ -900,6 +903,24 @@ const spawnLoveExplosion = (e: MouseEvent) => {
 
 :global(.game-library-select-popper.el-popper) {
     background: transparent;
+}
+
+/* 游戏预设名较长：选中值进入正常文档流并换行，输入框随内容自动变高，完整显示预设名 */
+.game-preset-select :deep(.el-select__placeholder) {
+    position: relative;
+    top: auto;
+    transform: none;
+    flex: 1;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    overflow: visible;
+    line-height: 1.3;
+}
+
+.game-preset-select :deep(.el-select__wrapper) {
+    height: auto;
 }
 
 .game-card:hover {
@@ -1086,9 +1107,9 @@ const spawnLoveExplosion = (e: MouseEvent) => {
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
     padding: 6px 0 0;
     line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* 长预设名自动换行（最多显示 2~3 行），不再固定单行省略 */
+    white-space: normal;
+    overflow-wrap: anywhere;
     letter-spacing: 0.02em;
     transition: color 0.2s;
 }

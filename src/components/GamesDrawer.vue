@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { AppStateManager, type GameInfo } from '../store/AppStateManager';
 import { debugLog } from '../utils/debugLog';
@@ -114,8 +114,8 @@ onUnmounted(() => {
                         >
                             <div class="game-icon-wrapper">
                                 <img :src="game.iconPath" class="game-icon" alt="icon" />
-                                <div class="game-label">{{ getGamePresetDisplayName(game.name, t) }}</div>
                             </div>
+                            <div class="game-label">{{ getGamePresetDisplayName(game.name, t) }}</div>
                         </div>
                     </div>
                 </div>
@@ -202,7 +202,10 @@ onUnmounted(() => {
     transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1) 0.2s, opacity 0.5s ease 0.2s, filter 0.5s ease 0.2s;
     border-radius: 8px;
     justify-content: center;
-    width: 100px;
+    /* 长预设名时卡片随文字自动变宽/变高 */
+    width: auto;
+    min-width: 100px;
+    max-width: 190px;
     /* height: 100px;  Removed fixed height to accommodate label flow */
     opacity: 0.7;
     /* Dusty/Sealed look: Darker, desaturated - REMOVED BLUR as requested */
@@ -379,31 +382,20 @@ onUnmounted(() => {
 }
 
 .game-label {
-    position: absolute;
-    left: 0;
-    bottom: 0;
     width: 100%;
-
     text-align: center;
     font-size: 11px;
     font-weight: 600;
     color: #fff;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-    background: rgba(0, 0, 0, 0.65);
-    /* Dark semi-transparent bar */
-
-    padding: 2px 0;
-    /* Minimal vertical padding */
+    padding: 4px 2px 0;
     margin: 0;
 
-    line-height: 1.1;
+    line-height: 1.25;
     z-index: 10;
-    /* Above all crystal effects */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border-bottom-left-radius: 11px;
-    /* Match wrapper radius - 1px border */
-    border-bottom-right-radius: 11px;
+    /* 长预设名自动换行，不再截断省略 */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border-radius: 0;
 }
 </style>

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { join } from '@tauri-apps/api/path';
@@ -731,7 +731,9 @@ const togglePin = async () => {
 }
 
 .titlebar-game-select {
-  width: 144px;
+  /* 游戏预设名较长（如 "Dead or Alive Xtreme: Venus Vacation(DOAV)"），
+     加宽以单行完整显示；自定义超长名时允许换行兜底 */
+  width: 264px;
 }
 
 .titlebar-drag-handle {
@@ -784,11 +786,27 @@ const togglePin = async () => {
   font-size: 11px;
 }
 
+.titlebar-game-select :deep(.el-select__placeholder) {
+  /* 超长游戏预设名在输入框内换行显示完整，不再单行截断 */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
 .titlebar-game-option {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.titlebar-game-option > span:last-child {
+  flex: 1;
+  min-width: 0;
+  /* 长预设名在面板内自动换行显示完整名称 */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .titlebar-game-option-icon {
@@ -813,6 +831,8 @@ const togglePin = async () => {
   background: rgba(18, 17, 15, 0.96) !important;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42) !important;
   backdrop-filter: blur(18px);
+  /* 超长游戏名在面板内换行，而不是把面板撑出屏幕 */
+  max-width: 300px;
 }
 
 :global(.titlebar-game-select-popper .el-popper__arrow::before) {
@@ -821,9 +841,15 @@ const togglePin = async () => {
 }
 
 :global(.titlebar-game-select-popper .el-select-dropdown__item) {
-  height: 34px;
+  height: auto;
+  min-height: 34px;
+  line-height: 1.35;
+  /* 覆盖 Element Plus 的单行省略，允许长游戏名换行显示 */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   margin: 2px 5px;
-  padding: 0 9px;
+  padding: 5px 9px;
   border-radius: 6px;
   color: rgba(var(--theme-text-primary-rgb), 0.74);
   background: transparent;
