@@ -517,7 +517,8 @@
       "appUpdateReleaseNotesTitle": "GitHub Release 릴리스 노트",
       "appUpdateNoReleaseNotes": "이 버전에는 릴리스 노트가 제공되지 않았습니다.",
       "appUpdateInstalledRestart": "업데이트를 다운로드하고 설치했습니다. 적용하려면 앱을 다시 시작하세요.",
-      "appUpdateFailed": "앱 업데이트 실패: {error}"
+      "appUpdateFailed": "앱 업데이트 실패: {error}",
+      "openCacheFolderFailed": "캐시 폴더를 열지 못했습니다"
     },
     "general": {
       "githubToken": "GitHub Token",
@@ -530,6 +531,7 @@
       "cacheFolder": "SSMT 캐시 폴더",
       "cacheFolderPlaceholder": "캐시 폴더 경로를 선택하세요",
       "changeFolder": "폴더 변경",
+      "openFolder": "폴더 열기",
       "selectCacheFolderTitle": "SSMT 캐시 폴더 선택"
     },
     "personalization": {

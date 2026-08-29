@@ -515,7 +515,8 @@
       "appUpdateReleaseNotesTitle": "GitHub-Release-Hinweise",
       "appUpdateNoReleaseNotes": "Für diese Version wurden keine Versionshinweise bereitgestellt.",
       "appUpdateInstalledRestart": "Update heruntergeladen und installiert. Bitte App neu starten, um es anzuwenden.",
-      "appUpdateFailed": "App-Update fehlgeschlagen: {error}"
+      "appUpdateFailed": "App-Update fehlgeschlagen: {error}",
+      "openCacheFolderFailed": "Cache-Ordner konnte nicht geöffnet werden"
     },
     "general": {
       "githubToken": "GitHub-Token",
@@ -528,6 +529,7 @@
       "cacheFolder": "SSMT-Cache-Ordner",
       "cacheFolderPlaceholder": "Bitte einen Cache-Ordner auswählen",
       "changeFolder": "Ordner ändern",
+      "openFolder": "Ordner öffnen",
       "selectCacheFolderTitle": "SSMT-Cache-Ordner auswählen"
     },
     "personalization": {

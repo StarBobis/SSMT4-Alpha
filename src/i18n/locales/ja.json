@@ -517,7 +517,8 @@
       "appUpdateReleaseNotesTitle": "GitHub Release リリースノート",
       "appUpdateNoReleaseNotes": "このバージョンにはリリースノートがありません。",
       "appUpdateInstalledRestart": "更新をダウンロードしてインストールしました。アプリを再起動すると適用されます。",
-      "appUpdateFailed": "アプリの更新に失敗しました: {error}"
+      "appUpdateFailed": "アプリの更新に失敗しました: {error}",
+      "openCacheFolderFailed": "キャッシュフォルダーを開けませんでした"
     },
     "general": {
       "githubToken": "GitHub Token",
@@ -530,6 +531,7 @@
       "cacheFolder": "SSMT キャッシュフォルダー",
       "cacheFolderPlaceholder": "キャッシュフォルダーのパスを選択してください",
       "changeFolder": "フォルダーを変更",
+      "openFolder": "フォルダーを開く",
       "selectCacheFolderTitle": "SSMT キャッシュフォルダーを選択"
     },
     "personalization": {

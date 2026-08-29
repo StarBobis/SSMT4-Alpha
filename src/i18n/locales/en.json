@@ -507,7 +507,8 @@
       "appUpdateReleaseNotesTitle": "GitHub Release Notes",
       "appUpdateNoReleaseNotes": "No release notes were provided for this version.",
       "appUpdateInstalledRestart": "Update downloaded and installed. Please restart the app to apply the new version.",
-      "appUpdateFailed": "Failed to update app: {error}"
+      "appUpdateFailed": "Failed to update app: {error}",
+      "openCacheFolderFailed": "Failed to open the cache folder"
     },
     "general": {
       "githubToken": "GitHub Token",
@@ -527,6 +528,7 @@
       "cacheFolder": "SSMT Cache Folder",
       "cacheFolderPlaceholder": "Please select a cache folder path",
       "changeFolder": "Change Folder",
+      "openFolder": "Open Folder",
       "selectCacheFolderTitle": "Select SSMT Cache Folder"
     },
     "personalization": {

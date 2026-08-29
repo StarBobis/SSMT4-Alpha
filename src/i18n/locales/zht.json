@@ -516,7 +516,8 @@
       "appUpdateReleaseNotesTitle": "GitHub Release 更新說明",
       "appUpdateNoReleaseNotes": "目前版本未提供更新說明。",
       "appUpdateInstalledRestart": "更新已下載並安裝，請重新啟動應用程式以生效。",
-      "appUpdateFailed": "應用程式更新失敗: {error}"
+      "appUpdateFailed": "應用程式更新失敗: {error}",
+      "openCacheFolderFailed": "無法開啟快取目錄"
     },
     "general": {
       "githubToken": "GitHub Token",
@@ -529,6 +530,7 @@
       "cacheFolder": "SSMT 快取目錄",
       "cacheFolderPlaceholder": "請選擇快取目錄路徑",
       "changeFolder": "更改目錄",
+      "openFolder": "開啟目錄",
       "selectCacheFolderTitle": "選擇 SSMT 快取目錄"
     },
     "personalization": {

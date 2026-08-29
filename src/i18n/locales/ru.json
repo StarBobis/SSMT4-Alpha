@@ -515,7 +515,8 @@
       "appUpdateReleaseNotesTitle": "Примечания GitHub Release",
       "appUpdateNoReleaseNotes": "Для этой версии примечания к выпуску не предоставлены.",
       "appUpdateInstalledRestart": "Обновление загружено и установлено. Перезапустите приложение, чтобы применить его.",
-      "appUpdateFailed": "Не удалось обновить приложение: {error}"
+      "appUpdateFailed": "Не удалось обновить приложение: {error}",
+      "openCacheFolderFailed": "Не удалось открыть папку кэша"
     },
     "general": {
       "githubToken": "Токен GitHub",
@@ -528,6 +529,7 @@
       "cacheFolder": "Папка кэша SSMT",
       "cacheFolderPlaceholder": "Выберите путь к папке кэша",
       "changeFolder": "Изменить папку",
+      "openFolder": "Открыть папку",
       "selectCacheFolderTitle": "Выберите папку кэша SSMT"
     },
     "personalization": {
