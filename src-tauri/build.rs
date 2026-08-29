@@ -22,8 +22,8 @@ fn build_directxtex_bridge() {
         .into_iter()
         .chain(sibling_root)
         .collect::<Vec<_>>();
-    // Cargo 会缓存构建脚本结果；显式声明依赖，DirectXTex 安装或更新后
-    // 下一次构建会自动重新探测，无需手动 cargo clean。
+    // Cargo 会缓存构建脚本结果；显式声明依赖，DirectXTex 安装、更新或仓库内
+    // vendored 文件变动后，下一次构建会自动重新探测，无需手动 cargo clean。
     println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
     for root in &candidates {
         let installed = root.join("installed").join("x64-windows-static-md");
@@ -34,12 +34,41 @@ fn build_directxtex_bridge() {
             println!("cargo:rerun-if-changed={}", lib.display());
         }
     }
-    let Some((root, installed)) = candidates.iter().find_map(|root| {
-        let installed = root.join("installed").join("x64-windows-static-md");
-        (installed.join("include").join("DirectXTex.h").is_file()
-            && installed.join("lib").join("DirectXTex.lib").is_file())
-        .then(|| (root, installed))
-    }) else {
+    // 仓库内 vendored 兜底（src-tauri/native/directxtex），保证无 vcpkg 的
+    // 环境（离线、CI、新克隆）也能编译链接。rerun-if-changed 对当前不存在的
+    // 文件同样生效：文件出现时构建脚本会自动重跑。
+    let vendored = manifest.join("native").join("directxtex");
+    let vendored_header = vendored.join("include").join("DirectXTex.h");
+    let vendored_lib = vendored.join("lib").join("DirectXTex.lib");
+    println!("cargo:rerun-if-changed={}", vendored_header.display());
+    println!("cargo:rerun-if-changed={}", vendored_lib.display());
+
+    // 解析实际使用的 DirectXTex：(include 目录, lib 目录, 来源描述)。
+    let used = candidates
+        .iter()
+        .find_map(|root| {
+            let installed = root.join("installed").join("x64-windows-static-md");
+            (installed.join("include").join("DirectXTex.h").is_file()
+                && installed.join("lib").join("DirectXTex.lib").is_file())
+                .then(|| {
+                    (
+                        installed.join("include"),
+                        installed.join("lib"),
+                        format!("vcpkg {}", root.display()),
+                    )
+                })
+        })
+        .or_else(|| {
+            (vendored_header.is_file() && vendored_lib.is_file()).then(|| {
+                (
+                    vendored.join("include"),
+                    vendored.join("lib"),
+                    "vendored native/directxtex".to_string(),
+                )
+            })
+        });
+
+    let Some((include, lib_dir, source)) = used else {
         // The native DirectXTex bridge is optional: src/native_texture_encoder.rs
         // references the bridge entry only under the `directxtex_native` cfg,
         // and texture conversion runs through the bundled texconv.exe. Only fail
@@ -51,19 +80,20 @@ fn build_directxtex_bridge() {
                 .cloned()
                 .unwrap_or_else(|| PathBuf::from("vcpkg"));
             panic!(
-                "Native DirectXTex is required. Run: {} install directxtex[dx11]:x64-windows-static-md",
+                "Native DirectXTex is required, but neither vcpkg nor the vendored copy \
+                 (src-tauri/native/directxtex) provides it. Run: {} install directxtex[dx11]:x64-windows-static-md",
                 preferred.join("vcpkg.exe").display()
             );
         }
         println!(
-            "cargo:warning=DirectXTex not found; skipping the native texture encoder bridge. \
-             Install it via `vcpkg install directxtex[dx11]:x64-windows-static-md` into the \
-             repo-sibling D:\\Dev\\vcpkg (or set VCPKG_ROOT) and rebuild to pick it up automatically."
+            "cargo:warning=DirectXTex not found in vcpkg or in src-tauri/native/directxtex; \
+             skipping the native texture encoder bridge. Install it via \
+             `vcpkg install directxtex[dx11]:x64-windows-static-md` into the repo-sibling \
+             D:\\Dev\\vcpkg (or set VCPKG_ROOT), or restore the vendored copy."
         );
         return;
     };
-    println!("cargo:warning=Using DirectXTex from {}", root.display());
-    let include = installed.join("include");
+    println!("cargo:warning=Using DirectXTex from {source}");
     let mut build = cc::Build::new();
     build
         .cpp(true)
@@ -71,10 +101,7 @@ fn build_directxtex_bridge() {
         .flag_if_supported("/std:c++17")
         .include(&include);
     build.compile("ssmt_texture_encoder");
-    println!(
-        "cargo:rustc-link-search=native={}",
-        installed.join("lib").display()
-    );
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=DirectXTex");
     println!("cargo:rustc-cfg=directxtex_native");
     // 桥接符号的保留由 Rust 侧 src/native_texture_encoder.rs 的 #[used] 静态
