@@ -7372,7 +7372,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         }
 
         if(errorText) {
-            ctx.strokeStyle = 'rgba(255,120,120,0.4)';
+            ctx.strokeStyle = 'rgba(255,95,116,0.4)';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(12, 12);
@@ -7380,7 +7380,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             ctx.moveTo(w - 12, 12);
             ctx.lineTo(12, h - 12);
             ctx.stroke();
-            caption.style.color = '#ff8a8a';
+            caption.style.color = '#ff8a96';
             caption.innerText = `预览错误：${errorText}`;
             wrap.style.display = 'block';
             return;
@@ -7403,8 +7403,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         };
 
         if(component.type === 'joystick') {
-            drawSeries(samplesX, '#4fc1ff', -1, 1);
-            drawSeries(samplesY, '#ff9d00', -1, 1);
+            drawSeries(samplesX, '#3fd9ff', -1, 1);
+            drawSeries(samplesY, '#ffb54d', -1, 1);
             ctx.strokeStyle = 'rgba(255,255,255,0.18)';
             ctx.beginPath();
             ctx.moveTo(0, h * 0.5);
@@ -7413,7 +7413,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             caption.style.color = '#888';
             caption.innerText = `X = X(t) | Y = Y(t) | t=0..1 | 采样帧 ${Math.max(1, Math.round(component.chaosRate || 96))}`;
         } else {
-            drawSeries(samplesX, '#4fc1ff', 0, 1);
+            drawSeries(samplesX, '#3fd9ff', 0, 1);
             caption.style.color = '#888';
             caption.innerText = `f = f(t) | t=0..1 | 采样帧 ${Math.max(1, Math.round(component.chaosRate || 96))}`;
         }
@@ -9335,7 +9335,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 pBox.disabled = false;
                 pVar.innerText = `$phys_mode_${objIndex}`;
                 pLbl.innerText = obj.physics ? '物理默认开启' : '物理默认关闭';
-                pLbl.style.color = obj.physics ? '#0f0' : '#aaa';
+                pLbl.style.color = obj.physics ? '#4dedb4' : '#aaa';
 
                 if(obj.physics) {
                     physConfigPanel.style.display = 'block';
@@ -9403,7 +9403,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     physConfigPanel.style.display = 'none';
                 } else {
                     pLbl.innerText = obj.physics ? "物理默认开启" : "物理默认关闭";
-                    pLbl.style.color = obj.physics ? "#0f0" : "#aaa";
+                    pLbl.style.color = obj.physics ? "#4dedb4" : "#aaa";
                     
                     if(obj.physics) {
                         physConfigPanel.style.display = 'block';
@@ -9954,13 +9954,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const kindLabel = targetComp && targetComp.type === 'toggle' ? '点击计数' : (targetComp && targetComp.type === 'joystick' ? '双轴位移' : '拖拽位移');
             container.innerHTML += `
                 <div style="display:flex; gap:4px; align-items:center; background:rgba(0,0,0,0.25); padding:4px 6px; border:1px solid rgba(255,90,90,0.3); border-radius:4px;">
-                    <span style="font-size:0.7em; color:#ff8a8a; white-space:nowrap;">绑定 ${idx + 1}:</span>
+                    <span style="font-size:0.7em; color:#ff8a96; white-space:nowrap;">绑定 ${idx + 1}:</span>
                     <select onchange="UIB.updateAccumBinding(${idx},this.value)" style="flex:1; font-size:0.78em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                         <option value="">-- 选择组件 --</option>
                         ${linkable.map(c => `<option value="${c.id}" ${c.id === b.targetId ? 'selected' : ''}>${getComponentDisplayName(c)}</option>`).join('')}
                     </select>
-                    ${targetComp ? `<span style="font-size:0.65em; color:#9bcfff; white-space:nowrap;">${kindLabel}</span>` : ''}
-                    <button onclick="UIB.removeAccumBinding(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                    ${targetComp ? `<span style="font-size:0.65em; color:#a8ecff; white-space:nowrap;">${kindLabel}</span>` : ''}
+                    <button onclick="UIB.removeAccumBinding(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
                 </div>
             `;
         });
@@ -9982,12 +9982,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     <span style="font-size:0.7em; color:var(--uib-warn-text); white-space:nowrap;">变量 ${idx + 1}:</span>
                     <input type="text" value="${escapeHtml(t.var || '')}" placeholder="$Var"
                         onchange="UIB.updateAccumTriggerVar(${idx},this.value)"
-                        style="flex:1; font-size:0.75em; padding:2px; color:#ffb457; border:1px solid rgba(255,180,87,0.45); background:var(--input-bg); border-radius:4px;">
+                        style="flex:1; font-size:0.75em; padding:2px; color:#ffcf7d; border:1px solid rgba(255,181,77,0.45); background:var(--input-bg); border-radius:4px;">
                     <span style="font-size:0.7em; color:var(--uib-warn-text); white-space:nowrap;">=</span>
                     <input type="number" step="0.01" value="${Number.isFinite(Number(t.value)) ? Number(t.value) : 0}"
                         onchange="UIB.updateAccumTriggerValue(${idx},this.value)"
                         style="width:84px; font-size:0.75em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
-                    <button onclick="UIB.removeAccumTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                    <button onclick="UIB.removeAccumTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
                 </div>
             `;
         });
@@ -10001,23 +10001,23 @@ void main(vs2ps input, out float4 result : SV_Target0)
             <div style="display:flex; gap:4px; align-items:center; margin-top:4px;">
                 <input type="text" value="${action.var || ''}" placeholder="$TargetVar"
                     onchange="UIB.updateLinkedSlaveActionVar(${linkIdx},'${safePhase}',${actionIdx},this.value)"
-                    style="flex:1; font-size:0.75em; padding:2px; color:#ffb457; border:1px solid rgba(255,180,87,0.45); background:var(--input-bg); border-radius:4px;">
+                    style="flex:1; font-size:0.75em; padding:2px; color:#ffcf7d; border:1px solid rgba(255,181,77,0.45); background:var(--input-bg); border-radius:4px;">
                 <input type="number" step="0.01" value="${Number.isFinite(Number(action.value)) ? Number(action.value) : 0}"
                     onchange="UIB.updateLinkedSlaveActionValue(${linkIdx},'${safePhase}',${actionIdx},this.value)"
                     style="width:92px; font-size:0.75em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
                 <button onclick="UIB.removeLinkedSlaveAction(${linkIdx},'${safePhase}',${actionIdx})"
-                    style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                    style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
             </div>
         `).join('');
         return `
-            <div style="margin-top:6px; padding:5px; background:rgba(255,193,7,0.06); border:1px solid rgba(255,193,7,0.22); border-radius:4px;">
+            <div style="margin-top:6px; padding:5px; background:rgba(255,181,77,0.06); border:1px solid rgba(255,181,77,0.22); border-radius:4px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                     <div>
-                        <div style="font-size:0.76em; color:#ffd36a; font-weight:bold;">${title}</div>
+                        <div style="font-size:0.76em; color:#ffd98a; font-weight:bold;">${title}</div>
                         <div style="font-size:0.65em; color:var(--muted-color);">${hint}</div>
                     </div>
                     <button onclick="UIB.addLinkedSlaveAction(${linkIdx},'${safePhase}')"
-                        style="font-size:0.68em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #4c8a61; color:#9cffb4; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
+                        style="font-size:0.68em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:#7df0c0; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
                 </div>
                 ${rows || '<div style="font-size:0.68em; color:var(--muted-color); margin-top:4px;">未配置动作</div>'}
             </div>
@@ -10057,13 +10057,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             
             let html = `<div style="background:rgba(0,0,0,0.3); padding:6px; border:1px solid rgba(255,165,0,0.3); border-radius:4px; margin-bottom:4px;">`;
             html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-size:0.8em; color:#ffa500; font-weight:bold;">联动 ${idx + 1}</span>
-                <button onclick="UIB.removeLinkedSlave(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:2px; width:auto;">删除</button>
+                <span style="font-size:0.8em; color:#ffab3d; font-weight:bold;">联动 ${idx + 1}</span>
+                <button onclick="UIB.removeLinkedSlave(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:2px; width:auto;">删除</button>
             </div>`;
             
             // 目标组件选择
             html += `<div class="input-row" style="margin-bottom:3px;">
-                <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">目标组件:</label>
+                <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">目标组件:</label>
                 <select onchange="UIB.updateLinkedSlave(${idx},'targetId',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                     <option value="">-- 选择组件 --</option>
                     ${linkable.map(c => `<option value="${c.id}" ${c.id === slave.targetId ? 'selected' : ''}>${getComponentDisplayName(c)}</option>`).join('')}
@@ -10077,14 +10077,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
             if(sourceToJoystick) {
                 const pts = getLinkedSlaveRegionPoints(slave);
-                html += `<div style="font-size:0.68em; color:#9bcfff; margin-bottom:5px; background:rgba(79,193,255,0.08); padding:4px 6px; border:1px solid rgba(79,193,255,0.2); border-radius:4px;">
+                html += `<div style="font-size:0.68em; color:#a8ecff; margin-bottom:5px; background:rgba(63,217,255,0.08); padding:4px 6px; border:1px solid rgba(63,217,255,0.2); border-radius:4px;">
                     摇杆联动摇杆固定使用 4 点区域映射。源摇杆进入该区域后，位置会直接映射到目标摇杆。
                 </div>`;
                 html += `<div style="background:rgba(0,0,0,0.2); padding:6px; border:1px solid rgba(255,165,0,0.2); border-radius:4px; margin-bottom:3px;">
-                    <div style="font-size:0.75em; color:#ffa500; font-weight:bold; margin-bottom:4px;">四边形区域 (4 点)</div>
+                    <div style="font-size:0.75em; color:#ffab3d; font-weight:bold; margin-bottom:4px;">四边形区域 (4 点)</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 6px;">`;
                 const ptLabels = ['点1 (左上)', '点2 (右上)', '点3 (右下)', '点4 (左下)'];
-                const ptColors = ['#ff9999', '#99ff99', '#9999ff', '#ffff99'];
+                const ptColors = ['#ff9daa', '#7df0c0', '#9d8fff', '#ffe08a'];
                 for(let pi = 0; pi < 4; pi++) {
                     const p = pts[pi] || { x: 0, y: 0 };
                     html += `<div style="border:1px solid ${ptColors[pi]}33; padding:3px; border-radius:3px;">
@@ -10093,11 +10093,11 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             <span style="font-size:0.55em; color:var(--muted-color);">X</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.x.toFixed(2)}"
                                 onchange="UIB.updateLinkedSlaveRegionPoint(${idx},${pi},'x',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8888; border-radius:3px;">
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8a96; border-radius:3px;">
                             <span style="font-size:0.55em; color:var(--muted-color);">Y</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.y.toFixed(2)}"
                                 onchange="UIB.updateLinkedSlaveRegionPoint(${idx},${pi},'y',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#8888ff; border-radius:3px;">
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#a58bff; border-radius:3px;">
                         </div>
                     </div>`;
                 }
@@ -10108,7 +10108,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     </div>
                 </div>`;
                 html += `<div class="input-row" style="margin-bottom:3px;">
-                    <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">超出范围:</label>
+                    <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">超出范围:</label>
                     <select onchange="UIB.updateLinkedSlave(${idx},'overflow',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                         <option value="reset" ${overflow === 'reset' ? 'selected' : ''}>归零（带回弹）</option>
                         <option value="keep_max" ${overflow === 'keep_max' ? 'selected' : ''}>保持最大值</option>
@@ -10124,7 +10124,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             dirOpts.push(`<option value="${d}" ${String(joyAxis) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                         }
                         html += `<div class="input-row" style="margin-bottom:3px;">
-                            <label style="font-size:0.75em; color:#4fc1ff; flex:0 0 5em;">源方向:</label>
+                            <label style="font-size:0.75em; color:#3fd9ff; flex:0 0 5em;">源方向:</label>
                             <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                                 ${dirOpts.join('')}
                             </select>
@@ -10138,15 +10138,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
                                 dirOpts2.push(`<option value="${d}" ${String(joyAxis2) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                             }
                             html += `<div class="input-row" style="margin-bottom:3px;">
-                                <label style="font-size:0.75em; color:#ffd36a; flex:0 0 5em;">右半方向:</label>
-                                <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,211,106,0.45); color:#ffd36a; border-radius:6px;">
+                                <label style="font-size:0.75em; color:#ffd98a; flex:0 0 5em;">右半方向:</label>
+                                <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,207,125,0.45); color:#ffd98a; border-radius:6px;">
                                     ${dirOpts2.join('')}
                                 </select>
                             </div>`;
                         }
                     } else {
                         html += `<div class="input-row" style="margin-bottom:3px;">
-                            <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">源轴:</label>
+                            <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">源轴:</label>
                             <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                                 <option value="both" ${joyAxis === 'both' ? 'selected' : ''}>两轴(取最大值)</option>
                                 <option value="x" ${joyAxis === 'x' ? 'selected' : ''}>X 轴</option>
@@ -10156,8 +10156,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         if(targetComp && targetComp.paramMode === '2') {
                             const joyAxis2 = slave.joyAxis2;
                             html += `<div class="input-row" style="margin-bottom:3px;">
-                                <label style="font-size:0.75em; color:#ffd36a; flex:0 0 5em;">右半轴:</label>
-                                <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,211,106,0.45); color:#ffd36a; border-radius:6px;">
+                                <label style="font-size:0.75em; color:#ffd98a; flex:0 0 5em;">右半轴:</label>
+                                <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,207,125,0.45); color:#ffd98a; border-radius:6px;">
                                     <option value="" ${!joyAxis2 ? 'selected' : ''}>未启用</option>
                                     <option value="x" ${joyAxis2 === 'x' ? 'selected' : ''}>X 轴</option>
                                     <option value="y" ${joyAxis2 === 'y' ? 'selected' : ''}>Y 轴</option>
@@ -10169,7 +10169,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                 if(!isJoystick && targetIsJoystick && targetComp.paramMode !== '4') {
                     html += `<div class="input-row" style="margin-bottom:3px;">
-                        <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">目标轴:</label>
+                        <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">目标轴:</label>
                         <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                             <option value="x" ${joyTargetAxis === 'x' ? 'selected' : ''}>X 轴</option>
                             <option value="y" ${joyTargetAxis === 'y' ? 'selected' : ''}>Y 轴</option>
@@ -10185,7 +10185,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         dirOpts.push(`<option value="${d}" ${String(joyTargetAxis) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                     }
                     html += `<div class="input-row" style="margin-bottom:3px;">
-                        <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">目标方向:</label>
+                        <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">目标方向:</label>
                         <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                             ${dirOpts.join('')}
                         </select>
@@ -10199,8 +10199,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             dirOpts2.push(`<option value="${d}" ${String(joyTargetAxis2) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                         }
                         html += `<div class="input-row" style="margin-bottom:3px;">
-                            <label style="font-size:0.75em; color:#ffd36a; flex:0 0 5em;">目标方向 2:</label>
-                            <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,211,106,0.45); color:#ffd36a; border-radius:6px;">
+                            <label style="font-size:0.75em; color:#ffd98a; flex:0 0 5em;">目标方向 2:</label>
+                            <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,207,125,0.45); color:#ffd98a; border-radius:6px;">
                                 ${dirOpts2.join('')}
                             </select>
                         </div>`;
@@ -10224,7 +10224,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                 if(targetComp && targetComp.paramMode === '2') {
                     html += `<div class="input-row" style="margin-bottom:3px;">
-                        <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">映射方向:</label>
+                        <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">映射方向:</label>
                         <select onchange="UIB.updateLinkedSlave(${idx},'splitSide',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                             <option value="both" ${splitSide === 'both' ? 'selected' : ''}>整体</option>
                             <option value="left" ${splitSide === 'left' ? 'selected' : ''}>左/下半 (0.5→0)</option>
@@ -10234,7 +10234,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 }
 
                 html += `<div class="input-row" style="margin-bottom:3px;">
-                    <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">超出范围:</label>
+                    <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">超出范围:</label>
                     <select onchange="UIB.updateLinkedSlave(${idx},'overflow',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                         <option value="reset" ${overflow === 'reset' ? 'selected' : ''}>归零（带回弹）</option>
                         <option value="keep_max" ${overflow === 'keep_max' ? 'selected' : ''}>保持最大值</option>
@@ -10247,7 +10247,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const postRadius = getLinkedSlavePostRadius(slave);
             if(isJoystick && targetIsJoystick) {
                 html += `<div style="margin-top:6px; padding:4px; background:rgba(64,224,208,0.08); border:1px solid rgba(64,224,208,0.35); border-radius:3px;">
-                    <label style="font-size:0.8em; color:#40e0d0; font-weight:bold;">
+                    <label style="font-size:0.8em; color:#4dedb4; font-weight:bold;">
                         <input type="checkbox" ${postEnabled ? 'checked' : ''} onchange="UIB.updateLinkedSlave(${idx},'postEnabled',this.checked)" style="margin-right:4px;">碰撞桩（中心激活）
                     </label>
                     <div id="post_config_${idx}" style="display:${postEnabled ? 'flex' : 'none'}; gap:4px; margin-top:4px;">
@@ -10283,7 +10283,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         displayVal = dirParts.length > 0 ? dirParts.join(' ') : 'N/A';
                     }
                 }
-                html += `<div style="font-size:0.7em; color:#7fd7ff; margin-top:3px; padding:2px 4px; background:rgba(0,0,0,0.2); border-radius:2px;">映射值: ${displayVal}</div>`;
+                html += `<div style="font-size:0.7em; color:#8fe8ff; margin-top:3px; padding:2px 4px; background:rgba(0,0,0,0.2); border-radius:2px;">映射值: ${displayVal}</div>`;
             }
 
             html += renderLinkedSlaveActionsEditor(idx, 'enter', enterActions);
@@ -10454,19 +10454,19 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const leaveActions = normalizeLinkedSlaveActionList(trigger.leaveActions);
             const isJoystick = obj.type === 'joystick';
 
-            let html = `<div style="background:rgba(0,0,0,0.3); padding:6px; border:1px solid rgba(79,193,255,0.3); border-radius:4px; margin-bottom:4px;">`;
+            let html = `<div style="background:rgba(0,0,0,0.3); padding:6px; border:1px solid rgba(63,217,255,0.3); border-radius:4px; margin-bottom:4px;">`;
             html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-size:0.8em; color:#4fc1ff; font-weight:bold;">区间触发 ${idx + 1}</span>
-                <button onclick="UIB.removeRangeTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:2px; width:auto;">删除</button>
+                <span style="font-size:0.8em; color:#3fd9ff; font-weight:bold;">区间触发 ${idx + 1}</span>
+                <button onclick="UIB.removeRangeTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:2px; width:auto;">删除</button>
             </div>`;
 
             if(isJoystick) {
                 const pts = getRangeTriggerRegionPoints(trigger);
-                html += `<div style="background:rgba(0,0,0,0.2); padding:6px; border:1px solid rgba(79,193,255,0.2); border-radius:4px; margin-bottom:3px;">
-                    <div style="font-size:0.75em; color:#4fc1ff; font-weight:bold; margin-bottom:4px;">触发区域 (4 点)</div>
+                html += `<div style="background:rgba(0,0,0,0.2); padding:6px; border:1px solid rgba(63,217,255,0.2); border-radius:4px; margin-bottom:3px;">
+                    <div style="font-size:0.75em; color:#3fd9ff; font-weight:bold; margin-bottom:4px;">触发区域 (4 点)</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 6px;">`;
                 const ptLabels = ['点1 (左上)', '点2 (右上)', '点3 (右下)', '点4 (左下)'];
-                const ptColors = ['#ff9999', '#99ff99', '#9999ff', '#ffff99'];
+                const ptColors = ['#ff9daa', '#7df0c0', '#9d8fff', '#ffe08a'];
                 for(let pi = 0; pi < 4; pi++) {
                     const p = pts[pi] || { x: 0, y: 0 };
                     html += `<div style="border:1px solid ${ptColors[pi]}33; padding:3px; border-radius:3px;">
@@ -10475,11 +10475,11 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             <span style="font-size:0.55em; color:var(--muted-color);">X</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.x.toFixed(2)}"
                                 onchange="UIB.updateRangeTriggerRegionPoint(${idx},${pi},'x',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8888; border-radius:3px;">
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8a96; border-radius:3px;">
                             <span style="font-size:0.55em; color:var(--muted-color);">Y</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.y.toFixed(2)}"
                                 onchange="UIB.updateRangeTriggerRegionPoint(${idx},${pi},'y',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#8888ff; border-radius:3px;">
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#a58bff; border-radius:3px;">
                         </div>
                     </div>`;
                 }
@@ -10527,23 +10527,23 @@ void main(vs2ps input, out float4 result : SV_Target0)
             <div style="display:flex; gap:4px; align-items:center; margin-top:4px;">
                 <input type="text" value="${action.var || ''}" placeholder="$TargetVar"
                     onchange="UIB.updateRangeTriggerActionVar(${triggerIdx},'${safePhase}',${actionIdx},this.value)"
-                    style="flex:1; font-size:0.75em; padding:2px; color:#7fd7ff; border:1px solid rgba(127,215,255,0.45); background:var(--input-bg); border-radius:4px;">
+                    style="flex:1; font-size:0.75em; padding:2px; color:#8fe8ff; border:1px solid rgba(127,215,255,0.45); background:var(--input-bg); border-radius:4px;">
                 <input type="number" step="0.01" value="${Number.isFinite(Number(action.value)) ? Number(action.value) : 0}"
                     onchange="UIB.updateRangeTriggerActionValue(${triggerIdx},'${safePhase}',${actionIdx},this.value)"
                     style="width:92px; font-size:0.75em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
                 <button onclick="UIB.removeRangeTriggerAction(${triggerIdx},'${safePhase}',${actionIdx})"
-                    style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                    style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
             </div>
         `).join('');
         return `
-            <div style="margin-top:6px; padding:5px; background:rgba(79,193,255,0.06); border:1px solid rgba(79,193,255,0.22); border-radius:4px;">
+            <div style="margin-top:6px; padding:5px; background:rgba(63,217,255,0.06); border:1px solid rgba(63,217,255,0.22); border-radius:4px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                     <div>
-                        <div style="font-size:0.76em; color:#7fd7ff; font-weight:bold;">${title}</div>
+                        <div style="font-size:0.76em; color:#8fe8ff; font-weight:bold;">${title}</div>
                         <div style="font-size:0.65em; color:var(--muted-color);">${hint}</div>
                     </div>
                     <button onclick="UIB.addRangeTriggerAction(${triggerIdx},'${safePhase}')"
-                        style="font-size:0.68em; padding:2px 8px; background:var(--uib-btn-bg); border:1px solid #4c8a8f; color:#9cffff; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
+                        style="font-size:0.68em; padding:2px 8px; background:var(--uib-btn-bg); border:1px solid #2a5a72; color:#a8ecff; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
                 </div>
                 ${rows || '<div style="font-size:0.68em; color:var(--muted-color); margin-top:4px;">未配置动作</div>'}
             </div>
@@ -10740,8 +10740,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
         varContainer.innerHTML += `
             <div class="var-item" style="flex-wrap:wrap; padding:7px; background:rgba(0,0,0,0.2); border-radius:4px; margin-bottom:8px;">
-                <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">${isBidirectional ? '双向分段设置' : '单向分段设置'}</div>
-                <div style="width:100%; font-size:0.75em; color:#8ecdf7; line-height:1.5; margin:4px 0 7px;">每段输出固定为 0–1；进入下一段后，之前的段保持为 1。</div>
+                <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">${isBidirectional ? '双向分段设置' : '单向分段设置'}</div>
+                <div style="width:100%; font-size:0.75em; color:#8fe8ff; line-height:1.5; margin:4px 0 7px;">每段输出固定为 0–1；进入下一段后，之前的段保持为 1。</div>
                 <div style="display:flex; gap:5px; width:100%; flex-wrap:wrap;">
                     <div style="flex:1; min-width:90px;">
                         <label style="font-size:0.75em; color:var(--muted-color);">${isBidirectional ? '默认位置 (0–1)' : '默认值'}</label>
@@ -10762,8 +10762,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         for(let sideIdx = 0; sideIdx < cfg.sideCount; sideIdx++) {
             const sideLabel = getSliderSubdivisionSideLabel(obj, sideIdx);
             varContainer.innerHTML += `
-                <div style="width:100%; margin-top:${sideIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px;">
-                    <div style="font-size:0.92em; color:#4fc1ff; font-weight:bold; margin-bottom:8px;">${sideLabel} · ${cfg.subdivisions} 段</div>
+                <div style="width:100%; margin-top:${sideIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(63,217,255,0.08); border:1px solid rgba(63,217,255,0.35); border-radius:4px;">
+                    <div style="font-size:0.92em; color:#3fd9ff; font-weight:bold; margin-bottom:8px;">${sideLabel} · ${cfg.subdivisions} 段</div>
                     <div id="slider_subdiv_group_${sideIdx}" style="display:flex; flex-direction:column; gap:6px;"></div>
                 </div>`;
 
@@ -10778,7 +10778,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                 sideContainer.innerHTML += `
                     <div class="var-item slider-subdivision-segment" data-side="${sideIdx}" data-segment="${segIdx}" style="flex-wrap:wrap; padding:6px; background:rgba(0,0,0,0.22); border-radius:3px; margin-bottom:0;">
-                        <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">累计 0→1</span></div>
+                        <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">累计 0→1</span></div>
                         <div style="width:100%; display:flex; flex-direction:column; gap:3px; margin-bottom:4px;">
                             ${segVars.map((v, rowIdx) => `
                                 <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
@@ -10788,11 +10788,11 @@ void main(vs2ps input, out float4 result : SV_Target0)
                                 </div>
                             `).join('')}
                         </div>
-                        <button onclick="UIB.addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
+                        <button onclick="UIB.addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
                         <div style="width:100%; margin-top:5px; padding-top:5px; border-top:1px dashed #444;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <span style="font-size:0.8em; color:#ff9d00;">本段触发目标</span>
-                                <button onclick="UIB.addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
+                                <span style="font-size:0.8em; color:#ffb54d;">本段触发目标</span>
+                                <button onclick="UIB.addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
                             </div>
                             <div id="dep_targets_${flatIdx}" style="display:flex; flex-direction:column; gap:5px;"></div>
                         </div>
@@ -10825,8 +10825,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
             
             varContainer.innerHTML += `
                 <div class="var-item" style="flex-wrap:wrap; padding:5px; background:rgba(0,0,0,0.2); border-radius:3px; margin-bottom:3px;">
-                    <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">可绑定变量名（可为多个，共享同一滑条）:</div>
-                    <div style="width:100%; font-size:0.78em; color:#8ecdf7; line-height:1.45; margin-bottom:6px;">输出值：${gridValuePreview}。这些变量会同步写入同一个档位值。</div>
+                    <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">可绑定变量名（可为多个，共享同一滑条）:</div>
+                    <div style="width:100%; font-size:0.78em; color:#8fe8ff; line-height:1.45; margin-bottom:6px;">输出值：${gridValuePreview}。这些变量会同步写入同一个档位值。</div>
                     <div style="width:100%; display:flex; flex-direction:column; gap:4px; margin-bottom:6px;">
                         ${gridVarRows.map((val, idx) => `
                             <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
@@ -10845,10 +10845,10 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 </div>`;
             
             varContainer.innerHTML += `
-                <div style="width:100%; margin-top:10px; padding:8px; background:rgba(255,152,0,0.1); border:1px solid #ff9800; border-radius:4px;">
-                    <div style="font-size:0.9em; color:#ff9800; font-weight:bold; margin-bottom:4px;">可选格子触发目标</div>
+                <div style="width:100%; margin-top:10px; padding:8px; background:rgba(255,148,64,0.1); border:1px solid #ff9440; border-radius:4px;">
+                    <div style="font-size:0.9em; color:#ff9440; font-weight:bold; margin-bottom:4px;">可选格子触发目标</div>
                     <div style="font-size:0.75em; color:#ffd08a; line-height:1.45; margin-bottom:8px;">只有滑条落在某个格子时才会按顺序写入目标变量。这里的目标列表和绑定变量列表是分开的。</div>
-                    <button onclick="UIB.toggleGridTargetEditor()" style="font-size:0.72em; padding:3px 8px; background:var(--uib-btn-bg); border:1px solid #47627c; color:#cde8ff; cursor:pointer; border-radius:3px; margin-bottom:${isAdvancedOpen ? '8px' : '0'};">${isAdvancedOpen ? '收起格子触发目标' : '展开格子触发目标'}</button>
+                    <button onclick="UIB.toggleGridTargetEditor()" style="font-size:0.72em; padding:3px 8px; background:var(--uib-btn-bg); border:1px solid #2a5a72; color:#d8ecf7; cursor:pointer; border-radius:3px; margin-bottom:${isAdvancedOpen ? '8px' : '0'};">${isAdvancedOpen ? '收起格子触发目标' : '展开格子触发目标'}</button>
                     <div id="grid_targets_container" style="display:${isAdvancedOpen ? 'flex' : 'none'}; flex-direction:column; gap:5px;"></div>
                 </div>`;
             
@@ -10857,10 +10857,10 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 for(let g = 0; g < gridSteps; g++) {
                     let targets = gridDepTargets[g] || [];
                     gridContainer.innerHTML += `
-                        <div style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ff9800;">
+                        <div style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ff9440;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-                                <span style="font-size:0.85em; color:#ff9800; font-weight:bold;">档位 ${g + 1}（值 ${formatSliderGridNumber(getSliderGridOutputValue(obj, g))}）激活时:</span>
-                                <button onclick="UIB.addGridDepTarget(${g})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:2px;">+ 添加目标</button>
+                                <span style="font-size:0.85em; color:#ff9440; font-weight:bold;">档位 ${g + 1}（值 ${formatSliderGridNumber(getSliderGridOutputValue(obj, g))}）激活时:</span>
+                                <button onclick="UIB.addGridDepTarget(${g})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:2px;">+ 添加目标</button>
                             </div>
                             <div id="grid_dep_targets_${g}" style="display:flex; flex-direction:column; gap:3px;"></div>
                         </div>`;
@@ -10881,9 +10881,9 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 const directionLabel = formatAngleLabel(angle);
 
                 varContainer.innerHTML += `
-                    <div style="width:100%; margin-top:${dirIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px;">
-                        <div style="font-size:0.92em; color:#4fc1ff; font-weight:bold; margin-bottom:8px;">方向 ${dirIdx + 1} · ${directionLabel}</div>
-                        <div style="font-size:0.72em; color:#8ecdf7; margin-bottom:8px;">当前方向变量会按方向值细分为 ${cfg.subdivisions} 段</div>
+                    <div style="width:100%; margin-top:${dirIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(63,217,255,0.08); border:1px solid rgba(63,217,255,0.35); border-radius:4px;">
+                        <div style="font-size:0.92em; color:#3fd9ff; font-weight:bold; margin-bottom:8px;">方向 ${dirIdx + 1} · ${directionLabel}</div>
+                        <div style="font-size:0.72em; color:#8fe8ff; margin-bottom:8px;">当前方向变量会按方向值细分为 ${cfg.subdivisions} 段</div>
                         <div id="joy_dir_group_${dirIdx}" style="display:flex; flex-direction:column; gap:6px;"></div>
                     </div>`;
 
@@ -10900,7 +10900,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                     directionContainer.innerHTML += `
                         <div class="var-item" style="flex-wrap:wrap; padding:6px; background:rgba(0,0,0,0.22); border-radius:3px; margin-bottom:0;">
-                            <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span></div>
+                            <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span></div>
                             <div style="width:100%; display:flex; flex-direction:column; gap:3px; margin-bottom:4px;">
                                 ${segVars.map((v, ri) => `
                                     <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
@@ -10910,7 +10910,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                                     </div>
                                 `).join('')}
                             </div>
-                            <button onclick="UIB.addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
+                            <button onclick="UIB.addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
                             <div style="display:flex; gap:3px; width:100%;">
                                 <div style="flex:1;">
                                     <label style="font-size:0.75em; color:var(--muted-color);">最大值</label>
@@ -10919,8 +10919,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             </div>
                             <div style="width:100%; margin-top:5px; padding-top:5px; border-top:1px dashed #444;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                    <span style="font-size:0.8em; color:#ff9d00;">触发目标</span>
-                                    <button onclick="UIB.addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
+                                    <span style="font-size:0.8em; color:#ffb54d;">触发目标</span>
+                                    <button onclick="UIB.addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
                                 </div>
                                 <div id="dep_targets_${flatIdx}" style="display:flex; flex-direction:column; gap:5px;"></div>
                             </div>
@@ -10957,7 +10957,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 
                 varContainer.innerHTML += `
                     <div class="var-item" style="flex-wrap:wrap; padding:5px; background:rgba(0,0,0,0.2); border-radius:3px; margin-bottom:3px;">
-                        <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">${l} <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span>:</div>
+                        <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">${l} <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span>:</div>
                         <div style="width:100%; display:flex; flex-direction:column; gap:3px; margin-bottom:4px;">
                             ${slotVars.map((v, ri) => `
                                 <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
@@ -10967,7 +10967,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                                 </div>
                             `).join('')}
                         </div>
-                        <button onclick="UIB.addVarRow(${i})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
+                        <button onclick="UIB.addVarRow(${i})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
                         <div style="display:flex; gap:3px; width:100%; flex-wrap:${obj.type.includes('slider') && obj.paramMode === '1' && i === 0 ? 'wrap' : 'nowrap'};">
                             <div style="flex:1;">
                                 <label style="font-size:0.75em; color:var(--muted-color);">默认值</label>
@@ -10986,8 +10986,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         </div>
                         <div style="width:100%; margin-top:5px; padding-top:5px; border-top:1px dashed #444;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <span style="font-size:0.8em; color:#ff9d00;">触发目标</span>
-                                <button onclick="UIB.addDepTarget(${i})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
+                                <span style="font-size:0.8em; color:#ffb54d;">触发目标</span>
+                                <button onclick="UIB.addDepTarget(${i})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
                             </div>
                             <div id="dep_targets_${i}" style="display:flex; flex-direction:column; gap:5px;">
                             </div>
@@ -11096,19 +11096,19 @@ void main(vs2ps input, out float4 result : SV_Target0)
             }
             
             container.innerHTML += `
-                <div class="dep-target-item" style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ff9d00;">
+                <div class="dep-target-item" style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ffb54d;">
                     <div style="display:flex; gap:5px; margin-bottom:3px;">
-                        <input type="text" value="${targetVar}" placeholder="$TargetVar" onchange="UIB.updateDepTargetVar(${paramIdx}, ${ti}, this.value)" style="flex:1; font-size:0.8em; padding:2px; color:#ff9d00; border-color:#d35400;">
-                        <button onclick="UIB.removeDepTarget(${paramIdx}, ${ti})" style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px;">删</button>
+                        <input type="text" value="${targetVar}" placeholder="$TargetVar" onchange="UIB.updateDepTargetVar(${paramIdx}, ${ti}, this.value)" style="flex:1; font-size:0.8em; padding:2px; color:#ffb54d; border-color:#ff9440;">
+                        <button onclick="UIB.removeDepTarget(${paramIdx}, ${ti})" style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px;">删</button>
                     </div>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
                         <label style="font-size:0.7em; color:var(--muted-color); display:flex; align-items:center; gap:3px;">
                             <input type="checkbox" ${inverted ? 'checked' : ''} onchange="UIB.updateDepTargetInvert(${paramIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
-                            <span style="color:#e74c3c;">反转</span>
+                            <span style="color:#ff5f74;">反转</span>
                         </label>
                         <label style="font-size:0.7em; color:var(--muted-color); display:flex; align-items:center; gap:3px;">
                             <input type="checkbox" ${useElse ? 'checked' : ''} onchange="UIB.updateDepTargetElse(${paramIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
-                            <span style="color:#3498db;">双态模式</span>
+                            <span style="color:#3fd9ff;">双态模式</span>
                         </label>
                     </div>
                     <div style="font-size:0.65em; color:var(--muted-color); margin-top:2px;">
@@ -11169,7 +11169,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             
             container.innerHTML += `
                 <div style="display:flex; gap:3px; align-items:center; background:rgba(0,0,0,0.2); padding:3px; border-radius:2px;">
-                    <input type="text" value="${targetVar}" placeholder="$Target" onchange="UIB.updateGridDepTargetVar(${gridIdx}, ${ti}, this.value)" style="flex:1; font-size:0.75em; padding:2px; color:#ff9800; border-color:#d35400;">
+                    <input type="text" value="${targetVar}" placeholder="$Target" onchange="UIB.updateGridDepTargetVar(${gridIdx}, ${ti}, this.value)" style="flex:1; font-size:0.75em; padding:2px; color:#ff9440; border-color:#ff9440;">
                     <label style="font-size:0.6em; display:flex; align-items:center; gap:1px; color:var(--muted-color);" title="双态模式：离开当前格子时恢复为 0">
                         <input type="checkbox" ${useElse ? 'checked' : ''} onchange="UIB.updateGridDepTargetElse(${gridIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
                         双态
@@ -11178,7 +11178,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         <input type="checkbox" ${inverted ? 'checked' : ''} onchange="UIB.updateGridDepTargetInvert(${gridIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
                         反转
                     </label>
-                <button onclick="UIB.removeGridDepTarget(${gridIdx}, ${ti})" style="font-size:0.6em; padding:1px 4px; background:var(--uib-btn-danger); border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:2px;">删</button>
+                <button onclick="UIB.removeGridDepTarget(${gridIdx}, ${ti})" style="font-size:0.6em; padding:1px 4px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:2px;">删</button>
                 </div>`;
         });
     };
@@ -11687,13 +11687,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             compileAutoExpression(next);
             input.value = next;
             input.title = '';
-            input.style.borderColor = '#225577';
+            input.style.borderColor = '#2a5a72';
             o.autoFuncX = next;
             renderAutoFunctionPreview(o);
         } catch(err) {
             input.value = o.autoFuncX || fallback;
             input.title = err.message;
-            input.style.borderColor = '#aa4444';
+            input.style.borderColor = '#a84a56';
             alert('Invalid auto function X.');
         }
     };
@@ -11708,13 +11708,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             compileAutoExpression(next);
             input.value = next;
             input.title = '';
-            input.style.borderColor = '#225577';
+            input.style.borderColor = '#2a5a72';
             o.autoFuncY = next;
             renderAutoFunctionPreview(o);
         } catch(err) {
             input.value = o.autoFuncY || fallback;
             input.title = err.message;
-            input.style.borderColor = '#aa4444';
+            input.style.borderColor = '#a84a56';
             alert('Invalid auto function Y.');
         }
     };
@@ -11730,13 +11730,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
         try {
             compileAutoExpression(next);
             input.title = '';
-            input.style.borderColor = '#225577';
+            input.style.borderColor = '#2a5a72';
             if(isY) o.autoFuncY = next;
             else o.autoFuncX = next;
             renderAutoFunctionPreview(o);
         } catch(err) {
             input.title = err.message;
-            input.style.borderColor = '#aa4444';
+            input.style.borderColor = '#a84a56';
             renderAutoFunctionPreview(o, `${isY ? 'Y(t)' : getAutoPrimaryFunctionLabel(o)}: ${err.message}`);
         }
     };
@@ -12101,15 +12101,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
             mDiv.style.transform = `translate(${nodeTx.toFixed(2)}px, ${nodeTy.toFixed(2)}px) rotate(${((mod.rot||0) + (previewNodeAnim.rotate || 0)).toFixed(3)}deg) scale(${(globalAnimState.scale * previewNodeAnim.scale).toFixed(4)}) scale(var(--text-hover-scale, 1))`;
             mDiv.style.opacity = (previewNodeAnim.opacity || 1).toFixed(3);
             mDiv.style.setProperty('--node-accent', ({
-                slider_h: 'rgba(114,210,255,0.30)',
-                slider_v: 'rgba(114,210,255,0.30)',
+                slider_h: 'rgba(143,232,255,0.30)',
+                slider_v: 'rgba(143,232,255,0.30)',
                 joystick: 'rgba(93,242,193,0.26)',
                 toggle: 'rgba(255,190,92,0.28)',
                 accum: 'rgba(255,90,90,0.28)',
                 static: 'rgba(255,255,255,0.16)',
                 sequence: 'rgba(142, 68, 173, 0.28)',
                 text: 'rgba(255,142,92,0.22)'
-            }[mod.type] || 'rgba(114,210,255,0.26)'));
+            }[mod.type] || 'rgba(143,232,255,0.26)'));
             if(mod.type === 'sequence' || mod.type === 'toggle') mDiv.setAttribute('data-animated', '1');
             if(selectedEntity && selectedEntity.type === 'component' && selectedEntity.id === mod.id) mDiv.classList.add('selected');
             else if(selectedEntities.some(ref => ref.type === 'component' && ref.id === mod.id)) mDiv.classList.add('selected-multi');
@@ -12224,8 +12224,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         for(let s = 0; s < gridSteps; s++) {
                             const pos = (s / (gridSteps - 1)) * 100;
                             html += !isV
-                                ? `<div style="position:absolute; left:${pos}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(255,152,0,0.7); z-index:3;"></div>`
-                                : `<div style="position:absolute; top:${100 - pos}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(255,152,0,0.7); z-index:3;"></div>`;
+                                ? `<div style="position:absolute; left:${pos}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(255,148,64,0.7); z-index:3;"></div>`
+                                : `<div style="position:absolute; top:${100 - pos}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(255,148,64,0.7); z-index:3;"></div>`;
                         }
                     }
 
@@ -12243,8 +12243,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         }
                         tickPositions.sort((a, b) => a - b).forEach(pos => {
                             html += !isV
-                                ? `<div class="slider-subdivision-tick" style="position:absolute; left:${pos.toFixed(3)}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(114,210,255,0.78); z-index:3; pointer-events:none;"></div>`
-                                : `<div class="slider-subdivision-tick" style="position:absolute; top:${(100 - pos).toFixed(3)}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(114,210,255,0.78); z-index:3; pointer-events:none;"></div>`;
+                                ? `<div class="slider-subdivision-tick" style="position:absolute; left:${pos.toFixed(3)}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(143,232,255,0.78); z-index:3; pointer-events:none;"></div>`
+                                : `<div class="slider-subdivision-tick" style="position:absolute; top:${(100 - pos).toFixed(3)}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(143,232,255,0.78); z-index:3; pointer-events:none;"></div>`;
                         });
                     }
 
@@ -12277,7 +12277,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         const valueLabel = Number.isInteger(actualValue)
                             ? String(actualValue)
                             : actualValue.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
-                        html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#dff8ff; background:rgba(5,16,28,0.72); border:1px solid rgba(123,211,255,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${valueLabel}</div>`;
+                        html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#eaf7ff; background:rgba(5,16,28,0.72); border:1px solid rgba(126,211,252,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${valueLabel}</div>`;
                     }
                     html += `</div>`;
                 } else if(mod.type === 'joystick') {
@@ -12312,7 +12312,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     if(joyCfg) {
                         for(let ring = 1; ring <= joyCfg.subdivisions; ring++) {
                             const size = (ring / joyCfg.subdivisions) * 100;
-                            html += `<div style="position:absolute; left:50%; top:50%; width:${size}%; height:${size}%; transform:translate(-50%, -50%); border:1px dashed rgba(123,211,255,${ring === joyCfg.subdivisions ? 0.46 : 0.24}); border-radius:50%; box-sizing:border-box; pointer-events:none;"></div>`;
+                            html += `<div style="position:absolute; left:50%; top:50%; width:${size}%; height:${size}%; transform:translate(-50%, -50%); border:1px dashed rgba(126,211,252,${ring === joyCfg.subdivisions ? 0.46 : 0.24}); border-radius:50%; box-sizing:border-box; pointer-events:none;"></div>`;
                         }
                         for(let dirIdx = 0; dirIdx < joyCfg.directionCount; dirIdx++) {
                             const angle = getJoystickDirectionAngle(mod, dirIdx);
@@ -12320,8 +12320,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             const labelRadius = 0.44;
                             const labelX = (50 + Math.sin(angleRad) * (labelRadius * 100)).toFixed(2);
                             const labelY = (50 - Math.cos(angleRad) * (labelRadius * 100)).toFixed(2);
-                            html += `<div style="position:absolute; left:50%; top:50%; width:1px; height:42%; background:linear-gradient(180deg, rgba(123,211,255,0.72), rgba(123,211,255,0.14)); transform-origin:center top; transform:translateX(-50%) rotate(${angle}deg); pointer-events:none;"></div>`;
-                            html += `<div style="position:absolute; left:${labelX}%; top:${labelY}%; transform:translate(-50%, -50%); font-size:10px; line-height:1; color:#d6f4ff; background:rgba(7,15,24,0.72); border:1px solid rgba(123,211,255,0.34); border-radius:999px; padding:2px 5px; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,0.28); pointer-events:none;">${formatAngleLabel(angle)}</div>`;
+                            html += `<div style="position:absolute; left:50%; top:50%; width:1px; height:42%; background:linear-gradient(180deg, rgba(126,211,252,0.72), rgba(126,211,252,0.14)); transform-origin:center top; transform:translateX(-50%) rotate(${angle}deg); pointer-events:none;"></div>`;
+                            html += `<div style="position:absolute; left:${labelX}%; top:${labelY}%; transform:translate(-50%, -50%); font-size:10px; line-height:1; color:#d8ecf7; background:rgba(7,15,24,0.72); border:1px solid rgba(126,211,252,0.34); border-radius:999px; padding:2px 5px; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,0.28); pointer-events:none;">${formatAngleLabel(angle)}</div>`;
                         }
                     }
                     html += tex.handle
@@ -12356,8 +12356,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     if(linkedRegions.length > 0 || triggerRegions.length > 0) {
                         const regionColors = ['rgba(255,100,50,', 'rgba(50,200,255,', 'rgba(255,200,50,', 'rgba(50,255,100,', 'rgba(255,50,200,', 'rgba(200,200,50,'];
                         const cornerColors = ['#ff6432', '#32c8ff', '#ffc832', '#32ff64', '#ff32c8', '#c8c832'];
-                        const triggerRegionColors = ['rgba(79,193,255,', 'rgba(86,225,193,', 'rgba(120,168,255,', 'rgba(100,220,255,'];
-                        const triggerCornerColors = ['#4fc1ff', '#56e1c1', '#78a8ff', '#64dcff'];
+                        const triggerRegionColors = ['rgba(63,217,255,', 'rgba(86,225,193,', 'rgba(120,168,255,', 'rgba(100,220,255,'];
+                        const triggerCornerColors = ['#3fd9ff', '#56e1c1', '#78a8ff', '#64dcff'];
                         const centerX = rect.width * 0.5;
                         const centerY = rect.height * 0.5;
                         const halfTravelX = joyTravelX * 0.5;
@@ -12429,7 +12429,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             const segStyle = `position:relative; flex:1; border-radius:${radius}px; transform:translateX(${(s < active ? segShift : 0).toFixed(2)}px) scale(${segScale.toFixed(4)});`;
                             html += segTex
                                 ? `<div class="component-surface" style="${segStyle} background-image:url(${segTex}); opacity:${((s < active ? (localAnimState.opacity || 1) : 1) * getComponentResourceOpacity(mod, s < active ? 'prog_on' : 'prog_off')).toFixed(3)};"></div>`
-                                : `<div style="${segStyle} background:${s < active ? '#ff8c6a' : '#296394'}; opacity:${(s < active ? (localAnimState.opacity || 1) : 1).toFixed(3)};"></div>`;
+                                : `<div style="${segStyle} background:${s < active ? '#ffb54d' : '#2a5a72'}; opacity:${(s < active ? (localAnimState.opacity || 1) : 1).toFixed(3)};"></div>`;
                         }
                         html += `</div></div>`;
                     } else {
@@ -12464,7 +12464,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             ? `<div class="component-surface" style="${fillStyle} border-radius:999px; background-image:url(${tex.bar_l}); z-index:2; opacity:${getComponentResourceOpacity(mod, 'bar_l').toFixed(3)};"></div>`
                             : `<div class="bar-fill" style="${fillStyle}; z-index:2;"></div>`;
                     }
-                    html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#ffd9d9; background:rgba(5,16,28,0.72); border:1px solid rgba(255,120,120,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${formatPreviewVariableValue(accumCount)} / ${formatPreviewVariableValue(accumThreshold)}</div>`;
+                    html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#ffc9d1; background:rgba(5,16,28,0.72); border:1px solid rgba(255,95,116,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${formatPreviewVariableValue(accumCount)} / ${formatPreviewVariableValue(accumThreshold)}</div>`;
                     html += `</div>`;
                }
            }
@@ -12504,7 +12504,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         renderHierarchyPanel();
     } catch(e) {
         console.error('renderAll error:', e);
-        if(workArea) workArea.innerHTML = `<div style="color:#ff6b6b;padding:20px;font-size:14px;text-align:center;">渲染错误: ${escapeHtml(String(e && e.message || e))}</div>`;
+        if(workArea) workArea.innerHTML = `<div style="color:#ff5f74;padding:20px;font-size:14px;text-align:center;">渲染错误: ${escapeHtml(String(e && e.message || e))}</div>`;
     }
     }
     function mkDiv(id, cls, obj) {

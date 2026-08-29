@@ -251,28 +251,28 @@
         <div id="component_group_notice" class="anim-note" style="display:none; margin-bottom:8px;"></div>
 
         <!-- Toggle Initial Value -->
-        <div class="input-row" id="row_initial_val" style="display:none; background:rgba(255,255,255,0.05); padding:5px; border-radius:3px;">
+        <div class="input-row" id="row_initial_val" style="display:none; background:var(--uib-glass); padding:5px; border-radius:3px;">
             <div class="checkbox-wrapper">
                 <label style="flex:1; text-align:left; color:var(--text-color);">初始状态（默认开启）:</label>
                 <input type="checkbox" id="p_initial_val" onchange="UIB.updateData()">
             </div>
         </div>
-        <div class="input-row" id="row_toggle_invert" style="display:none; background:rgba(255,190,92,0.08); padding:5px; border-radius:3px;">
+        <div class="input-row" id="row_toggle_invert" style="display:none; background:var(--uib-amber-soft); padding:5px; border-radius:3px;">
             <div class="checkbox-wrapper">
                 <label style="flex:1; text-align:left; color:var(--text-color);" title="开启后：默认开启时绑定变量=0，关闭时=1（与开关状态相反）">反转绑定变量:</label>
                 <input type="checkbox" id="p_toggle_invert" onchange="UIB.updateData()">
             </div>
         </div>
-        <div class="input-row" id="row_initial_num" style="display:none; background:rgba(255,255,255,0.05); padding:5px; border-radius:3px;">
+        <div class="input-row" id="row_initial_num" style="display:none; background:var(--uib-glass); padding:5px; border-radius:3px;">
             <label style="color:var(--text-color);">初始数值:</label>
             <input type="number" id="p_initial_num" step="1" min="0" value="0" onchange="UIB.updateData()">
         </div>
 
         <!-- Sequence Logic -->
-        <div id="seq_editor_group" style="display:none; padding:5px; border:1px solid #8e44ad; margin-bottom:8px;">
+        <div id="seq_editor_group" style="display:none; padding:5px; border:1px solid var(--uib-violet-line); margin-bottom:8px;">
             <div class="input-row">
                 <label style="color:var(--uib-ok-text);">控制变量:</label>
-                <input type="text" id="p_seq_var" placeholder="$State" oninput="UIB.updateSeqVar()" style="color:var(--uib-ok-text); border-color:#006600;">
+                <input type="text" id="p_seq_var" placeholder="$State" oninput="UIB.updateSeqVar()" style="color:var(--uib-ok-text); border-color:var(--uib-mint-line);">
             </div>
             <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:5px;">
                 <button style="flex:1; background:var(--uib-btn-ok);" onclick="document.getElementById('u_batch_seq').click()">批量导入</button>
@@ -283,8 +283,8 @@
             <div id="seq_list_container" class="seq-list"></div>
         </div>
 
-        <div id="text_editor_group" style="display:none; background:rgba(211, 84, 0, 0.1); padding:5px; border:1px solid #d35400; margin-bottom:8px;">
-            <div class="input-row"><label style="color:#e67e22; font-weight:bold;">文本内容:</label></div>
+        <div id="text_editor_group" style="display:none; background:var(--uib-orange-soft); padding:5px; border:1px solid var(--uib-orange-line); margin-bottom:8px;">
+            <div class="input-row"><label style="color:var(--uib-orange-text); font-weight:bold;">文本内容:</label></div>
             <div class="input-row"><textarea id="p_text_content" oninput="UIB.updateTextContent()"></textarea></div>
             
             <div class="input-row">
@@ -317,8 +317,8 @@
                 </select>
             </div>
 
-            <div class="input-group" style="margin:8px 0; border-color:rgba(79,193,255,0.38);">
-                <h4 style="margin:0 0 6px; color:#7fd7ff;">独立显示</h4>
+            <div class="input-group" style="margin:8px 0; border-color:var(--uib-accent-line);">
+                <h4 style="margin:0 0 6px; color:var(--uib-accent-hi);">独立显示</h4>
                 <div class="bind-row">
                     <div>
                         <input type="checkbox" id="p_text_visibility_enabled" onchange="UIB.updateTextProps()">
@@ -342,15 +342,15 @@
                 </div>
             </div>
 
-            <div class="input-group" style="margin:8px 0; border-color:rgba(255,174,94,0.42);">
-                <h4 style="margin:0 0 6px; color:#ffae5e;">点击开关</h4>
+            <div class="input-group" style="margin:8px 0; border-color:var(--uib-amber-line);">
+                <h4 style="margin:0 0 6px; color:var(--uib-amber-text);">点击开关</h4>
                 <div class="input-row">
                     <label>绑定变量:</label>
-                    <input type="text" id="p_text_click_var" placeholder="$text_show_0" oninput="UIB.updateTextProps()" style="color:#ffca8a; border-color:#8a5725;">
+                    <input type="text" id="p_text_click_var" placeholder="$text_show_0" oninput="UIB.updateTextProps()" style="color:var(--uib-amber-text); border-color:var(--uib-amber-line);">
                 </div>
             </div>
 
-            <div class="input-row" style="background:rgba(255,255,255,0.05); border:1px solid #555; padding:5px;">
+            <div class="input-row" style="background:var(--uib-glass); border:1px solid var(--uib-hairline); padding:5px;">
                 <label style="color:var(--text-color);">颜色设置:</label>
                 <input type="color" id="p_font_color" value="#ffffff" style="flex:1; height:30px; cursor:pointer;" oninput="UIB.applyTextColor(this.value)">
                 <div style="flex:2; font-size:0.8em; color:var(--muted-color); margin-left:5px; line-height:1.2;">
@@ -360,7 +360,7 @@
 
             <div class="input-row">
                 <label style="color:var(--uib-ok-text);">数值变量:</label>
-                <input type="text" id="p_val_var" placeholder="{val}，导出为 000~999" title="运行时取整并限制到 0~999，始终显示三位" oninput="UIB.updateTextProps()" style="color:var(--uib-ok-text); border-color:#006600;">
+                <input type="text" id="p_val_var" placeholder="{val}，导出为 000~999" title="运行时取整并限制到 0~999，始终显示三位" oninput="UIB.updateTextProps()" style="color:var(--uib-ok-text); border-color:var(--uib-mint-line);">
             </div>
 
             <div class="input-row"><label>字符大小:</label><input type="number" id="p_char_size" step="0.001" onchange="UIB.updateTextProps()"></div>
@@ -376,7 +376,7 @@
                 </div>
                 <span id="phys_var_name" class="var-tag"></span>
             </div>
-            <div id="phys_config_panel" style="display:none; background:rgba(0, 255, 0, 0.05); padding:8px; border:1px solid #006600; border-radius:4px; margin-bottom:8px;">
+            <div id="phys_config_panel" style="display:none; background:var(--uib-mint-soft); padding:8px; border:1px solid var(--uib-mint-line); border-radius:4px; margin-bottom:8px;">
                 <h4 style="margin:0 0 8px 0; color:var(--uib-ok-text); font-size:0.9em;">物理与自动动画控制</h4>
                 <details class="fold-block">
                     <summary>物理模式说明</summary>
@@ -399,7 +399,7 @@
                         - <b>响应 / 回弹 / 重力</b> 用于调整整体动态手感。
                     </div>
                 </details>
-                <div style="display:none; font-size:0.75em; color:var(--muted-color); margin-bottom:8px; padding:5px; background:rgba(0,0,0,0.3); border-radius:3px;">
+                <div style="display:none; font-size:0.75em; color:var(--muted-color); margin-bottom:8px; padding:5px; background:var(--uib-well); border-radius:3px;">
                     <b style="color:var(--uib-ok-text);">算法说明:</b><br>
                     - <b>弹性 (K)</b> 影响回弹速度，值越大越灵敏。<br>
                     - <b>阻尼 (D)</b> 控制速度衰减，越接近 1 越稳定。<br>
@@ -414,86 +414,86 @@
                 </div>
                 <div class="input-row">
                     <label style="color:var(--uib-ok-text);">弹性强度 (K):</label>
-                    <input type="number" id="p_spring_k_val" value="0.05" step="0.01" min="0" max="1" onchange="UIB.updatePhysParamsDirect()" style="flex:1; color:var(--uib-ok-text); border-color:#006600;">
+                    <input type="number" id="p_spring_k_val" value="0.05" step="0.01" min="0" max="1" onchange="UIB.updatePhysParamsDirect()" style="flex:1; color:var(--uib-ok-text); border-color:var(--uib-mint-line);">
                 </div>
                 <div class="input-row">
                     <label style="color:var(--uib-ok-text);">阻尼系数 (D):</label>
-                    <input type="number" id="p_spring_d_val" value="0.95" step="0.01" min="0" max="1" onchange="UIB.updatePhysParamsDirect()" style="flex:1; color:var(--uib-ok-text); border-color:#006600;">
+                    <input type="number" id="p_spring_d_val" value="0.95" step="0.01" min="0" max="1" onchange="UIB.updatePhysParamsDirect()" style="flex:1; color:var(--uib-ok-text); border-color:var(--uib-mint-line);">
                 </div>
                 <div class="input-row" id="row_phys_profile" style="display:none;">
-                    <label style="color:#6cf;">物理模式:</label>
-                    <select id="p_phys_profile" onchange="UIB.updatePhysProfile()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label style="color:var(--uib-accent-hi);">物理模式:</label>
+                    <select id="p_phys_profile" onchange="UIB.updatePhysProfile()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                         <option value="normal">普通模式</option>
                         <option value="breast">乳摇模式</option>
                     </select>
                 </div>
-                <div id="phys_profile_hint" style="display:none; color:#7fd7ff; font-size:12px; line-height:1.5; padding:4px 2px 6px;">
+                <div id="phys_profile_hint" style="display:none; color:var(--uib-accent-hi); font-size:12px; line-height:1.5; padding:4px 2px 6px;">
                     乳摇模式会保留更多边缘延迟、回弹和下坠感，适合柔性摆动部件。
                 </div>
                 <details id="auto_anim_section" class="fold-block">
                     <summary>自动动画参数</summary>
                     <div class="fold-body controls-body">
                 <div class="input-row" style="justify-content:space-between; align-items:center;">
-                    <label style="color:#ff0;">自动动画:</label>
+                    <label style="color:var(--uib-amber-text);">自动动画:</label>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <input type="checkbox" id="p_auto_animate" onchange="UIB.updateAutoAnimate()" style="width:1.2em; height:1.2em;">
                         <span id="auto_var_name" class="var-tag"></span>
                     </div>
                 </div>
                 <div class="input-row">
-                    <label style="color:#ff0;">牵引强度:</label>
-                    <input type="number" id="p_auto_str" value="0.10" step="0.01" min="0" max="1" onchange="UIB.updateAutoStr()" style="flex:1; color:#ff0; border-color:#996600;">
+                    <label style="color:var(--uib-amber-text);">牵引强度:</label>
+                    <input type="number" id="p_auto_str" value="0.10" step="0.01" min="0" max="1" onchange="UIB.updateAutoStr()" style="flex:1; color:var(--uib-amber-text); border-color:var(--uib-amber-line);">
                 </div>
                 <div class="input-row" id="row_auto_source">
-                    <label style="color:#6cf;">轨迹来源:</label>
-                    <select id="p_auto_source" onchange="UIB.updateAutoSource()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label style="color:var(--uib-accent-hi);">轨迹来源:</label>
+                    <select id="p_auto_source" onchange="UIB.updateAutoSource()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                         <option value="chaos">混沌轨迹</option>
                         <option value="function">自定义函数</option>
                     </select>
                 </div>
                 <div class="input-row" id="row_auto_amp_x">
-                    <label id="lbl_auto_amp_x" style="color:#ff0;">幅度范围:</label>
-                    <input type="number" id="p_auto_amp_x" value="1" step="0.01" min="0" max="3" onchange="UIB.updateAutoAmpX()" style="flex:1; color:#ff0; border-color:#996600;">
+                    <label id="lbl_auto_amp_x" style="color:var(--uib-amber-text);">幅度范围:</label>
+                    <input type="number" id="p_auto_amp_x" value="1" step="0.01" min="0" max="3" onchange="UIB.updateAutoAmpX()" style="flex:1; color:var(--uib-amber-text); border-color:var(--uib-amber-line);">
                 </div>
                 <div class="input-row" id="row_auto_amp_y">
-                    <label style="color:#ff0;">Y 轴范围:</label>
-                    <input type="number" id="p_auto_amp_y" value="1" step="0.01" min="0" max="3" onchange="UIB.updateAutoAmpY()" style="flex:1; color:#ff0; border-color:#996600;">
+                    <label style="color:var(--uib-amber-text);">Y 轴范围:</label>
+                    <input type="number" id="p_auto_amp_y" value="1" step="0.01" min="0" max="3" onchange="UIB.updateAutoAmpY()" style="flex:1; color:var(--uib-amber-text); border-color:var(--uib-amber-line);">
                 </div>
                 <div class="input-row" id="row_auto_seed_x">
-                    <label id="lbl_auto_seed_x" style="color:#6cf;">随机种子:</label>
-                    <input type="number" id="p_auto_seed_x" value="0.3187" step="0.0001" min="0.001" max="0.999" onchange="UIB.updateAutoSeedX()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label id="lbl_auto_seed_x" style="color:var(--uib-accent-hi);">随机种子:</label>
+                    <input type="number" id="p_auto_seed_x" value="0.3187" step="0.0001" min="0.001" max="0.999" onchange="UIB.updateAutoSeedX()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                 </div>
                 <div class="input-row" id="row_auto_seed_y">
-                    <label style="color:#6cf;">Y 轴种子:</label>
-                    <input type="number" id="p_auto_seed_y" value="0.6123" step="0.0001" min="0.001" max="0.999" onchange="UIB.updateAutoSeedY()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label style="color:var(--uib-accent-hi);">Y 轴种子:</label>
+                    <input type="number" id="p_auto_seed_y" value="0.6123" step="0.0001" min="0.001" max="0.999" onchange="UIB.updateAutoSeedY()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                 </div>
                 <div class="input-row" id="row_auto_func_x" style="display:none;">
-                    <label id="lbl_auto_func_x" style="color:#6cf;">函数 f(t):</label>
-                    <input type="text" id="p_auto_func_x" value="sin01(t)" oninput="UIB.previewAutoFunc('x')" onchange="UIB.updateAutoFuncX()" style="flex:1; color:#6cf; border-color:#225577;" placeholder="sin01(t)">
+                    <label id="lbl_auto_func_x" style="color:var(--uib-accent-hi);">函数 f(t):</label>
+                    <input type="text" id="p_auto_func_x" value="sin01(t)" oninput="UIB.previewAutoFunc('x')" onchange="UIB.updateAutoFuncX()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);" placeholder="sin01(t)">
                 </div>
                 <div class="input-row" id="row_auto_func_y" style="display:none;">
-                    <label style="color:#6cf;">函数 Y(t):</label>
-                    <input type="text" id="p_auto_func_y" value="cos(TAU * t)" oninput="UIB.previewAutoFunc('y')" onchange="UIB.updateAutoFuncY()" style="flex:1; color:#6cf; border-color:#225577;" placeholder="cos(TAU * t)">
+                    <label style="color:var(--uib-accent-hi);">函数 Y(t):</label>
+                    <input type="text" id="p_auto_func_y" value="cos(TAU * t)" oninput="UIB.previewAutoFunc('y')" onchange="UIB.updateAutoFuncY()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);" placeholder="cos(TAU * t)">
                 </div>
                 <div class="input-row" id="row_auto_speed">
-                    <label style="color:#6cf;">动画速度:</label>
-                    <input type="number" id="p_auto_speed" value="0.015" step="0.002" min="0" max="0.2" onchange="UIB.updateAutoSpeed()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label style="color:var(--uib-accent-hi);">动画速度:</label>
+                    <input type="number" id="p_auto_speed" value="0.015" step="0.002" min="0" max="0.2" onchange="UIB.updateAutoSpeed()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                 </div>
                 <div class="input-row">
-                    <label style="color:#6cf;">目标平滑:</label>
-                    <input type="number" id="p_auto_response" value="0.22" step="0.01" min="0.01" max="1" onchange="UIB.updateAutoResponse()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label style="color:var(--uib-accent-hi);">目标平滑:</label>
+                    <input type="number" id="p_auto_response" value="0.22" step="0.01" min="0.01" max="1" onchange="UIB.updateAutoResponse()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                 </div>
                 <div class="input-row">
-                    <label style="color:#6cf;">边界反弹:</label>
-                    <input type="number" id="p_auto_bounce" value="0.25" step="0.01" min="0" max="1" onchange="UIB.updateAutoBounce()" style="flex:1; color:#6cf; border-color:#225577;">
+                    <label style="color:var(--uib-accent-hi);">边界反弹:</label>
+                    <input type="number" id="p_auto_bounce" value="0.25" step="0.01" min="0" max="1" onchange="UIB.updateAutoBounce()" style="flex:1; color:var(--uib-accent-hi); border-color:var(--uib-accent-line);">
                 </div>
                 <div class="input-row">
-                    <label style="color:#f80;">伪重力:</label>
-                    <input type="number" id="p_gravity" value="0" step="0.005" min="0" max="1" onchange="UIB.updateGravity()" style="flex:1; color:#f80; border-color:#663300;">
+                    <label style="color:var(--uib-orange-text);">伪重力:</label>
+                    <input type="number" id="p_gravity" value="0" step="0.005" min="0" max="1" onchange="UIB.updateGravity()" style="flex:1; color:var(--uib-orange-text); border-color:var(--uib-orange-line);">
                 </div>
                 <div class="input-row">
-                    <label id="lbl_auto_rate" style="color:#ff0;">轨迹刷新:</label>
-                    <input type="number" id="p_chaos_rate" value="96" step="1" min="1" max="240" onchange="UIB.updateChaosRate()" style="flex:1; color:#ff0; border-color:#996600;">
+                    <label id="lbl_auto_rate" style="color:var(--uib-amber-text);">轨迹刷新:</label>
+                    <input type="number" id="p_chaos_rate" value="96" step="1" min="1" max="240" onchange="UIB.updateChaosRate()" style="flex:1; color:var(--uib-amber-text); border-color:var(--uib-amber-line);">
                 </div>
                 <details id="auto_func_hint" class="fold-block" style="display:none;">
                     <summary>自定义函数语法</summary>
@@ -509,52 +509,52 @@
                     </div>
                 </details>
                 <div id="auto_func_preview_wrap" style="display:none; margin-top:8px;">
-                    <div style="font-size:0.8em; color:#7fd7ff; margin-bottom:4px;">函数轨迹预览</div>
-                    <canvas id="auto_func_preview" width="300" height="140" style="width:100%; height:140px; background:rgba(0,0,0,0.35); border:1px solid rgba(127,215,255,0.25); border-radius:4px;"></canvas>
+                    <div style="font-size:0.8em; color:var(--uib-accent-hi); margin-bottom:4px;">函数轨迹预览</div>
+                    <canvas id="auto_func_preview" width="300" height="140" style="width:100%; height:140px; background:var(--uib-well); border:1px solid var(--uib-accent-line); border-radius:4px;"></canvas>
                     <div id="auto_func_preview_caption" class="shader-status"></div>
                 </div>
                     </div>
                 </details>
             </div>
-            <div id="accum_panel" style="display:none; background:rgba(255,80,80,0.08); padding:8px; border:1px solid rgba(255,90,90,0.5); border-radius:4px; margin-bottom:8px;">
-                <h4 style="margin:0 0 6px 0; color:#ff6b6b; font-size:0.9em;">积蓄条配置</h4>
-                <div style="font-size:0.72em; color:#ffb3b3; line-height:1.5; margin-bottom:8px;">
+            <div id="accum_panel" style="display:none; background:var(--uib-coral-soft); padding:8px; border:1px solid var(--uib-coral-line); border-radius:4px; margin-bottom:8px;">
+                <h4 style="margin:0 0 6px 0; color:var(--uib-coral-text); font-size:0.9em;">积蓄条配置</h4>
+                <div style="font-size:0.72em; color:var(--uib-coral-text); line-height:1.5; margin-bottom:8px;">
                     绑定滑条/摇杆/开关后，仅统计<b>手柄被鼠标拖拽</b>产生的位移（含模型区域拖拽）；自动动画、物理回弹不计入。<br>
                     滑条按拖拽距离累计（来回一次记 2），摇杆记两轴位移之和，开关每次点击记 1。达到积蓄槽值时触发下方变量并自动归零重新统计。
                 </div>
                 <div class="input-row">
-                    <label style="color:#ff8a8a;">方向:</label>
+                    <label style="color:var(--uib-coral-text);">方向:</label>
                     <select id="p_accum_direction" onchange="UIB.updateAccumProps()">
                         <option value="h">水平</option>
                         <option value="v">垂直</option>
                     </select>
                 </div>
                 <div class="input-row">
-                    <label style="color:#ff8a8a;">积蓄槽值:</label>
+                    <label style="color:var(--uib-coral-text);">积蓄槽值:</label>
                     <input type="number" id="p_accum_threshold" step="0.1" min="0.1" value="5" onchange="UIB.updateAccumProps()">
                 </div>
-                <h4 style="margin:8px 0 4px 0; color:#ff8a8a; font-size:0.82em;">绑定组件（统计其拖拽位移/点击）</h4>
+                <h4 style="margin:8px 0 4px 0; color:var(--uib-coral-text); font-size:0.82em;">绑定组件（统计其拖拽位移/点击）</h4>
                 <div id="accum_bindings_list" style="display:flex; flex-direction:column; gap:5px; margin-bottom:6px;"></div>
-                <button onclick="UIB.addAccumBinding()" style="font-size:0.72em; padding:4px 10px; background:var(--uib-btn-danger); border:1px solid #8a3a3a; color:#ff9c9c; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加绑定</button>
+                <button onclick="UIB.addAccumBinding()" style="font-size:0.72em; padding:4px 10px; background:var(--uib-btn-danger); border:1px solid var(--uib-coral-line); color:var(--uib-coral-text); cursor:pointer; border-radius:3px; justify-content:center;">+ 添加绑定</button>
                 <h4 style="margin:10px 0 4px 0; color:var(--uib-warn-text); font-size:0.82em;">达到阈值后触发变量</h4>
-                <div style="font-size:0.68em; color:#ffd08a; line-height:1.4; margin-bottom:5px;">达到积蓄槽值时将以下变量设为指定值，然后积蓄槽归零重新统计。</div>
+                <div style="font-size:0.68em; color:var(--uib-amber-text); line-height:1.4; margin-bottom:5px;">达到积蓄槽值时将以下变量设为指定值，然后积蓄槽归零重新统计。</div>
                 <div id="accum_triggers_list" style="display:flex; flex-direction:column; gap:5px; margin-bottom:6px;"></div>
-                <button onclick="UIB.addAccumTrigger()" style="font-size:0.72em; padding:4px 10px; background:var(--uib-btn-warn); border:1px solid #8a6a3a; color:#ffcf7a; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加触发变量</button>
+                <button onclick="UIB.addAccumTrigger()" style="font-size:0.72em; padding:4px 10px; background:var(--uib-btn-warn); border:1px solid var(--uib-amber-line); color:var(--uib-amber-text); cursor:pointer; border-radius:3px; justify-content:center;">+ 添加触发变量</button>
             </div>
-            <div id="linked_slaves_panel" style="display:none; background:rgba(255, 165, 0, 0.08); padding:8px; border:1px solid rgba(255,165,0,0.45); border-radius:4px; margin-bottom:8px;">
-                <h4 style="margin:0 0 6px 0; color:#ffa500; font-size:0.9em;">嵌套联动（区间映射）</h4>
-                <div style="font-size:0.72em; color:#ffd08a; line-height:1.5; margin-bottom:8px;">
+            <div id="linked_slaves_panel" style="display:none; background:var(--uib-orange-soft); padding:8px; border:1px solid var(--uib-orange-line); border-radius:4px; margin-bottom:8px;">
+                <h4 style="margin:0 0 6px 0; color:var(--uib-orange-text); font-size:0.9em;">嵌套联动（区间映射）</h4>
+                <div style="font-size:0.72em; color:var(--uib-amber-text); line-height:1.5; margin-bottom:8px;">
                     将本组件的值通过区间映射到其他滑块/遥杆组件。例如本组件 0~0.5 映射到目标 0~1。
                 </div>
                 <div id="linked_slaves_list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
-                <button onclick="UIB.addLinkedSlave()" style="font-size:0.75em; padding:4px 10px; background:var(--uib-btn-ok); border:1px solid #3a7a4a; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; justify-content:center;">+ 添加联动目标</button>
+                <button onclick="UIB.addLinkedSlave()" style="font-size:0.75em; padding:4px 10px; background:var(--uib-btn-ok); border:1px solid var(--uib-mint-line); color:var(--uib-ok-text); cursor:pointer; border-radius:3px; justify-content:center;">+ 添加联动目标</button>
                 
-                <h4 style="margin:12px 0 6px 0; color:#4fc1ff; font-size:0.85em; border-top:1px solid rgba(79,193,255,0.2); padding-top:8px;">独立区间触发</h4>
-                <div style="font-size:0.72em; color:#7fd7ff; line-height:1.5; margin-bottom:8px;">
+                <h4 style="margin:12px 0 6px 0; color:var(--uib-accent-hi); font-size:0.85em; border-top:1px solid var(--uib-accent-line); padding-top:8px;">独立区间触发</h4>
+                <div style="font-size:0.72em; color:var(--uib-accent-hi); line-height:1.5; margin-bottom:8px;">
                     无需绑定目标组件，自由设置区间及其进入/离开动作。仅当本组件值进入或离开区间时触发动作。
                 </div>
                 <div id="range_triggers_list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
-                <button onclick="UIB.addRangeTrigger()" style="font-size:0.75em; padding:4px 10px; background:var(--uib-btn-bg); border:1px solid #3a7a7a; color:#4fc1ff; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加独立区间触发</button>
+                <button onclick="UIB.addRangeTrigger()" style="font-size:0.75em; padding:4px 10px; background:var(--uib-btn-bg); border:1px solid var(--uib-accent-line); color:var(--uib-accent-hi); cursor:pointer; border-radius:3px; justify-content:center;">+ 添加独立区间触发</button>
             </div>
             <div class="input-group">
                 <div class="input-row" id="row_switch_group" style="display:none;">
@@ -602,16 +602,16 @@
                     <label>默认 Y:</label>
                     <input type="number" id="p_joy_default_y" step="0.01" min="-1" max="1" value="0" onchange="UIB.updateJoystickDefaultY()" placeholder="0">
                 </div>
-                <div id="joy_algo_hint" style="display:none; font-size:0.72em; color:var(--muted-color); padding:6px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px; margin-bottom:6px;">
+                <div id="joy_algo_hint" style="display:none; font-size:0.72em; color:var(--muted-color); padding:6px; background:var(--uib-accent-soft); border:1px solid var(--uib-accent-line); border-radius:4px; margin-bottom:6px;">
                     方向变量按相邻两个方向混合计算；第 0 个方向的角度 = 起始角度 + n × (360 / 方向数量)
                 </div>
-                <div id="slider_subdiv_hint" style="display:none; font-size:0.72em; color:var(--muted-color); padding:6px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px; margin-bottom:6px;">
+                <div id="slider_subdiv_hint" style="display:none; font-size:0.72em; color:var(--muted-color); padding:6px; background:var(--uib-accent-soft); border:1px solid var(--uib-accent-line); border-radius:4px; margin-bottom:6px;">
                     前一段到达 1 后保持不变，当前段继续从 0 增长到 1。
                 </div>
                 
-                <div class="input-row" id="row_zone_drag" style="display:none; background:rgba(93,242,193,0.10); border:1px solid rgba(93,242,193,0.45); padding:5px; border-radius:3px;">
+                <div class="input-row" id="row_zone_drag" style="display:none; background:var(--uib-mint-soft); border:1px solid var(--uib-mint-line); padding:5px; border-radius:3px;">
                     <div class="checkbox-wrapper">
-                        <label style="flex:1; text-align:left; color:#5df2c1;">模型区域拖拽:</label>
+                        <label style="flex:1; text-align:left; color:var(--uib-mint-text);">模型区域拖拽:</label>
                         <input type="checkbox" id="p_zone_drag_enabled" onchange="UIB.updateZoneDragEnabled()">
                     </div>
                 </div>
@@ -645,22 +645,22 @@
                 <label>圆角 (px):</label>
                 <input type="number" id="p_corner_radius" step="0.1" min="0" onchange="UIB.updateGeom()">
             </div>
-            <div class="input-row" style="background:rgba(255,255,0,0.1); border:1px solid #aa0;">
-                <label style="color:#ff0; font-weight:bold;">旋转 (度):</label>
-                <input type="number" id="p_rot" step="1" onchange="UIB.updateGeom()" style="color:#ff0; font-weight:bold;">
+            <div class="input-row" style="background:var(--uib-amber-soft); border:1px solid var(--uib-amber-line);">
+                <label style="color:var(--uib-amber-text); font-weight:bold;">旋转 (度):</label>
+                <input type="number" id="p_rot" step="1" onchange="UIB.updateGeom()" style="color:var(--uib-amber-text); font-weight:bold;">
             </div>
             <div class="input-row" style="background:var(--uib-btn-bg); padding:2px; border-radius:3px;">
-                <label style="color:#fff">层级 (Z):</label>
-                <input type="number" id="p_z" step="1" onchange="UIB.updateGeom()" style="font-weight:bold; color:#ff0;">
+                <label style="color:var(--uib-text)">层级 (Z):</label>
+                <input type="number" id="p_z" step="1" onchange="UIB.updateGeom()" style="font-weight:bold; color:var(--uib-amber-text);">
             </div>
-            <div class="input-row" id="row_follow_cursor" style="display:none; background:rgba(79,193,255,0.10); border:1px solid rgba(79,193,255,0.45); padding:5px; border-radius:3px;">
+            <div class="input-row" id="row_follow_cursor" style="display:none; background:var(--uib-accent-soft); border:1px solid var(--uib-accent-line); padding:5px; border-radius:3px;">
                 <div class="checkbox-wrapper">
-                    <label style="flex:1; text-align:left; color:#7fd7ff;">跟随鼠标指针:</label>
+                    <label style="flex:1; text-align:left; color:var(--uib-accent-hi);">跟随鼠标指针:</label>
                     <input type="checkbox" id="p_follow_cursor" onchange="UIB.updateFollowCursor()">
                 </div>
             </div>
             <div class="input-row" id="row_follow_offset" style="display:none; padding:5px;">
-                <label style="color:#7fd7ff;">跟随偏移 X/Y:</label>
+                <label style="color:var(--uib-accent-hi);">跟随偏移 X/Y:</label>
                 <input type="number" id="p_follow_offset_x" step="0.05" onchange="UIB.updateFollowOffset()" title="水平偏移（组件宽度比例）：0.5=水平居中，1=组件在指针左侧，0=在右侧，可填小数或超出 0~1 的值">
                 <input type="number" id="p_follow_offset_y" step="0.05" onchange="UIB.updateFollowOffset()" title="垂直偏移（组件高度比例）：0.5=垂直居中，1=组件在指针上方，0=在下方，可填小数或超出 0~1 的值">
             </div>
