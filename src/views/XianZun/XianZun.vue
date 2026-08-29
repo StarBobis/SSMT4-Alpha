@@ -11,6 +11,7 @@ import {
   Document,
   Download,
   EditPen,
+  FolderOpened,
   Link as LinkIcon,
   List,
   MagicStick,
@@ -24,17 +25,17 @@ import {
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { fetch } from '@tauri-apps/plugin-http'
-import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { appDataDir, join } from '@tauri-apps/api/path'
-import { exists, mkdir, writeFile } from '@tauri-apps/plugin-fs'
+import { appCacheDir, appDataDir, join } from '@tauri-apps/api/path'
+import { exists, mkdir, stat, writeFile } from '@tauri-apps/plugin-fs'
 import { AppStateManager } from '../../store/AppStateManager'
 import {
   REASONING_EFFORT_OPTIONS,
   XIANZUN_APPROVAL_MODE_OPTIONS,
+  pushXianzunApiUrlHistory,
   type XianZunApprovalMode,
 } from '../../store/AppSettings'
 import { mcpTools, validateToolArgs, MCP_CATEGORY_LABELS } from '../../store/XianZunMcp'
@@ -44,6 +45,7 @@ import type { CapabilityTool } from '../../store/XianZunCapabilities'
 import { webTools } from '../../store/XianZunWebTools'
 import { agentTools } from '../../store/XianZunAgentTools'
 import { fileTools } from '../../store/XianZunFileTools'
+import { copyTextToClipboard } from '../../utils/clipboard'
 import { useResourceManagerStore } from '../../store/ResourceManager'
 import { useModManagerStore } from '../../store/ModManager'
 import { useModTagStore } from '../../store/ModTagStore'
@@ -1568,6 +1570,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     appSettings.DRMAclFolderPath ? `- DRM ACL 路径: ${appSettings.DRMAclFolderPath}` : '',
     appSettings.DRMTargetFolderPath ? `- DRM 目标路径: ${appSettings.DRMTargetFolderPath}` : '',
     appSettings.ReverseOutputFolder ? `- 逆向输出目录: ${appSettings.ReverseOutputFolder}` : '',
+    workDirectory.value ? `- 当前工作目录(用户拖入的文件夹或已解压的压缩包,文件/代码操作默认在此进行): ${workDirectory.value}` : '',
     '- 安装/扫描/导出 Mod 时,installDir 直接用上面的"游戏安装目录",gameName 用"当前游戏";不要猜测或搜索这些路径。',
   ]
     .filter((line) => line.length > 0)
@@ -1598,6 +1601,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     '- 调用可能耗时较长的命令(下载、全量提取、扫描)前,先告诉用户你正在做什么。',
     '- 复杂任务(多步工作流)开始前,先调用 create_task_plan 声明步骤计划;每完成一步调用 update_task_step 更新进度(界面会实时展示任务面板);全部完成后调用 complete_task_plan。',
     '- 探索代码/项目时,先用 get_directory_tree 看目录结构、get_file_outline 看文件符号概览,再精读需要修改的部分,改完用 list_project_scripts 查脚本并运行验证。',
+    '- 用户设定了「当前工作目录」时,所有文件/代码操作默认以该目录为基础:需要路径参数时直接使用其中的路径(可先用 get_directory_tree 查看),不要向用户反复询问路径。',
     '- 查看代码项目的 Git 状态/历史/改动时,用 git_status(未提交改动清单)、git_log(提交历史)、git_diff(改动内容),三者均只读。',
     '- 你支持 Markdown 富文本输出:可以嵌入图片(![描述](图片URL))、超链接([文字](URL))、代码块、表格、列表等。需要给用户看图(如 Mod 预览图、提取结果、参考图)时,直接用图片语法展示;引用外部资料时,用超链接。图片 URL 必须以 https:// 或 http:// 开头。',
     '- 严禁编造指令执行结果;只有收到工具返回后才可以引用其结果。',
@@ -2545,8 +2549,11 @@ const runAgentTurn = async () => {
 
 const sendMessage = async () => {
   const inputText = (vditor?.getValue() ?? draft.value).trim()
-  if ((!inputText && droppedAttachments.value.length === 0) || isStreaming.value) return
-  const text = inputText || '请检查这些文件，定位问题并直接修复；如果包含功能需求，请结合现有项目完成实现。'
+  const hasWorkDirectory = !!workDirectory.value
+  if ((!inputText && droppedAttachments.value.length === 0 && !hasWorkDirectory) || isStreaming.value) return
+  const text = inputText || (hasWorkDirectory
+    ? `请以「${workDirectory.value}」为工作目录开始工作:先浏览目录结构,了解里面的内容,然后等待我的具体指令。`
+    : '请检查这些文件，定位问题并直接修复；如果包含功能需求，请结合现有项目完成实现。')
   const attachments = [...droppedAttachments.value]
   draft.value = ''
   droppedAttachments.value = []
@@ -2587,11 +2594,95 @@ const removeDroppedAttachment = (path: string) => {
   droppedAttachments.value = droppedAttachments.value.filter((item) => item !== path)
 }
 
-const handleDroppedPaths = (paths: string[]) => {
+/* ═══════════════════════════════════════════════
+   Work directory (工作目录) — 拖入文件夹/压缩包后,
+   芝士猫在这块指定区域里工作（参考 MMT 的用法）。
+   ═══════════════════════════════════════════════ */
+
+const workDirectory = ref('')
+const workspacePreparing = ref(false)
+
+const workDirectoryName = computed(() =>
+  workDirectory.value ? attachmentName(workDirectory.value) : ''
+)
+
+const isArchivePath = (path: string): boolean => /\.(zip|7z|rar)$/i.test(path)
+
+const clearWorkDirectory = () => {
+  workDirectory.value = ''
+}
+
+const fillWorkDirectoryStarter = () => {
+  if (!workDirectory.value) return
+  const name = workDirectoryName.value
+  draft.value = `请以「${name}」为工作目录开始工作:先浏览目录结构,了解里面的内容,然后等待我的具体指令。`
+  vditor?.setValue(draft.value)
+  vditor?.focus()
+}
+
+const prepareArchiveWorkDirectory = async (archivePath: string): Promise<string> => {
+  workspacePreparing.value = true
+  try {
+    const base = await appCacheDir()
+    const name = attachmentName(archivePath).replace(/\.(zip|7z|rar)$/i, '')
+    const stamp = Date.now()
+    const destDir = await join(base, 'xianzun-workspaces', `${name}-${stamp}`)
+    await invoke('extract_archive_to_dir', { archivePath, destDir })
+    return destDir
+  } finally {
+    workspacePreparing.value = false
+  }
+}
+
+const setWorkDirectory = async (path: string) => {
+  try {
+    const resolved = isArchivePath(path)
+      ? await prepareArchiveWorkDirectory(path)
+      : path
+    workDirectory.value = resolved
+    ElMessage.success(
+      isArchivePath(path)
+        ? `压缩包已解压到工作目录:${resolved}`
+        : `已设置工作目录:${resolved}`,
+    )
+  } catch (error) {
+    ElMessage.error(`无法把「${attachmentName(path)}」设为工作目录:${errorText(error)}`)
+  }
+}
+
+const handleDroppedPaths = async (paths: string[]) => {
   const normalized = paths.map((path) => path.trim()).filter(Boolean)
   if (normalized.length === 0) return
-  droppedAttachments.value = Array.from(new Set([...droppedAttachments.value, ...normalized]))
-  ElMessage.success(`已添加 ${normalized.length} 个文件或目录`)
+
+  // 文件夹 / 压缩包 → 快捷设定为「工作目录」;普通文件 → 作为附件附加。
+  const workCandidates: string[] = []
+  const plainFiles: string[] = []
+  for (const path of normalized) {
+    if (isArchivePath(path)) {
+      workCandidates.push(path)
+      continue
+    }
+    let isDirectory = false
+    try {
+      isDirectory = (await stat(path)).isDirectory
+    } catch {
+      // 无法读取元数据时按扩展名兜底:未知扩展名视为目录候选。
+      isDirectory = true
+    }
+    if (isDirectory) workCandidates.push(path)
+    else plainFiles.push(path)
+  }
+
+  if (workCandidates.length > 0) {
+    await setWorkDirectory(workCandidates[0])
+  }
+  if (plainFiles.length > 0 || workCandidates.length > 1) {
+    const attachRest = [...plainFiles, ...workCandidates.slice(1)]
+    droppedAttachments.value = Array.from(new Set([...droppedAttachments.value, ...attachRest]))
+  }
+  if (plainFiles.length > 0) {
+    ElMessage.success(`已添加 ${plainFiles.length} 个附加文件`)
+  }
 }
 
 const clearChat = async () => {
@@ -2630,6 +2721,7 @@ const testConnection = async () => {
       apiKey,
       auth: provider.anthropicAuth,
     })
+    rememberApiUrl(apiUrl)
     ElMessage.success(t('xianzun.connectOk'))
   } catch (err) {
     ElMessage.error(t('xianzun.connectFail', { error: errorText(err) }))
@@ -2708,6 +2800,7 @@ const refreshModelList = async () => {
       const modelIds = options.map((option) => option.id)
       if (currentModel && !modelIds.includes(currentModel)) modelIds.push(currentModel)
       provider.models = Array.from(new Set(modelIds))
+      rememberApiUrl(baseUrl)
     }
     if (!currentModel && provider.models.length > 0) provider.model = provider.models[0]
     provider.updatedAt = Date.now()
@@ -2743,6 +2836,54 @@ const addProvider = () => {
   appSettings.xianzunActiveProviderId = provider.id
 }
 
+/* ═══════════════════════════════════════════════
+   API 地址历史 — 仿 MMT 模型管理:常用地址可下拉回填
+   ═══════════════════════════════════════════════ */
+
+const rememberApiUrl = (url: string) => {
+  const trimmed = url?.trim()
+  if (!trimmed) return
+  appSettings.xianzunApiUrlHistory = pushXianzunApiUrlHistory(appSettings.xianzunApiUrlHistory, trimmed)
+}
+
+const normalizeBaseUrl = () => {
+  const provider = activeProvider.value
+  if (!provider) return
+  const trimmed = provider.baseUrl.trim().replace(/\/+$/, '')
+  if (trimmed !== provider.baseUrl) provider.baseUrl = trimmed
+}
+
+const onBaseUrlChange = () => {
+  normalizeBaseUrl()
+  rememberApiUrl(activeProvider.value?.baseUrl ?? '')
+}
+
+const onApiUrlHistorySelect = (item: Record<string, unknown>) => {
+  const url = typeof item?.url === 'string' ? item.url : ''
+  const provider = activeProvider.value
+  if (!provider || !url) return
+  provider.baseUrl = url
+  rememberApiUrl(url)
+}
+
+const fetchApiUrlSuggestions = (
+  query: string,
+  callback: (suggestions: Array<{ url: string }>) => void,
+) => {
+  const keyword = query.trim().toLowerCase()
+  callback(
+    appSettings.xianzunApiUrlHistory
+      .filter((url) => !keyword || url.toLowerCase().includes(keyword))
+      .slice(0, 8)
+      .map((url) => ({ url })),
+  )
+}
+
+const clearApiUrlHistory = () => {
+  appSettings.xianzunApiUrlHistory = []
+  ElMessage.success(t('xianzun.apiUrlHistoryCleared'))
+}
+
 const removeActiveProvider = async () => {
   if (appSettings.xianzunProviders.length <= 1) {
     ElMessage.warning('至少保留一个供应商')
@@ -2764,7 +2905,7 @@ const removeActiveProvider = async () => {
 
 const copyText = async (text: string) => {
   try {
-    await writeText(text)
+    await copyTextToClipboard(text)
     ElMessage.success(t('xianzun.copied'))
   } catch (err) {
     ElMessage.error(`${t('xianzun.copyFailed')}: ${errorText(err)}`)
@@ -4050,7 +4191,7 @@ onMounted(() => {
   void setupProgressListeners()
   void listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
     if (router.currentRoute.value.path !== '/xianzun') return
-    handleDroppedPaths(event.payload?.paths ?? [])
+    void handleDroppedPaths(event.payload?.paths ?? [])
   }).then((unlisten) => {
     unlistenFileDrop = unlisten
   }).catch((error) => {
@@ -4513,6 +4654,26 @@ onUnmounted(() => {
           aria-orientation="horizontal"
           @pointerdown="startComposerResize"
         ></div>
+        <div v-if="workDirectory" class="xz-workdir" aria-label="工作目录">
+          <el-icon class="xz-workdir-icon"><FolderOpened /></el-icon>
+          <span class="xz-workdir-name" :title="workDirectory">{{ workDirectoryName }}</span>
+          <span v-if="workspacePreparing" class="xz-workdir-preparing">
+            <span class="xz-workdir-spinner" aria-hidden="true"></span>
+            {{ t('xianzun.workDirectoryExtracting') }}
+          </span>
+          <button
+            type="button"
+            class="xz-workdir-start"
+            :disabled="workspacePreparing"
+            :title="t('xianzun.workDirectoryStart')"
+            @click="fillWorkDirectoryStarter"
+          >
+            {{ t('xianzun.workDirectoryStart') }}
+          </button>
+          <button type="button" class="xz-workdir-remove" :title="t('xianzun.workDirectoryClear')" @click="clearWorkDirectory">
+            <el-icon><CircleClose /></el-icon>
+          </button>
+        </div>
         <div v-if="droppedAttachments.length" class="xz-attachments" aria-label="附加文件">
           <span v-for="path in droppedAttachments" :key="path" class="xz-attachment" :title="path">
             <el-icon><Document /></el-icon>
@@ -4527,6 +4688,8 @@ onUnmounted(() => {
           <div class="xz-composer-left">
             <span class="xz-hint">
               {{ t('xianzun.hint') }}
+              <span class="xz-hint-sep">·</span>
+              <span class="xz-hint-drop">{{ t('xianzun.dropHint') }}</span>
               <span class="xz-hint-sep">·</span>
               <span class="xz-hint-model">{{ appSettings.xianzunModel || 'deepseek-v4-flash' }}</span>
             </span>
@@ -4573,7 +4736,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="xz-send"
-            :class="{ stop: isStreaming, disabled: !draft.trim() && droppedAttachments.length === 0 && !isStreaming }"
+            :class="{ stop: isStreaming, disabled: !draft.trim() && droppedAttachments.length === 0 && !workDirectory && !isStreaming }"
             :title="isStreaming ? t('xianzun.stop') : t('xianzun.send')"
             @click="onSendClick"
           >
@@ -4773,8 +4936,37 @@ onUnmounted(() => {
 
         <label class="xz-field">
           <span class="xz-field-label">{{ t('xianzun.apiUrl') }}</span>
-          <el-input v-model="activeProvider.baseUrl" placeholder="https://api.example.com/v1" />
-          <span class="xz-field-hint">{{ t('xianzun.apiUrlHint') }}</span>
+          <el-autocomplete
+            v-model="activeProvider.baseUrl"
+            class="xz-settings-url"
+            :fetch-suggestions="fetchApiUrlSuggestions"
+            placeholder="https://api.example.com/v1"
+            value-key="url"
+            trigger-on-focus
+            clearable
+            @select="onApiUrlHistorySelect"
+            @change="onBaseUrlChange"
+            @keydown.enter.prevent="onBaseUrlChange"
+            @blur="onBaseUrlChange"
+          >
+            <template #default="{ item }">
+              <div class="xz-url-suggestion">
+                <span class="xz-url-suggestion-text">{{ item.url }}</span>
+                <span class="xz-url-suggestion-badge">{{ t('xianzun.apiUrlHistory') }}</span>
+              </div>
+            </template>
+          </el-autocomplete>
+          <div class="xz-field-row">
+            <span class="xz-field-hint">{{ t('xianzun.apiUrlHint') }}</span>
+            <button
+              v-if="appSettings.xianzunApiUrlHistory.length > 0"
+              type="button"
+              class="xz-history-clear"
+              @click="clearApiUrlHistory"
+            >
+              {{ t('xianzun.apiUrlHistoryClear') }}
+            </button>
+          </div>
         </label>
 
         <label class="xz-field">
@@ -6276,6 +6468,99 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+/* ── Work directory chip (工作目录) ── */
+.xz-workdir {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin: 4px 8px 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.22);
+  border-radius: 8px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+  font-size: 12px;
+}
+
+.xz-workdir-icon {
+  flex: 0 0 auto;
+  color: rgba(var(--theme-surface-tint-rgb), 0.9);
+}
+
+.xz-workdir-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(var(--theme-text-primary-rgb), 0.95);
+}
+
+.xz-workdir-preparing {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(var(--theme-text-secondary-rgb), 0.75);
+}
+
+.xz-workdir-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--theme-surface-tint-rgb), 0.25);
+  border-top-color: rgba(var(--theme-surface-tint-rgb), 0.9);
+  animation: xz-spin 0.7s linear infinite;
+}
+
+@keyframes xz-spin {
+  to { transform: rotate(360deg); }
+}
+
+.xz-workdir-start {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.3);
+  border-radius: 6px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.1);
+  color: rgba(var(--theme-text-primary-rgb), 0.9);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.xz-workdir-start:hover:not(:disabled) {
+  background: rgba(var(--theme-surface-tint-rgb), 0.2);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.5);
+}
+
+.xz-workdir-start:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.xz-workdir-remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: rgba(var(--theme-text-secondary-rgb), 0.7);
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.xz-workdir-remove:hover {
+  color: rgba(var(--theme-danger-rgb), 0.9);
+}
+
+.xz-hint-drop {
+  color: rgba(var(--theme-surface-tint-rgb), 0.8);
+}
+
 .xz-composer:focus-within {
   border-color: rgba(var(--theme-surface-tint-rgb), 0.3);
   box-shadow: 0 0 0 3px rgba(var(--theme-surface-tint-rgb), 0.06), var(--t-material-shadow);
@@ -6974,6 +7259,59 @@ onUnmounted(() => {
 
 .xz-settings-model {
   width: 100%;
+}
+
+.xz-settings-url {
+  width: 100%;
+}
+
+.xz-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.xz-history-clear {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  color: rgba(var(--theme-danger-rgb), 0.75);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.xz-history-clear:hover {
+  color: rgba(var(--theme-danger-rgb), 1);
+  text-decoration: underline;
+}
+
+.xz-url-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.xz-url-suggestion-text {
+  overflow: hidden;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xz-url-suggestion-badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.12);
+  color: rgba(var(--theme-text-secondary-rgb), 0.75);
+  font-size: 10px;
 }
 
 .xz-model-control-row .xz-settings-model {

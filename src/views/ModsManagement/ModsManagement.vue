@@ -5,6 +5,7 @@ import { openPath } from '@tauri-apps/plugin-opener';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { AppStateManager } from '../../store/AppStateManager';
+import { takePendingModInstallDrop } from '../../store/ModInstallDropBus';
 import { open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { ModManager, type DisabledParentGroupInfo } from '../../store/ModManager';
@@ -1685,6 +1686,25 @@ const {
     reconcileInstalledMods: () => refreshAfterMutation('structure'),
 });
 
+// 主页(/)拖入后跳转到 /mods 的交接兜底:无论事件与路由谁先到达,
+// 待安装路径只在最终到达模组管理页时被消费一次。
+const drainPendingModInstallDrop = async () => {
+    const handedOff = takePendingModInstallDrop();
+    if (handedOff.length === 0) return;
+    if (handedOff.length === 1) {
+        await handleFileDrop(handedOff[0]);
+    } else {
+        await batchInstallFromPaths(handedOff);
+    }
+};
+
+watch(
+    () => router.currentRoute.value.path,
+    (path) => {
+        if (path === '/mods') void drainPendingModInstallDrop();
+    },
+);
+
 // Native DnD (kept for completeness) + Manual fallback
 const draggingMod = ref<ModInfo | null>(null);
 
@@ -1913,6 +1933,16 @@ onMounted(async () => {
     
     // Listen for file drops
     unlistenDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+        // 主页(/)拖入转交的路径优先处理——即使事件到来时路由尚未切换完成。
+        const handedOff = takePendingModInstallDrop();
+        if (handedOff.length > 0) {
+            if (handedOff.length === 1) {
+                await handleFileDrop(handedOff[0]);
+            } else {
+                await batchInstallFromPaths(handedOff);
+            }
+            return;
+        }
         if (router.currentRoute.value.path !== '/mods') return;
         const payload = event.payload;
         if (payload.paths && payload.paths.length > 0) {
@@ -2248,6 +2278,7 @@ onDeactivated(() => {
 
 onActivated(() => {
     isModsPageActive.value = true;
+    void drainPendingModInstallDrop();
     void rescanAfterReactivation();
 });
 

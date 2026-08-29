@@ -136,6 +136,32 @@ const normalizeXianZunApprovalMode = (value: unknown): XianZunApprovalMode =>
 		? (value as XianZunApprovalMode)
 		: 'manual'
 
+const XIANZUN_API_URL_HISTORY_MAX = 12
+
+const normalizeXianzunApiUrlHistory = (value: unknown): string[] => {
+	if (!Array.isArray(value)) return []
+	const seen = new Set<string>()
+	const normalized: string[] = []
+	for (const raw of value) {
+		if (typeof raw !== 'string') continue
+		const url = raw.trim()
+		if (!url || !/^https?:\/\//i.test(url)) continue
+		const key = url.replace(/\/+$/, '')
+		if (seen.has(key)) continue
+		seen.add(key)
+		normalized.push(key)
+		if (normalized.length >= XIANZUN_API_URL_HISTORY_MAX) break
+	}
+	return normalized
+}
+
+export const pushXianzunApiUrlHistory = (history: string[], url: string): string[] => {
+	const trimmed = url.trim().replace(/\/+$/, '')
+	if (!trimmed || !/^https?:\/\//i.test(trimmed)) return history
+	const next = [trimmed, ...history.filter((item) => item !== trimmed)]
+	return next.slice(0, XIANZUN_API_URL_HISTORY_MAX)
+}
+
 const normalizeXianzunMaxToolRounds = (value: unknown): number => {
 	const n = typeof value === 'number' ? value : Number(value)
 	if (!Number.isFinite(n)) return 20
@@ -306,6 +332,7 @@ export class AppSettings {
 	xianzunApiKey: string = ''
 	xianzunApiUrl: string = 'https://api.deepseek.com/v1'
 	xianzunModel: string = 'deepseek-v4-flash'
+	xianzunApiUrlHistory: string[] = []
 	xianzunProviders: XianZunProvider[] = []
 	xianzunActiveProviderId: string = ''
 	xianzunSystemPrompt: string = ''
@@ -416,6 +443,8 @@ export class AppSettings {
 				migrateLegacyXianZunProvider(this.xianzunApiUrl, this.xianzunApiKey, this.xianzunModel),
 			]
 		}
+		// 用户手动使用过的 API 地址历史（最近使用在前），用于设置页快速回填。
+		this.xianzunApiUrlHistory = normalizeXianzunApiUrlHistory(init?.xianzunApiUrlHistory)
 		this.xianzunActiveProviderId =
 			this.xianzunProviders.some((provider) => provider.id === init?.xianzunActiveProviderId)
 				? init!.xianzunActiveProviderId!
@@ -512,6 +541,7 @@ export class AppSettings {
 			xianzunApiKey: this.xianzunApiKey,
 			xianzunApiUrl: this.xianzunApiUrl,
 			xianzunModel: this.xianzunModel,
+			xianzunApiUrlHistory: this.xianzunApiUrlHistory,
 			xianzunProviders: this.xianzunProviders,
 			xianzunActiveProviderId: this.xianzunActiveProviderId,
 			xianzunSystemPrompt: this.xianzunSystemPrompt,

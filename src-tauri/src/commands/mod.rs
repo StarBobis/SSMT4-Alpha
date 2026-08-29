@@ -1,4 +1,5 @@
 pub mod ccswitch;
+pub mod clipboard;
 pub mod compress;
 pub mod extract_model;
 pub mod extract_textures;

@@ -1940,12 +1940,58 @@ const translateHoveredParagraph = async () => {
   await Promise.all(targets.map((target) => translateAnchor(target)));
 };
 
+// 翻译快捷键「点按 vs 按住」判定:只有快速的点按(按下-松开在
+// TAP_WINDOW_MS 内)才视为一次有意的翻译调用;按住不放(例如 Ctrl
+// 配合游戏内操作或其它快捷键)绝不会弹出「请先悬停」提示。
+const TAP_WINDOW_MS = 300;
+let translationKeyDownAt = 0;
+
 const onGlobalKeydown = (event: KeyboardEvent) => {
   const target = event.target as HTMLElement | null;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return;
   if (!matchesTranslationShortcut(event)) return;
+  // 按住产生的系统重复 keydown 一律忽略,避免重复翻译/重复提示。
+  if (event.repeat) return;
   event.preventDefault();
-  void translateHoveredParagraph();
+  if (!appSettings.gamebananaTranslationEnabled) return;
+
+  const anchor = hoveredTranslateElement;
+  if (anchor?.isConnected && hoveredTranslateText.trim()) {
+    // 有悬停文本:立即翻译;本次按键在松开时不再弹提示。
+    translationKeyDownAt = 0;
+    void translateHoveredParagraph();
+    return;
+  }
+
+  // 没有悬停文本:先记录按下时间,是否提示推迟到松开时决定。
+  translationKeyDownAt = Date.now();
+};
+
+const shortcutModifierKey = (event: KeyboardEvent): boolean => {
+  const shortcut = appSettings.gamebananaTranslationShortcut.trim().toLowerCase() || 'ctrl';
+  const tokens = shortcut.split('+').map((item) => item.trim().toLowerCase()).filter(Boolean);
+  const key = event.key.trim().toLowerCase();
+  if (tokens.includes(key)) return true;
+  if (key === 'control' && (tokens.includes('ctrl') || tokens.includes('control'))) return true;
+  if (key === 'meta' && (tokens.includes('meta') || tokens.includes('cmd') || tokens.includes('command'))) return true;
+  return false;
+};
+
+const onGlobalKeyup = (event: KeyboardEvent) => {
+  if (!shortcutModifierKey(event)) return;
+  if (!translationKeyDownAt) return;
+  const heldMs = Date.now() - translationKeyDownAt;
+  translationKeyDownAt = 0;
+  // 按住超过点按窗口 → 视为「按住」,不打扰用户。
+  if (heldMs > TAP_WINDOW_MS) return;
+  const anchor = hoveredTranslateElement;
+  if (anchor?.isConnected && hoveredTranslateText.trim()) return;
+  ElMessage.info(t('gameBanana.translationNoParagraph'));
+};
+
+const onGlobalBlur = () => {
+  // 窗口失焦时清掉未完成的点按记录,防止稍后误弹提示。
+  translationKeyDownAt = 0;
 };
 
 const syncGameTargetOnce = async () => {
@@ -2242,6 +2288,8 @@ const closeGbTransientMenus = () => closeGbBlockMenu();
 
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown);
+  window.addEventListener('keyup', onGlobalKeyup);
+  window.addEventListener('blur', onGlobalBlur);
   window.addEventListener('pointerdown', closeGbTransientMenus);
   gbPanelResizeObserver = new ResizeObserver(constrainGbPanelWidths);
   if (gbLayoutRef.value) gbPanelResizeObserver.observe(gbLayoutRef.value);
@@ -2255,6 +2303,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown);
+  window.removeEventListener('keyup', onGlobalKeyup);
+  window.removeEventListener('blur', onGlobalBlur);
   window.removeEventListener('pointerdown', closeGbTransientMenus);
   unlistenDownloadProgress?.();
   unlistenInstallProgress?.();

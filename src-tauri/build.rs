@@ -22,6 +22,18 @@ fn build_directxtex_bridge() {
         .into_iter()
         .chain(sibling_root)
         .collect::<Vec<_>>();
+    // Cargo 会缓存构建脚本结果；显式声明依赖，DirectXTex 安装或更新后
+    // 下一次构建会自动重新探测，无需手动 cargo clean。
+    println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
+    for root in &candidates {
+        let installed = root.join("installed").join("x64-windows-static-md");
+        let header = installed.join("include").join("DirectXTex.h");
+        let lib = installed.join("lib").join("DirectXTex.lib");
+        if header.is_file() && lib.is_file() {
+            println!("cargo:rerun-if-changed={}", header.display());
+            println!("cargo:rerun-if-changed={}", lib.display());
+        }
+    }
     let Some((root, installed)) = candidates.iter().find_map(|root| {
         let installed = root.join("installed").join("x64-windows-static-md");
         (installed.join("include").join("DirectXTex.h").is_file()
@@ -44,7 +56,8 @@ fn build_directxtex_bridge() {
         }
         println!(
             "cargo:warning=DirectXTex not found; skipping the native texture encoder bridge. \
-             Install it via vcpkg (directxtex[dx11]:x64-windows-static-md) if you need it later."
+             Install it via `vcpkg install directxtex[dx11]:x64-windows-static-md` into the \
+             repo-sibling D:\\Dev\\vcpkg (or set VCPKG_ROOT) and rebuild to pick it up automatically."
         );
         return;
     };
@@ -63,6 +76,8 @@ fn build_directxtex_bridge() {
     );
     println!("cargo:rustc-link-lib=DirectXTex");
     println!("cargo:rustc-cfg=directxtex_native");
+    // 桥接符号的保留由 Rust 侧 src/native_texture_encoder.rs 的 #[used] 静态
+    // 引用完成（linker 的 /OPT:REF 不会丢弃被引用的入口符号）。
     for lib in ["d3d11", "dxgi", "windowscodecs", "ole32"] {
         println!("cargo:rustc-link-lib={lib}");
     }

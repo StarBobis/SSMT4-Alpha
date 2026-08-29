@@ -1,4 +1,4 @@
-﻿<script setup lang="ts" >
+<script setup lang="ts" >
 import { computed, reactive, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -6,7 +6,10 @@ import { AppStateManager, type GameInfo } from '../../store/AppStateManager'
 
 import { openPath, openUrl } from '@tauri-apps/plugin-opener'
 import { exists, mkdir } from '@tauri-apps/plugin-fs'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { useRouter } from 'vue-router'
 import { ResourceManager, type UpdateInfo } from '../../store/ResourceManager'
+import { handOffModInstallDrop } from '../../store/ModInstallDropBus'
 import { join } from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 import { PathHelper } from '../../helper/PathHelper'
@@ -31,6 +34,8 @@ const appSettings = AppStateManager.appSettings;
 const selectGame = AppStateManager.selectGame.bind(AppStateManager)
 const loadGames = AppStateManager.loadGames.bind(AppStateManager)
 const { t } = useI18n()
+const router = useRouter()
+let unlistenNativeDrop: UnlistenFn | null = null;
 const currentGameConfig = ref<GameConfig>(GameConfigManager.defaultGameConfig())
 const appVersion = ref('')
 
@@ -640,6 +645,23 @@ onMounted(() => {
     .catch(error => {
       console.error('Failed to get app version:', error)
     })
+
+  // 主页拖入压缩包/文件夹 → 转交模组管理页安装(仅主页与模组管理页触发)。
+  void listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+    if (router.currentRoute.value.path !== '/') return;
+    const paths = (event.payload?.paths ?? []).map(path => path.trim()).filter(Boolean);
+    if (paths.length === 0) return;
+    if (!AppStateManager.hasSelectedGame()) {
+      ElMessage.info(t('home.messages.selectGameConfigFirst'));
+      return;
+    }
+    handOffModInstallDrop(paths);
+    await router.push('/mods');
+  }).then((unlisten) => {
+    unlistenNativeDrop = unlisten;
+  }).catch((error) => {
+    console.error('Failed to attach Home drop listener', error);
+  });
 });
 
 onUnmounted(() => {
@@ -647,6 +669,8 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', handleWindowMouseMove);
   document.removeEventListener('mouseup', finishSidebarMouseInteraction);
   clearSidebarDragState();
+  unlistenNativeDrop?.();
+  unlistenNativeDrop = null;
 });
 
 watch(
