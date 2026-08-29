@@ -8,7 +8,6 @@ import { useI18n } from 'vue-i18n';
 import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
 import type { D3d11Mode, HuntingMode } from './store/GameConfig';
-import UIBuilderHost from "./views/UIBuilder/UIBuilderHost.vue";
 import CacheFolderPicker from './components/CacheFolderPicker.vue';
 import { getGamePresetDisplayName } from './store/GamePreset';
 
@@ -441,8 +440,6 @@ onUnmounted(() => {
                   </KeepAlive>
                 </transition>
               </router-view>
-              <!-- UI 构造器常驻宿主：iframe 不随路由卸载，切页不刷新 -->
-              <UIBuilderHost />
             </div>
           </main>
         </div>
