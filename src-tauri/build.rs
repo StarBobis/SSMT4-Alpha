@@ -40,10 +40,11 @@ fn build_directxtex_bridge() {
             && installed.join("lib").join("DirectXTex.lib").is_file())
         .then(|| (root, installed))
     }) else {
-        // The native DirectXTex bridge is optional: no Rust code depends on
-        // the `directxtex_native` cfg yet (texture conversion runs through the
-        // bundled texconv.exe). Only fail the build when the caller explicitly
-        // asks for it via SSMT_REQUIRE_NATIVE_DIRECTXTEX.
+        // The native DirectXTex bridge is optional: src/native_texture_encoder.rs
+        // references the bridge entry only under the `directxtex_native` cfg,
+        // and texture conversion runs through the bundled texconv.exe. Only fail
+        // the build when the caller explicitly asks for it via
+        // SSMT_REQUIRE_NATIVE_DIRECTXTEX.
         if env::var_os("SSMT_REQUIRE_NATIVE_DIRECTXTEX").is_some() {
             let preferred = candidates
                 .last()
