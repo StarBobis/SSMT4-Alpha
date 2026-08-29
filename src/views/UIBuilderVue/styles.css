@@ -74,6 +74,10 @@
   --uib-radius-btn: 10px;
   --uib-radius-input: 8px;
 
+  /* 标题栏补偿:本页 fixed 元素的包含块是 .app-ui-scale(transform),
+     其原点位于视口顶部,必须下移一个标题栏高度才不会被 TitleBar 遮挡 */
+  --uib-titlebar-offset: calc(32px / var(--app-ui-scale, 1));
+
   /* 兼容引擎内联样式引用的变量(原版令牌名) */
   --border-color: var(--uib-hairline);
   --group-color: var(--uib-mint);
@@ -270,8 +274,8 @@
 .ui-builder-app .text-logic-window {
   position: fixed;
   left: 74px;
-  top: 12px;
-  max-height: calc(100vh - 24px);
+  top: calc(var(--uib-titlebar-offset) + 12px);
+  max-height: calc(100vh - var(--uib-titlebar-offset) - 24px);
   overflow: auto;
   padding: 12px;
   box-sizing: border-box;
@@ -406,7 +410,7 @@
 .ui-builder-app .window-dock {
   position: fixed;
   left: 8px;
-  top: 10px;
+  top: calc(var(--uib-titlebar-offset) + 10px);
   bottom: 10px;
   width: 46px;
   display: flex;
@@ -1865,7 +1869,7 @@
 /* ── 工作区模式切换栏 ── */
 .ui-builder-app .workspace-mode-bar {
   position: fixed;
-  top: 12px;
+  top: calc(var(--uib-titlebar-offset) + 12px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 180;
@@ -2824,10 +2828,12 @@
 }
 
 /* ── 页面级刷新按钮(编辑器外壳) ── */
+/* 该按钮渲染在 .ui-builder-app 之外,不能继承 --uib-titlebar-offset,
+   直接用应用全局的 --app-ui-scale 换算同样的标题栏补偿 */
 .uib-page-refresh {
   position: fixed;
   right: 14px;
-  top: 10px;
+  top: calc(32px / var(--app-ui-scale, 1) + 10px);
   z-index: 2000;
   padding: 6px 14px;
   border: 1px solid rgba(255, 255, 255, 0.14);

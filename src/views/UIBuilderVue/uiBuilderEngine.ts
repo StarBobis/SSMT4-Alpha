@@ -1652,12 +1652,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const hierarchy = document.querySelector('.hierarchy-sidebar');
         if(hierarchy) hierarchy.style.display = layout.hierarchyVisible === false ? 'none' : 'flex';
         let restoredMaxZIndex = toolWindowZIndex;
+        // 悬浮窗 fixed 定位原点在视口顶部(含标题栏),恢复布局时顶边不得低于标题栏高度
+        const presetAppUiScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--app-ui-scale')) || 1;
+        const minPresetWinTop = 32 / presetAppUiScale + 8;
         Object.entries(PRESET_TOOL_WINDOWS).forEach(([name, id]) => {
             const element = document.getElementById(id), saved = layout.windows && layout.windows[name]; if(!element || !saved) return;
             const maxLeft = Math.max(8, window.innerWidth - Math.max(120, element.offsetWidth));
-            const maxTop = Math.max(8, window.innerHeight - 80);
+            const maxTop = Math.max(minPresetWinTop, window.innerHeight - 80);
             if(Number.isFinite(Number(saved.left))) element.style.left = `${Math.max(8, Math.min(maxLeft, Number(saved.left)))}px`;
-            if(Number.isFinite(Number(saved.top))) element.style.top = `${Math.max(8, Math.min(maxTop, Number(saved.top)))}px`;
+            if(Number.isFinite(Number(saved.top))) element.style.top = `${Math.max(minPresetWinTop, Math.min(maxTop, Number(saved.top)))}px`;
             if(Number.isFinite(Number(saved.zIndex)) && Number(saved.zIndex) > 0) {
                 element.style.zIndex = String(saved.zIndex);
                 restoredMaxZIndex = Math.max(restoredMaxZIndex, Number(saved.zIndex));
@@ -8108,9 +8111,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const originLeft = rect.left;
         const originTop = rect.top;
         root.classList.add('tool-window-dragging');
+        // 悬浮窗 fixed 定位原点在视口顶部(含标题栏),拖拽顶边不得低于标题栏高度
+        const appUiScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--app-ui-scale')) || 1;
+        const minToolWinTop = 32 / appUiScale + 8;
         const move = (moveEvent) => {
             element.style.left = `${Math.max(8, originLeft + moveEvent.clientX - startX)}px`;
-            element.style.top = `${Math.max(8, originTop + moveEvent.clientY - startY)}px`;
+            element.style.top = `${Math.max(minToolWinTop, originTop + moveEvent.clientY - startY)}px`;
             resize();
         };
         const stop = () => {
