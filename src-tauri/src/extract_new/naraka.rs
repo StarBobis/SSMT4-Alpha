@@ -658,11 +658,7 @@ impl NarakaNewExtractor {
         for draw_ib in draw_ib_list.iter() {
             crate::extract_log!("当前DrawIB: {}", draw_ib);
 
-            let pointlist_index = self
-                .fa
-                .log
-                .get_last_pointlist_index_by_hash(&draw_ib)
-                .unwrap_or_default();
+            let pointlist_index = self.fa.get_first_pointlist_index_by_hash(&draw_ib);
             crate::extract_log!("当前识别到的PointlistIndex: {}", pointlist_index);
             if pointlist_index.is_empty() {
                 crate::extract_log!(
