@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { AppStateManager } from '../../store/AppStateManager'
 import {
   APP_UI_SCALE_MAX,
@@ -7,8 +7,10 @@ import {
   SSMT_LOCALE_OPTIONS,
 } from '../../store/AppSettings'
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openPath, openUrl } from '@tauri-apps/plugin-opener';
+import { mkdir } from '@tauri-apps/plugin-fs';
 import { getVersion } from '@tauri-apps/api/app';
+import { ElMessage } from 'element-plus';
 import { ref, onMounted, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -22,6 +24,7 @@ import {
   Link,
   Lock,
   Monitor,
+  Open,
   Refresh,
   FullScreen,
   View,
@@ -103,6 +106,22 @@ const selectCacheDir = async () => {
   }
 };
 
+const openCacheDir = async () => {
+  const cacheDir = (appSettings.DBMTWorkFolder || '').trim();
+  if (!cacheDir) {
+    ElMessage.warning(t('settings.messages.openCacheFolderFailed'));
+    return;
+  }
+  try {
+    // 目录可能被用户手动删除，打开前先确保它存在。
+    await mkdir(cacheDir, { recursive: true });
+    await openPath(cacheDir);
+  } catch (error) {
+    console.error('Failed to open cache folder:', error);
+    ElMessage.error(t('settings.messages.openCacheFolderFailed'));
+  }
+};
+
 onMounted(async () => {
   try {
     appVersion.value = await getVersion();
@@ -150,6 +169,10 @@ const openUsageDocs = async () => {
                     :placeholder="t('settings.general.cacheFolderPlaceholder')"
                     readonly
                   />
+                  <el-button @click="openCacheDir">
+                    <el-icon><Open /></el-icon>
+                    <span>{{ t('settings.general.openFolder') }}</span>
+                  </el-button>
                   <el-button @click="selectCacheDir">
                     <el-icon><FolderOpened /></el-icon>
                     <span>{{ t('settings.general.changeFolder') }}</span>

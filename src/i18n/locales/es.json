@@ -515,7 +515,8 @@
       "appUpdateReleaseNotesTitle": "Notas de GitHub Release",
       "appUpdateNoReleaseNotes": "No se proporcionaron notas para esta versión.",
       "appUpdateInstalledRestart": "Actualización descargada e instalada. Reinicia la aplicación para aplicarla.",
-      "appUpdateFailed": "Error al actualizar la aplicación: {error}"
+      "appUpdateFailed": "Error al actualizar la aplicación: {error}",
+      "openCacheFolderFailed": "No se pudo abrir la carpeta de caché"
     },
     "general": {
       "githubToken": "Token de GitHub",
@@ -528,6 +529,7 @@
       "cacheFolder": "Carpeta de caché de SSMT",
       "cacheFolderPlaceholder": "Selecciona una ruta para la carpeta de caché",
       "changeFolder": "Cambiar carpeta",
+      "openFolder": "Abrir carpeta",
       "selectCacheFolderTitle": "Seleccionar carpeta de caché de SSMT"
     },
     "personalization": {

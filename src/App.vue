@@ -872,7 +872,9 @@ textarea {
   align-items: center;
   gap: 9px;
   min-width: 0;
-  height: 48px;
+  min-height: 48px;
+  height: auto;
+  /* 游戏预设名较长时会换行，高度随内容自动增长 */
   padding: 7px 9px;
   border: 1px solid rgba(255, 255, 255, .1);
   border-radius: 9px;

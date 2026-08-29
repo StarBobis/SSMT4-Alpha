@@ -515,7 +515,8 @@
       "appUpdateReleaseNotesTitle": "Notes de version GitHub Release",
       "appUpdateNoReleaseNotes": "Aucune note de version n’a été fournie pour cette version.",
       "appUpdateInstalledRestart": "Mise à jour téléchargée et installée. Redémarrez l’application pour l’appliquer.",
-      "appUpdateFailed": "Échec de la mise à jour de l’application : {error}"
+      "appUpdateFailed": "Échec de la mise à jour de l’application : {error}",
+      "openCacheFolderFailed": "Impossible d’ouvrir le dossier de cache"
     },
     "general": {
       "githubToken": "Jeton GitHub",
@@ -528,6 +529,7 @@
       "cacheFolder": "Dossier de cache SSMT",
       "cacheFolderPlaceholder": "Veuillez sélectionner le chemin du dossier de cache",
       "changeFolder": "Changer de dossier",
+      "openFolder": "Ouvrir le dossier",
       "selectCacheFolderTitle": "Sélectionner le dossier de cache SSMT"
     },
     "personalization": {
