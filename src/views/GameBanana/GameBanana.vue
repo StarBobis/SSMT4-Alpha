@@ -550,6 +550,56 @@ const isSafeHttpUrl = (value: string): boolean => {
   }
 };
 
+const richTextBlockTags = new Set([
+  'P', 'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'LI',
+  'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR',
+  'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD',
+]);
+
+const wrapLooseRichTextNodes = (root: Element, document: Document) => {
+  const normalized: Node[] = [];
+  let inlineNodes: Node[] = [];
+  let pendingBreaks: HTMLBRElement[] = [];
+
+  const flushInlineNodes = () => {
+    const hasContent = inlineNodes.some((node) =>
+      Boolean(node.textContent?.trim()) || (node instanceof Element && node.tagName !== 'BR'),
+    );
+    if (hasContent) {
+      const paragraph = document.createElement('p');
+      paragraph.append(...inlineNodes);
+      normalized.push(paragraph);
+    }
+    inlineNodes = [];
+    pendingBreaks = [];
+  };
+
+  for (const node of Array.from(root.childNodes)) {
+    if (node instanceof HTMLBRElement) {
+      pendingBreaks.push(node);
+      continue;
+    }
+
+    const isBlock = node instanceof Element && richTextBlockTags.has(node.tagName);
+    if (isBlock) {
+      flushInlineNodes();
+      normalized.push(node);
+      continue;
+    }
+
+    if (pendingBreaks.length >= 2) {
+      flushInlineNodes();
+    } else if (pendingBreaks.length === 1 && inlineNodes.length) {
+      inlineNodes.push(pendingBreaks[0]);
+      pendingBreaks = [];
+    }
+    inlineNodes.push(node);
+  }
+
+  flushInlineNodes();
+  root.replaceChildren(...normalized);
+};
+
 const sanitizeRichText = (value: unknown): string => {
   const source = asString(value);
   if (!source || typeof DOMParser === 'undefined') return '';
@@ -597,31 +647,11 @@ const sanitizeRichText = (value: unknown): string => {
     }
   }
 
-  if (!root.querySelector('p, li, blockquote, pre, h1, h2, h3, h4, h5, h6, td, th')) {
-    const paragraphs: Node[][] = [[]];
-    let consecutiveBreaks = 0;
-    for (const node of Array.from(root.childNodes)) {
-      if (node instanceof HTMLBRElement) {
-        consecutiveBreaks += 1;
-        if (consecutiveBreaks >= 2) {
-          if (paragraphs.at(-1)?.length) paragraphs.push([]);
-          consecutiveBreaks = 0;
-        }
-        continue;
-      }
-      if (consecutiveBreaks === 1 && paragraphs.at(-1)?.length) {
-        paragraphs.at(-1)?.push(document.createElement('br'));
-      }
-      consecutiveBreaks = 0;
-      paragraphs.at(-1)?.push(node);
-    }
-    root.replaceChildren();
-    for (const nodes of paragraphs.filter((items) => items.some((node) => node.textContent?.trim() || node instanceof Element))) {
-      const paragraph = document.createElement('p');
-      paragraph.append(...nodes);
-      root.append(paragraph);
-    }
-  }
+  // GameBanana descriptions often mix top-level text/BR/CODE nodes with
+  // headings or rules. Normalize every loose inline run, not only documents
+  // containing no block elements, so each visible paragraph can be hovered and
+  // used as an independent translation anchor.
+  wrapLooseRichTextNodes(root, document);
 
   return root.innerHTML.trim();
 };
@@ -3116,7 +3146,7 @@ onBeforeUnmount(() => {
 .gb-rich-text :deep(pre), .gb-rich-text :deep(code) { font-family: Consolas, 'Cascadia Code', monospace; }.gb-rich-text :deep(pre) { padding: 8px; overflow: auto; border-radius: 6px; background: rgba(0,0,0,.22); white-space: pre-wrap; }
 .gb-rich-text :deep(a) { color: rgba(var(--theme-surface-tint-rgb),.95); text-decoration: underline; cursor: pointer; }.gb-rich-text :deep(img) { max-width: 100%; height: auto; border-radius: 6px; }
 .gb-rich-text :deep(table) { width: 100%; margin: 0 0 9px; border-collapse: collapse; font-size: 11px; }.gb-rich-text :deep(th), .gb-rich-text :deep(td) { padding: 5px 6px; border: 1px solid rgba(255,255,255,.12); text-align: left; }.gb-rich-text :deep(th) { background: rgba(255,255,255,.06); }
-.gb-rich-text :deep(p:hover), .gb-rich-text :deep(li:hover), .gb-rich-text :deep(blockquote:hover), .gb-rich-text :deep(pre:hover), .gb-rich-text :deep(td:hover), .gb-rich-text :deep(th:hover) { outline: 1px dashed rgba(var(--theme-surface-tint-rgb),.36); outline-offset: 3px; }
+.gb-rich-text :deep(p:hover), .gb-rich-text :deep(li:hover), .gb-rich-text :deep(blockquote:hover), .gb-rich-text :deep(pre:hover), .gb-rich-text :deep(h1:hover), .gb-rich-text :deep(h2:hover), .gb-rich-text :deep(h3:hover), .gb-rich-text :deep(h4:hover), .gb-rich-text :deep(h5:hover), .gb-rich-text :deep(h6:hover), .gb-rich-text :deep(td:hover), .gb-rich-text :deep(th:hover) { outline: 1px dashed rgba(var(--theme-surface-tint-rgb),.36); outline-offset: 3px; }
 .gb-files { display: grid; gap: 6px; }
 .gb-files h3 { color: rgba(var(--theme-text-primary-rgb), 0.8); font-size: 12px; }
 .gb-install-target { display:grid; gap:6px; padding:7px; border:1px solid rgba(255,255,255,.08); border-radius:7px; background:rgba(255,255,255,.025); }.gb-install-target-label { color:rgba(var(--theme-text-secondary-rgb),.66); font-size:10px; }.gb-install-group-modes { display:flex; min-height:27px; overflow:hidden; border-radius:6px; }.gb-install-group-modes :deep(.el-radio-button) { flex:1 1 0; min-width:0; }.gb-install-group-modes :deep(.el-radio-button__inner) { display:flex; align-items:center; justify-content:center; box-sizing:border-box; width:100%; min-height:27px; padding:0 7px; border:none!important; outline:none!important; background:rgba(255,255,255,.055); color:rgba(var(--theme-text-primary-rgb),.78); font:inherit; font-size:10px; line-height:1; box-shadow:none!important; transition:background .16s ease,color .16s ease; }.gb-install-group-modes :deep(.el-radio-button__inner:hover) { background:rgba(var(--theme-surface-tint-rgb),.16); color:rgba(var(--theme-text-primary-rgb),.96); }.gb-install-group-modes :deep(.el-radio-button.is-active .el-radio-button__inner) { background:rgba(var(--theme-surface-tint-rgb),.22); color:rgba(var(--theme-text-primary-rgb),.98); box-shadow:none!important; }.gb-install-group { display:flex; align-items:center; gap:6px; color:rgba(var(--theme-text-secondary-rgb),.66); font-size:10px; }.gb-install-group input { min-width:0; flex:1; height:27px; box-sizing:border-box; padding:0 8px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:5px; outline:none; background:rgba(var(--theme-surface-tint-rgb),.055); color:rgba(var(--theme-text-primary-rgb),.86); font:inherit; }.gb-install-group input[readonly] { color:rgba(var(--theme-text-secondary-rgb),.72); cursor:default; }.gb-install-path-select { min-width:0; flex:1; }.gb-install-path-select :deep(.el-select__wrapper) { min-height:27px; padding:0 8px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:5px; background:rgba(var(--theme-surface-tint-rgb),.055); box-shadow:none!important; }.gb-install-path-select :deep(.el-select__selected-item),.gb-install-path-select :deep(.el-select__placeholder) { color:rgba(var(--theme-text-primary-rgb),.86); font-size:10px; }.gb-install-path-select :deep(.el-select__wrapper.is-focused) { border-color:rgba(var(--theme-surface-tint-rgb),.48); box-shadow:0 0 0 2px rgba(var(--theme-surface-tint-rgb),.10)!important; }.gb-install-path-refresh { width:27px; height:27px; border:1px solid rgba(var(--theme-surface-tint-rgb),.14); border-radius:5px; background:rgba(var(--theme-surface-tint-rgb),.07); color:rgba(var(--theme-text-primary-rgb),.82); cursor:pointer; }.gb-install-path-refresh:hover:not(:disabled) { background:rgba(var(--theme-surface-tint-rgb),.16); }.gb-install-path-refresh:disabled { opacity:.45; cursor:default; }
