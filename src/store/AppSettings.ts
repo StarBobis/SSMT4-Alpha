@@ -279,6 +279,7 @@ export class AppSettings {
 	gamebananaShowNsfw: boolean = true
 	gamebananaRestoreNsfwAfterHide: boolean = false
 	revealBlurredImagesOnHover: boolean = true
+	titlebarCompactView: boolean = false
 	gamebananaTranslationEnabled: boolean = true
 	gamebananaTranslationRichText: boolean = false
 	gamebananaTranslationProvider: GameBananaTranslationProvider = 'openai'
@@ -370,6 +371,7 @@ export class AppSettings {
 			this.gamebananaRestoreNsfwAfterHide = true
 		}
 		this.revealBlurredImagesOnHover = init?.revealBlurredImagesOnHover ?? this.revealBlurredImagesOnHover
+		this.titlebarCompactView = init?.titlebarCompactView ?? this.titlebarCompactView
 		this.gamebananaTranslationEnabled = init?.gamebananaTranslationEnabled ?? this.gamebananaTranslationEnabled
 		this.gamebananaTranslationRichText = init?.gamebananaTranslationRichText ?? this.gamebananaTranslationRichText
 		this.gamebananaTranslationProvider = normalizeGameBananaTranslationProvider(init?.gamebananaTranslationProvider)
@@ -489,6 +491,7 @@ export class AppSettings {
 			gamebananaShowNsfw: this.gamebananaShowNsfw,
 			gamebananaRestoreNsfwAfterHide: this.gamebananaRestoreNsfwAfterHide,
 			revealBlurredImagesOnHover: this.revealBlurredImagesOnHover,
+			titlebarCompactView: this.titlebarCompactView,
 			gamebananaTranslationEnabled: this.gamebananaTranslationEnabled,
 			gamebananaTranslationRichText: this.gamebananaTranslationRichText,
 			gamebananaTranslationProvider: this.gamebananaTranslationProvider,

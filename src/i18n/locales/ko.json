@@ -254,6 +254,8 @@
   "titlebar": {
     "switchToGameLibrary": "게임 라이브러리로 전환",
     "settings": "설정",
+    "enableCompactView": "컴팩트 보기 사용",
+    "disableCompactView": "컴팩트 보기 해제",
     "pinWindow": "클릭하여 창을 항상 위에 표시 · Alt + F로 SSMT 호출",
     "unpinWindow": "클릭하여 항상 위 표시 해제 · Alt + F로 SSMT 호출",
     "nav": {

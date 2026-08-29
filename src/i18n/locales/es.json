@@ -252,6 +252,8 @@
   "titlebar": {
     "switchToGameLibrary": "Cambiar a la biblioteca de juegos",
     "settings": "Ajustes",
+    "enableCompactView": "Activar vista compacta",
+    "disableCompactView": "Desactivar vista compacta",
     "pinWindow": "Haz clic para fijar la ventana · Alt + F para mostrar SSMT",
     "unpinWindow": "Haz clic para desfijar la ventana · Alt + F para mostrar SSMT",
     "nav": {

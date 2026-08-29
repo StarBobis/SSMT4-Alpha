@@ -252,6 +252,8 @@
   "titlebar": {
     "switchToGameLibrary": "Passa alla libreria giochi",
     "settings": "Impostazioni",
+    "enableCompactView": "Attiva visualizzazione compatta",
+    "disableCompactView": "Disattiva visualizzazione compatta",
     "pinWindow": "Fai clic per mantenere la finestra in primo piano · Alt + F per mostrare SSMT",
     "unpinWindow": "Fai clic per rimuovere la finestra dal primo piano · Alt + F per mostrare SSMT",
     "nav": {

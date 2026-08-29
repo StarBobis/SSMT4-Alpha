@@ -263,6 +263,8 @@
     "switchToGameLibrary": "Switch to Game Library",
     "settings": "Settings",
     "hidePage": "Hide this page",
+    "enableCompactView": "Enable compact view",
+    "disableCompactView": "Disable compact view",
     "pinWindow": "Click to pin window · Alt + F to show SSMT",
     "unpinWindow": "Click to unpin window · Alt + F to show SSMT",
     "nav": {

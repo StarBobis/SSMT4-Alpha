@@ -254,6 +254,8 @@
   "titlebar": {
     "switchToGameLibrary": "ゲームライブラリに切り替え",
     "settings": "設定",
+    "enableCompactView": "コンパクト表示を有効にする",
+    "disableCompactView": "コンパクト表示を解除する",
     "pinWindow": "クリックしてウィンドウを常に手前に表示 · Alt + F で SSMT を呼び出す",
     "unpinWindow": "クリックして常に手前の表示を解除 · Alt + F で SSMT を呼び出す",
     "nav": {

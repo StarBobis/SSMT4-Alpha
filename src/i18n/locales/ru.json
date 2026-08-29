@@ -252,6 +252,8 @@
   "titlebar": {
     "switchToGameLibrary": "Перейти к библиотеке игр",
     "settings": "Настройки",
+    "enableCompactView": "Включить компактный вид",
+    "disableCompactView": "Отключить компактный вид",
     "pinWindow": "Нажмите, чтобы закрепить окно поверх остальных · Alt + F — показать SSMT",
     "unpinWindow": "Нажмите, чтобы открепить окно · Alt + F — показать SSMT",
     "nav": {

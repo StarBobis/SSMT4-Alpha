@@ -253,6 +253,8 @@
   "titlebar": {
     "switchToGameLibrary": "切換到遊戲庫",
     "settings": "設定",
+    "enableCompactView": "啟用緊湊檢視",
+    "disableCompactView": "關閉緊湊檢視",
     "pinWindow": "點擊開啟視窗置頂 · Alt + F 快速喚起 SSMT",
     "unpinWindow": "點擊取消視窗置頂 · Alt + F 快速喚起 SSMT",
     "nav": {

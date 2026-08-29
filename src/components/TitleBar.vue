@@ -199,10 +199,9 @@ const closeNavContextMenu = () => {
 };
 
 const openNavContextMenu = (event: MouseEvent, item: NavItem) => {
-    if (!visibilityKeyByNavId[item.id]) return;
     navContextMenu.item = item;
     navContextMenu.x = Math.min(event.clientX, window.innerWidth - 170);
-    navContextMenu.y = Math.min(event.clientY, window.innerHeight - 48);
+    navContextMenu.y = Math.min(event.clientY, window.innerHeight - (visibilityKeyByNavId[item.id] ? 78 : 44));
     navContextMenu.visible = true;
 };
 
@@ -379,6 +378,14 @@ const hideNavItem = async (item: NavItem) => {
     await AppStateManager.saveSettingsNow();
 };
 
+const toggleTitlebarCompactView = async () => {
+    appSettings.titlebarCompactView = !appSettings.titlebarCompactView;
+    closeNavContextMenu();
+    await nextTick();
+    updateNavOverflow();
+    await AppStateManager.saveSettingsNow();
+};
+
 const togglePin = async () => {
     const newVal = !isPinned.value;
     isPinned.value = newVal;
@@ -390,7 +397,7 @@ const togglePin = async () => {
 
 <template>
   <div class="titlebar">
-    <div ref="navControlsElement" class="nav-controls" :class="{ 'is-overflowing': isNavOverflowing, 'can-scroll-left': canScrollNavLeft, 'can-scroll-right': canScrollNavRight }" @wheel="onNavWheel" @scroll="updateNavOverflow">
+    <div ref="navControlsElement" class="nav-controls" :class="{ 'is-compact': appSettings.titlebarCompactView, 'is-overflowing': isNavOverflowing, 'can-scroll-left': canScrollNavLeft, 'can-scroll-right': canScrollNavRight }" @wheel="onNavWheel" @scroll="updateNavOverflow">
         <transition-group name="nav-list" tag="div" class="nav-list">
           <div
             v-for="item in displayItems"
@@ -406,6 +413,7 @@ const togglePin = async () => {
                 class="nav-button"
                 :class="{ active: route.path === item.path, 'drag-hover': navHoverId === item.id, dragging: navDraggingId === item.id }"
                 :data-nav-id="item.id"
+                :aria-label="item.label"
                 @click="navTo(item.path)"
                 @mousedown.prevent="onNavMouseDown($event, item)"
                 @contextmenu.prevent.stop="openNavContextMenu($event, item)"
@@ -435,7 +443,7 @@ const togglePin = async () => {
 
                 <svg v-if="item.id === 'ui-builder'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 8h8v8H8z"></path><path d="M8 12h8M12 8v8"></path></svg>
 
-                <span class="nav-text">{{ item.label }}</span>
+                <span v-if="!appSettings.titlebarCompactView" class="nav-text">{{ item.label }}</span>
             </div>
             </el-tooltip>
           </div>
@@ -449,7 +457,10 @@ const togglePin = async () => {
         :style="{ left: `${navContextMenu.x}px`, top: `${navContextMenu.y}px` }"
         @pointerdown.stop
       >
-        <button type="button" @click="hideNavItem(navContextMenu.item)">{{ t('titlebar.hidePage') }}</button>
+        <button type="button" @click="toggleTitlebarCompactView">
+          {{ t(appSettings.titlebarCompactView ? 'titlebar.disableCompactView' : 'titlebar.enableCompactView') }}
+        </button>
+        <button v-if="visibilityKeyByNavId[navContextMenu.item.id]" type="button" @click="hideNavItem(navContextMenu.item)">{{ t('titlebar.hidePage') }}</button>
       </div>
     </Teleport>
 
@@ -692,6 +703,14 @@ const togglePin = async () => {
     vector-effect: non-scaling-stroke;
     stroke-width: 2.25;
     color: rgba(var(--theme-text-secondary-rgb), 0.70);
+}
+.nav-controls.is-compact .nav-button {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+}
+.nav-controls.is-compact .nav-button svg {
+    margin-right: 0;
 }
 .nav-button.active svg {
     opacity: 1;
