@@ -16458,6 +16458,33 @@ function buildDialogueIniRuntime() {
   handleResourceDragOver,
   }
   Object.assign((window as unknown as Record<string, unknown>).UIB = {}, __uibExports)
+  // 补齐遗漏导出:原 iframe 经典脚本中这些顶层函数天然挂在 window 上,
+  // 机械移植为闭包声明后从未导出,导致设置窗/停靠栏上一批按钮静默失效。
+  // 这里同时挂回 window(恢复原全局语义)与 window.UIB(前缀事件处理器)。
+  const __uibRestoredExports: Record<string, unknown> = {
+    addComponent,
+    copyPropsToSelection,
+    generateAndDownloadAssets,
+    generateINI,
+    groupSelected,
+    loadPreset,
+    normalizeShortcutInput,
+    redoHistory,
+    resetShortcutSettings,
+    savePreset,
+    toggleAnimationPanel,
+    toggleGridSnapAutoY,
+    toggleTheme,
+    undoHistory,
+    ungroupSelected,
+    updateAspectRatio,
+    updateGridSnapX,
+    updateGridSnapY,
+    updateUIScale,
+    validateShortcutSettings,
+  }
+  Object.assign(window as unknown as Record<string, unknown>, __uibRestoredExports)
+  Object.assign((window as unknown as Record<string, unknown>).UIB as Record<string, unknown>, __uibRestoredExports)
   Object.defineProperty(window.UIB, '_svCapture', { get: () => window._svCapture, configurable: true });
   Object.defineProperty(window.UIB, 'addDepTarget', { get: () => window.addDepTarget, configurable: true });
   Object.defineProperty(window.UIB, 'addGridDepTarget', { get: () => window.addGridDepTarget, configurable: true });
