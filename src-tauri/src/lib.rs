@@ -142,6 +142,7 @@ pub fn run() {
         // 从各个子模块中注册命令
         .invoke_handler(tauri::generate_handler![
             set_show_window_shortcut_enabled,
+            config::path_manager::ssmt_install_directory,
             commands::ccswitch::import_ccswitch_providers,
             commands::game_discovery::find_game_executable,
             commands::game_launcher::configure_zzmi_launch_settings,

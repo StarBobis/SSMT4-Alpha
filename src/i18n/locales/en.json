@@ -407,7 +407,7 @@
     "steps": {
       "language": { "description": "选择 SSMT4 的界面语言。\nChoose the interface language for SSMT4." },
       "role": { "description": "Choose how you use SSMT4 and we will prepare the initial interface." },
-      "general": { "description": "Configure cache storage and the window shortcut. Every option may keep its default." },
+      "general": { "description": "Choose where SSMT4 keeps its cache. Use the default location inside the installation folder, or pick a custom one. This step is mandatory: SSMT4 stays blocked until a cache folder is confirmed." },
       "authorPreferences": { "description": "Set defaults for the Mod authoring workflow." },
       "games": { "description": "Choose games shown on Home. Selected games move to the front." },
       "d3d11": { "description": "Batch configure the d3d11.dll source for selected games." },
@@ -460,7 +460,17 @@
     },
     "selectedCount": "Selected {count} games",
     "selectedMoveFront": "Selected games move to the front",
-    "confirm": "Finish setup"
+    "confirm": "Finish setup",
+    "cacheRequiredTitle": "SSMT Cache Folder Required",
+    "cacheRequiredMessage": "SSMT4 needs a cache folder to store workspaces, generated files, and local cache data. The app stays blocked until you choose and confirm a cache folder.",
+    "cacheRequired": "Choose where the cache folder lives (required)",
+    "cacheDefaultLabel": "Default location (inside the installation folder)",
+    "cacheDefaultHint": "The cache is stored in the SSMT4CachedFolder folder inside the program installation directory.",
+    "cacheCustomLabel": "Custom location",
+    "cacheCustomHint": "Store the cache at a folder you choose on any disk.",
+    "cacheCustomEmpty": "No custom folder chosen yet — click Choose",
+    "cacheRequiredError": "Please choose and confirm a cache folder before continuing.",
+    "confirmCacheGate": "Confirm and Continue"
   },
   "settings": {
     "sections": {

@@ -406,7 +406,7 @@
     "steps": {
       "language": { "description": "选择 SSMT4 的界面语言。\nChoose the interface language for SSMT4." },
       "role": { "description": "请选择最符合你的使用方式，我们会据此准备初始界面。" },
-      "general": { "description": "配置缓存位置与窗口快捷唤起。所有项目都可以保留默认值。" },
+      "general": { "description": "选择 SSMT4 缓存目录的存放位置：使用安装目录内的默认位置，或自定义位置。此步骤必须完成，未设置缓存目录前无法使用程序。" },
       "authorPreferences": { "description": "设置 Mod 制作相关的默认工作流。" },
       "games": { "description": "选择首页显示的游戏。已选择的游戏会自动排在最前。" },
       "d3d11": { "description": "批量设置所选游戏使用的 d3d11.dll 来源。" },
@@ -459,7 +459,17 @@
     },
     "selectedCount": "已选 {count} 个游戏",
     "selectedMoveFront": "已选游戏自动排在最前",
-    "confirm": "完成配置"
+    "confirm": "完成配置",
+    "cacheRequiredTitle": "必须先设置 SSMT 缓存目录",
+    "cacheRequiredMessage": "SSMT4 需要使用缓存目录来保存工作区、生成文件与本地缓存数据。在完成缓存目录的选择与确认之前，程序将保持锁定，无法使用。",
+    "cacheRequired": "选择缓存目录存放位置（必选）",
+    "cacheDefaultLabel": "默认位置（程序安装目录内）",
+    "cacheDefaultHint": "缓存将保存在程序安装目录下的 SSMT4CachedFolder 文件夹中。",
+    "cacheCustomLabel": "自定义位置",
+    "cacheCustomHint": "将缓存保存到你指定的其它磁盘位置。",
+    "cacheCustomEmpty": "尚未选择自定义目录——点击“选择”",
+    "cacheRequiredError": "请先选择并确认缓存目录，再继续。",
+    "confirmCacheGate": "确认并继续"
   },
   "settings": {
     "sections": {

@@ -402,7 +402,7 @@
         "description": "SSMT4 사용 방식에 가장 가까운 항목을 선택하세요. 선택에 맞춰 초기 화면을 구성합니다."
       },
       "general": {
-        "description": "캐시 저장 위치와 창 호출 단축키를 구성합니다. 모든 옵션은 기본값을 그대로 사용해도 됩니다."
+        "description": "SSMT4 캐시를 저장할 위치를 선택하세요. 설치 폴더 안의 기본 위치를 사용하거나 직접 지정할 수 있습니다. 이 단계는 필수이며, 캐시 폴더를 확정하기 전에는 SSMT4를 사용할 수 없습니다."
       },
       "authorPreferences": {
         "description": "Mod 제작 워크플로의 기본값을 설정합니다."
@@ -472,7 +472,17 @@
     },
     "selectedCount": "게임 {count}개 선택됨",
     "selectedMoveFront": "선택한 게임은 자동으로 앞쪽에 배치됩니다",
-    "confirm": "설정 완료"
+    "confirm": "설정 완료",
+    "cacheRequiredTitle": "SSMT 캐시 폴더 설정 필요",
+    "cacheRequiredMessage": "SSMT4는 작업 공간, 생성 파일, 로컬 캐시 데이터를 저장하기 위해 캐시 폴더가 필요합니다. 캐시 폴더를 선택하고 확정하기 전까지 프로그램은 잠겨 사용할 수 없습니다.",
+    "cacheRequired": "캐시 폴더 저장 위치 선택 (필수)",
+    "cacheDefaultLabel": "기본 위치 (설치 폴더 안)",
+    "cacheDefaultHint": "프로그램 설치 폴더 안의 SSMT4CachedFolder 폴더에 캐시가 저장됩니다.",
+    "cacheCustomLabel": "직접 지정",
+    "cacheCustomHint": "원하는 디스크의 폴더에 캐시를 저장합니다.",
+    "cacheCustomEmpty": "아직 직접 지정하지 않음 — '선택' 클릭",
+    "cacheRequiredError": "계속하려면 먼저 캐시 폴더를 선택하고 확정하세요.",
+    "confirmCacheGate": "확정하고 계속"
   },
   "settings": {
     "sections": {

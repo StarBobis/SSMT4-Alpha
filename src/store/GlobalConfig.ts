@@ -1,14 +1,39 @@
 import { copyFile, exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { dirname, join, localDataDir, resourceDir } from '@tauri-apps/api/path'
+import { invoke } from '@tauri-apps/api/core'
 import { SSMTFileUtils } from '../utils/SSMTFileUtils'
 import { AppSettings } from './AppSettings'
 import { AppStateManager } from './AppStateManager'
 
 export class GlobalConfig {
   private static saveQueue: Promise<void> = Promise.resolve()
+  private static installDirPromise: Promise<string> | null = null
 
   public static async AppDataLocalFolder(): Promise<string> {
     return await localDataDir()
+  }
+
+  /// 安装目录（可执行文件所在目录）。默认缓存位置从 AppData 迁移到安装目录，
+  /// 用户清理/卸载时能直观看到缓存在哪里。
+  public static async SSMTInstallDir(): Promise<string> {
+    if (!this.installDirPromise) {
+      this.installDirPromise = (async () => {
+        try {
+          const dir = await invoke<string>('ssmt_install_directory')
+          if (dir && dir.trim()) return dir.trim()
+        } catch (error) {
+          console.warn('Failed to resolve SSMT install directory:', error)
+        }
+        try {
+          const res = await resourceDir()
+          if (res && res.trim()) return res.trim()
+        } catch (error) {
+          console.warn('Failed to resolve SSMT resource directory:', error)
+        }
+        return ''
+      })()
+    }
+    return this.installDirPromise
   }
 
   public static async SSMT4GlobalConfigsFolder(): Promise<string> {
@@ -36,7 +61,7 @@ export class GlobalConfig {
   }
 
   public static async SSMT4DefaultCacheFolder(): Promise<string> {
-    return join(await this.AppDataLocalFolder(), 'SSMT4CachedFolder')
+    return join(await this.SSMTInstallDir(), 'SSMT4CachedFolder')
   }
 
   public static async MarkTextureResultFolder(): Promise<string> {
@@ -53,7 +78,9 @@ export class GlobalConfig {
   }
 
 
-  //获取缓存文件夹位置统一使用这个接口，优先级：AppStateManager > settings.json配置 > 默认位置
+  //获取缓存文件夹位置统一使用这个接口，优先级：AppStateManager > settings.json配置 > 默认位置（安装目录）
+  //注意：未设置（DBMTWorkFolder 为空）时这里仍回退到默认位置，避免内部代码写入相对路径；
+  //“必须设置缓存目录才能使用程序”的强制拦截由 App.vue 的引导/强制弹窗负责。
   public static async SSMT4CustomCacheFolder(): Promise<string> {
     const cacheDirFromStateManager = await this.TryGetCacheDirFromStateManager()
     if (cacheDirFromStateManager) {
@@ -131,9 +158,10 @@ export class GlobalConfig {
       return existing
     }
 
-    const fallback = await this.SSMT4DefaultCacheFolder()
-    await SSMTFileUtils.CreateFolderIfNotExists(fallback)
-    return fallback
+    // 不再静默回退到默认位置：缓存目录必须由用户显式选择
+    // （首次启动引导页或“未设置缓存目录”强制弹窗）。
+    // 未设置时保持空值，由前端拦截并阻止使用程序。
+    return ''
   }
 
   private static async buildCorruptedBackupFilePath(): Promise<string> {

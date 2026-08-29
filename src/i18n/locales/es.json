@@ -400,7 +400,7 @@
         "description": "Elige la forma que mejor describa cómo usas SSMT4 y prepararemos la interfaz inicial en consecuencia."
       },
       "general": {
-        "description": "Configura el almacenamiento de caché y el atajo para mostrar la ventana. Todas las opciones pueden dejarse con sus valores predeterminados."
+        "description": "Elige dónde guarda SSMT4 su caché: usa la ubicación predeterminada dentro de la carpeta de instalación o elige una personalizada. Este paso es obligatorio: la aplicación permanece bloqueada hasta que se confirme una carpeta de caché."
       },
       "authorPreferences": {
         "description": "Define los valores predeterminados del flujo de creación de Mods."
@@ -470,7 +470,17 @@
     },
     "selectedCount": "{count} juegos seleccionados",
     "selectedMoveFront": "Los juegos seleccionados se mueven automáticamente al principio",
-    "confirm": "Finalizar configuración"
+    "confirm": "Finalizar configuración",
+    "cacheRequiredTitle": "Se requiere la carpeta de caché de SSMT",
+    "cacheRequiredMessage": "SSMT4 necesita una carpeta de caché para almacenar espacios de trabajo, archivos generados y datos locales. La aplicación permanece bloqueada hasta que elijas y confirmes una carpeta de caché.",
+    "cacheRequired": "Elige dónde estará la carpeta de caché (obligatorio)",
+    "cacheDefaultLabel": "Ubicación predeterminada (dentro de la carpeta de instalación)",
+    "cacheDefaultHint": "El caché se guardará en la carpeta SSMT4CachedFolder dentro del directorio de instalación del programa.",
+    "cacheCustomLabel": "Ubicación personalizada",
+    "cacheCustomHint": "Guarda el caché en una carpeta que elijas en cualquier disco.",
+    "cacheCustomEmpty": "Aún no has elegido una carpeta personalizada — haz clic en «Elegir»",
+    "cacheRequiredError": "Elige y confirma primero una carpeta de caché.",
+    "confirmCacheGate": "Confirmar y continuar"
   },
   "settings": {
     "sections": {

@@ -402,7 +402,7 @@
         "description": "SSMT4 の使用方法に最も近いものを選択してください。選択内容に合わせて初期画面を構成します。"
       },
       "general": {
-        "description": "キャッシュの保存場所とウィンドウ呼び出しショートカットを設定します。すべて既定値のままでも構いません。"
+        "description": "SSMT4 のキャッシュ保存先を選択してください。インストールフォルダー内の既定の場所か、カスタムの場所を選びます。この手順は必須です。キャッシュフォルダーを確定するまで SSMT4 は使用できません。"
       },
       "authorPreferences": {
         "description": "Mod 制作用ワークフローの既定値を設定します。"
@@ -472,7 +472,17 @@
     },
     "selectedCount": "{count} 件のゲームを選択中",
     "selectedMoveFront": "選択したゲームを自動的に先頭へ移動",
-    "confirm": "セットアップを完了"
+    "confirm": "セットアップを完了",
+    "cacheRequiredTitle": "SSMT キャッシュフォルダーの設定が必要です",
+    "cacheRequiredMessage": "SSMT4 はワークスペース・生成ファイル・ローカルキャッシュデータの保存にキャッシュフォルダーを使用します。フォルダーを選択して確定するまで、アプリはロックされ使用できません。",
+    "cacheRequired": "キャッシュフォルダーの保存場所を選択してください（必須）",
+    "cacheDefaultLabel": "既定の場所（インストールフォルダー内）",
+    "cacheDefaultHint": "プログラムのインストールフォルダー内の SSMT4CachedFolder にキャッシュが保存されます。",
+    "cacheCustomLabel": "カスタムの場所",
+    "cacheCustomHint": "任意のディスク上のフォルダーにキャッシュを保存します。",
+    "cacheCustomEmpty": "カスタムフォルダー未選択 — 「選択」をクリック",
+    "cacheRequiredError": "先にキャッシュフォルダーを選択して確定してください。",
+    "confirmCacheGate": "確定して続行"
   },
   "settings": {
     "sections": {

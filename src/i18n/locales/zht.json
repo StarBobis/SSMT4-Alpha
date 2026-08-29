@@ -401,7 +401,7 @@
         "description": "請選擇最符合你的使用方式，我們會據此準備初始介面。"
       },
       "general": {
-        "description": "設定快取位置與視窗快捷喚起。所有項目都可以保留預設值。"
+        "description": "選擇 SSMT4 快取目錄的存放位置：使用安裝目錄內的預設位置，或自訂位置。此步驟必須完成，未設定快取目錄前無法使用程式。"
       },
       "authorPreferences": {
         "description": "設定 Mod 製作相關的預設工作流。"
@@ -471,7 +471,17 @@
     },
     "selectedCount": "已選 {count} 個遊戲",
     "selectedMoveFront": "已選遊戲自動排在最前",
-    "confirm": "完成設定"
+    "confirm": "完成設定",
+    "cacheRequiredTitle": "必須先設定 SSMT 快取目錄",
+    "cacheRequiredMessage": "SSMT4 需要使用快取目錄來儲存工作區、產生檔案與本機快取資料。在完成快取目錄的選擇與確認之前，程式將保持鎖定，無法使用。",
+    "cacheRequired": "選擇快取目錄存放位置（必選）",
+    "cacheDefaultLabel": "預設位置（程式安裝目錄內）",
+    "cacheDefaultHint": "快取將儲存在程式安裝目錄下的 SSMT4CachedFolder 資料夾中。",
+    "cacheCustomLabel": "自訂位置",
+    "cacheCustomHint": "將快取儲存到你指定的其他磁碟位置。",
+    "cacheCustomEmpty": "尚未選擇自訂目錄——點擊「選擇」",
+    "cacheRequiredError": "請先選擇並確認快取目錄，再繼續。",
+    "confirmCacheGate": "確認並繼續"
   },
   "settings": {
     "sections": {

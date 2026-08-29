@@ -5,11 +5,11 @@ import { AppStateManager, BGType } from "./store/AppStateManager";
 import { normalizeAppUiScale, SSMT_LOCALE_OPTIONS, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
 import { useI18n } from 'vue-i18n';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
 import type { D3d11Mode, HuntingMode } from './store/GameConfig';
 import UIBuilderHost from "./views/UIBuilder/UIBuilderHost.vue";
+import CacheFolderPicker from './components/CacheFolderPicker.vue';
 import { getGamePresetDisplayName } from './store/GamePreset';
 
 const route = useRoute();
@@ -32,7 +32,6 @@ const currentFirstRunStep = computed(() => firstRunSteps.value[firstRunStep.valu
 const firstRunStepCount = computed(() => firstRunSteps.value.length);
 const firstRunTransitionDirection = ref<'forward' | 'backward'>('forward');
 const firstRunTransitionName = computed(() => `first-run-${firstRunTransitionDirection.value}`);
-const firstRunCacheDir = ref('');
 const firstRunDialog = ref<HTMLElement | null>(null);
 watch(firstRunStep, () => firstRunDialog.value?.scrollTo({ top: 0 }));
 const selectedFirstRunGames = ref<string[]>([]);
@@ -45,11 +44,35 @@ const firstRunCheckDllUpdate = ref(true);
 const firstRunCheckPackageUpdate = ref(true);
 const firstRunBackgroundType = ref<'Image' | 'Video'>('Video');
 const firstRunBackgroundUpdateMode = ref<'manual' | 'auto'>('auto');
+// 缓存目录：默认位置（安装目录）与自定义位置必须二选一，未选择前无法继续。
+const firstRunDefaultCacheDir = ref('');
+const firstRunCustomCacheDir = ref('');
+const firstRunCacheMode = ref<'' | 'default' | 'custom'>('');
+const firstRunCacheResolved = computed(() => {
+  const path = firstRunCacheMode.value === 'default'
+    ? firstRunDefaultCacheDir.value
+    : firstRunCacheMode.value === 'custom' ? firstRunCustomCacheDir.value : '';
+  return path.trim();
+});
+const firstRunNextDisabled = computed(() => {
+  if (currentFirstRunStep.value === 'role') return !selectedFirstRunRole.value;
+  if (currentFirstRunStep.value === 'general') return !firstRunCacheResolved.value;
+  return false;
+});
+// 未设置缓存目录时禁止使用程序（引导页之外也会强制弹窗）。
+const cacheRequiredBlocked = computed(() => {
+  if (AppStateManager.isFirstRunOnboardingOpen.value) return false;
+  return !(appSettings.DBMTWorkFolder || '').trim();
+});
 const orderedFirstRunGames = computed(() => [...AppStateManager.gamesList].sort((a, b) => {
   const aSelected = selectedFirstRunGames.value.includes(a.name) ? 0 : 1;
   const bSelected = selectedFirstRunGames.value.includes(b.name) ? 0 : 1;
   return aSelected - bSelected || a.name.localeCompare(b.name);
 }));
+// 尽早解析“安装目录内默认缓存位置”，供引导页与强制弹窗使用。
+void GlobalConfig.SSMT4DefaultCacheFolder().then((path) => {
+  if (path.trim()) firstRunDefaultCacheDir.value = path.trim();
+});
 watch(() => AppStateManager.gamesList.map(game => game.name).join('\n'), async () => {
   if (firstRunGamesInitialized.value || AppStateManager.gamesList.length === 0) return;
   const defaults = new Set(['GIMI', 'SRMI', 'ZZMI', 'WWMI']);
@@ -64,7 +87,9 @@ watch(() => AppStateManager.gamesList.map(game => game.name).join('\n'), async (
   firstRunGamesInitialized.value = true;
 }, { immediate: true });
 watch(() => AppStateManager.isFirstRunOnboardingOpen.value, async open => {
-  if (open && !firstRunCacheDir.value) firstRunCacheDir.value = await GlobalConfig.SSMT4DefaultCacheFolder();
+  if (open && !firstRunDefaultCacheDir.value.trim()) {
+    firstRunDefaultCacheDir.value = (await GlobalConfig.SSMT4DefaultCacheFolder()).trim();
+  }
 }, { immediate: true });
 const firstRunRoleVisibility: Record<'author' | 'player' | 'both', PageVisibilitySettings> = {
   author: { work: true, markTexture: true, textureModMaker: true, mods: false, gameBanana: false, nexusMods: false, xianzun: false, uiBuilder: true },
@@ -87,8 +112,8 @@ const selectedFirstRunPages = computed(() => {
   return [t('titlebar.nav.home'), ...firstRunPageLabels.filter(page => visibility[page.id]).map(page => t(page.labelKey))];
 });
 const confirmFirstRunRole = async () => {
-  if (!selectedFirstRunRole.value) return;
-  appSettings.DBMTWorkFolder = firstRunCacheDir.value.trim();
+  if (!selectedFirstRunRole.value || !firstRunCacheResolved.value) return;
+  appSettings.DBMTWorkFolder = firstRunCacheResolved.value;
   localStorage.setItem('ssmt4:post-processing-preview:lighting-mode', appSettings.postProcessPreviewLightingMode);
   appSettings.sidebarGameOrder = [
     ...selectedFirstRunGames.value,
@@ -117,15 +142,18 @@ const confirmFirstRunRole = async () => {
   await AppStateManager.completeFirstRunOnboarding(firstRunRoleVisibility[selectedFirstRunRole.value]);
 };
 const advanceFirstRun = () => {
-  if (currentFirstRunStep.value === 'role' && !selectedFirstRunRole.value) return;
+  if (firstRunNextDisabled.value) return;
   if (firstRunStep.value < firstRunStepCount.value - 1) {
     firstRunTransitionDirection.value = 'forward';
     firstRunStep.value += 1;
   }
 };
-const selectFirstRunCacheDir = async () => {
-  const selected = await openDialog({ directory: true, multiple: false, title: t('firstRun.fields.cacheDir') });
-  if (typeof selected === 'string') firstRunCacheDir.value = selected;
+const confirmCacheRequiredGate = async () => {
+  const cacheDir = firstRunCacheResolved.value;
+  if (!cacheDir) return;
+  appSettings.DBMTWorkFolder = cacheDir;
+  // 立即落盘并创建目录，避免用户未等防抖保存就关闭程序。
+  await AppStateManager.saveSettingsNow();
 };
 const toggleFirstRunGame = (name: string) => {
   selectedFirstRunGames.value = selectedFirstRunGames.value.includes(name)
@@ -279,10 +307,11 @@ onUnmounted(() => {
               </div>
             </div>
             <div v-else-if="currentFirstRunStep === 'general'" class="first-run-form">
-              <label><span>{{ t('firstRun.fields.cacheDir') }}</span>
-                <div class="first-run-path"><el-input v-model="firstRunCacheDir" readonly /><el-button
-                    @click="selectFirstRunCacheDir">{{ t('firstRun.choose') }}</el-button></div>
-              </label>
+              <p class="first-run-cache-required">{{ t('firstRun.cacheRequired') }}</p>
+              <CacheFolderPicker v-model:mode="firstRunCacheMode" :default-path="firstRunDefaultCacheDir"
+                v-model:custom-path="firstRunCustomCacheDir" />
+              <p v-if="firstRunCacheMode && !firstRunCacheResolved" class="first-run-cache-error">{{
+                t('firstRun.cacheRequiredError') }}</p>
               <label class="first-run-switch"><span>{{ t('firstRun.fields.altF') }}</span><el-switch
                   v-model="appSettings.showWindowShortcutEnabled" /></label>
             </div>
@@ -361,12 +390,38 @@ onUnmounted(() => {
         <footer class="first-run-actions">
           <el-button v-if="firstRunStep > 0" @click="retreatFirstRun">{{ t('firstRun.back') }}</el-button>
           <span class="first-run-actions-grow"></span>
-          <el-button v-if="firstRunStep < firstRunStepCount - 1 && currentFirstRunStep !== 'role'" text
-            @click="advanceFirstRun">{{ t('firstRun.skip') }}</el-button>
-          <el-button v-if="firstRunStep < firstRunStepCount - 1" type="primary"
-            :disabled="currentFirstRunStep === 'role' && !selectedFirstRunRole" @click="advanceFirstRun">{{
-              t('firstRun.next') }}</el-button>
-          <el-button v-else type="primary" @click="confirmFirstRunRole">{{ t('firstRun.confirm') }}</el-button>
+          <el-button v-if="firstRunStep < firstRunStepCount - 1 && currentFirstRunStep !== 'role' && currentFirstRunStep !== 'general'"
+            text @click="advanceFirstRun">{{ t('firstRun.skip') }}</el-button>
+          <el-button v-if="firstRunStep < firstRunStepCount - 1" type="primary" :disabled="firstRunNextDisabled"
+            @click="advanceFirstRun">{{ t('firstRun.next') }}</el-button>
+          <el-button v-else type="primary" :disabled="!firstRunCacheResolved" @click="confirmFirstRunRole">{{
+            t('firstRun.confirm') }}</el-button>
+        </footer>
+      </section>
+    </div>
+
+    <!-- 未设置缓存目录时强制设置：不选择与确认无法使用程序 -->
+    <div v-else-if="cacheRequiredBlocked" class="first-run-overlay">
+      <section class="first-run-dialog first-run-cache-gate" role="dialog" aria-modal="true"
+        :aria-label="t('firstRun.cacheRequiredTitle')">
+        <header>
+          <div class="first-run-head-row">
+            <span class="first-run-kicker">SSMT4</span>
+          </div>
+          <h2>{{ t('firstRun.cacheRequiredTitle') }}</h2>
+          <p>{{ t('firstRun.cacheRequiredMessage') }}</p>
+        </header>
+        <div class="first-run-body first-run-form">
+          <p class="first-run-cache-required">{{ t('firstRun.cacheRequired') }}</p>
+          <CacheFolderPicker v-model:mode="firstRunCacheMode" :default-path="firstRunDefaultCacheDir"
+            v-model:custom-path="firstRunCustomCacheDir" />
+          <p v-if="firstRunCacheMode && !firstRunCacheResolved" class="first-run-cache-error">{{
+            t('firstRun.cacheRequiredError') }}</p>
+        </div>
+        <footer class="first-run-actions">
+          <span class="first-run-actions-grow"></span>
+          <el-button type="primary" :disabled="!firstRunCacheResolved" @click="confirmCacheRequiredGate">{{
+            t('firstRun.confirmCacheGate') }}</el-button>
         </footer>
       </section>
     </div>
@@ -785,6 +840,24 @@ textarea {
 
 .first-run-path .el-input {
   flex: 1;
+}
+
+/* 缓存目录强制设置（引导页 + 未设置拦截弹窗） */
+.first-run-cache-required {
+  margin: 0 0 12px;
+  color: rgba(117, 214, 187, .95);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.first-run-cache-error {
+  margin: 10px 0 0;
+  color: #ff8a7a;
+  font-size: 12.5px;
+}
+
+.first-run-cache-gate {
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .first-run-game-grid {

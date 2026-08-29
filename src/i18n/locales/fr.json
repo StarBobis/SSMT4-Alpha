@@ -400,7 +400,7 @@
         "description": "Choisissez l’usage qui correspond le mieux à votre façon d’utiliser SSMT4 ; l’interface initiale sera préparée en conséquence."
       },
       "general": {
-        "description": "Configurez le stockage du cache et le raccourci d’affichage de la fenêtre. Toutes les options peuvent conserver leur valeur par défaut."
+        "description": "Choisissez où SSMT4 stocke son cache : utilisez l’emplacement par défaut dans le dossier d’installation ou choisissez un emplacement personnalisé. Cette étape est obligatoire : l’application reste bloquée tant que le dossier de cache n’est pas confirmé."
       },
       "authorPreferences": {
         "description": "Définissez les valeurs par défaut du flux de création de Mods."
@@ -470,7 +470,17 @@
     },
     "selectedCount": "{count} jeux sélectionnés",
     "selectedMoveFront": "Les jeux sélectionnés sont automatiquement placés en tête",
-    "confirm": "Terminer la configuration"
+    "confirm": "Terminer la configuration",
+    "cacheRequiredTitle": "Dossier de cache SSMT requis",
+    "cacheRequiredMessage": "SSMT4 a besoin d’un dossier de cache pour stocker les espaces de travail, les fichiers générés et les données locales. L’application reste bloquée jusqu’à ce que vous choisissiez et confirmiez un dossier de cache.",
+    "cacheRequired": "Choisissez où placer le dossier de cache (obligatoire)",
+    "cacheDefaultLabel": "Emplacement par défaut (dans le dossier d’installation)",
+    "cacheDefaultHint": "Le cache sera stocké dans le dossier SSMT4CachedFolder situé dans le répertoire d’installation du programme.",
+    "cacheCustomLabel": "Emplacement personnalisé",
+    "cacheCustomHint": "Stockez le cache dans un dossier de votre choix, sur n’importe quel disque.",
+    "cacheCustomEmpty": "Aucun dossier personnalisé choisi — cliquez sur « Choisir »",
+    "cacheRequiredError": "Veuillez d’abord choisir et confirmer un dossier de cache.",
+    "confirmCacheGate": "Confirmer et continuer"
   },
   "settings": {
     "sections": {

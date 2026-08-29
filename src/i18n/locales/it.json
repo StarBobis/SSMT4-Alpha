@@ -400,7 +400,7 @@
         "description": "Scegli l'opzione che descrive meglio come usi SSMT4; l'interfaccia iniziale verrà preparata di conseguenza."
       },
       "general": {
-        "description": "Configura la posizione della cache e la scorciatoia per richiamare la finestra. Tutte le opzioni possono mantenere i valori predefiniti."
+        "description": "Scegli dove SSMT4 conserva la cache: usa la posizione predefinita nella cartella di installazione o scegline una personalizzata. Questo passaggio è obbligatorio: l’app resta bloccata finché non viene confermata una cartella di cache."
       },
       "authorPreferences": {
         "description": "Imposta i valori predefiniti per il flusso di creazione dei Mod."
@@ -470,7 +470,17 @@
     },
     "selectedCount": "{count} giochi selezionati",
     "selectedMoveFront": "I giochi selezionati vengono spostati automaticamente all'inizio",
-    "confirm": "Completa configurazione"
+    "confirm": "Completa configurazione",
+    "cacheRequiredTitle": "Cartella cache SSMT richiesta",
+    "cacheRequiredMessage": "SSMT4 richiede una cartella cache per archiviare aree di lavoro, file generati e dati locali. L’app resta bloccata finché non scegli e confermi una cartella cache.",
+    "cacheRequired": "Scegli dove collocare la cartella cache (obbligatorio)",
+    "cacheDefaultLabel": "Posizione predefinita (nella cartella di installazione)",
+    "cacheDefaultHint": "La cache verrà archiviata nella cartella SSMT4CachedFolder all’interno della directory di installazione del programma.",
+    "cacheCustomLabel": "Posizione personalizzata",
+    "cacheCustomHint": "Archivia la cache in una cartella da te scelta su qualsiasi disco.",
+    "cacheCustomEmpty": "Nessuna cartella personalizzata scelta — clicca su «Scegli»",
+    "cacheRequiredError": "Scegli e conferma prima una cartella cache.",
+    "confirmCacheGate": "Conferma e continua"
   },
   "settings": {
     "sections": {

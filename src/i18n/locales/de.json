@@ -400,7 +400,7 @@
         "description": "Wählen Sie die Nutzungsart, die am besten passt; SSMT4 richtet die anfängliche Oberfläche entsprechend ein."
       },
       "general": {
-        "description": "Cache-Speicherort und Fenster-Tastenkürzel konfigurieren. Alle Optionen können auf den Standardwerten bleiben."
+        "description": "Wählen Sie, wo SSMT4 seinen Cache speichert: Verwenden Sie den Standardort im Installationsordner oder wählen Sie einen eigenen Ort. Dieser Schritt ist Pflicht — ohne bestätigten Cache-Ordner bleibt die Anwendung gesperrt."
       },
       "authorPreferences": {
         "description": "Standardwerte für den Mod-Erstellungsworkflow festlegen."
@@ -470,7 +470,17 @@
     },
     "selectedCount": "{count} Spiele ausgewählt",
     "selectedMoveFront": "Ausgewählte Spiele werden automatisch nach vorne verschoben",
-    "confirm": "Einrichtung abschließen"
+    "confirm": "Einrichtung abschließen",
+    "cacheRequiredTitle": "SSMT-Cache-Ordner erforderlich",
+    "cacheRequiredMessage": "SSMT4 benötigt einen Cache-Ordner für Arbeitsbereiche, generierte Dateien und lokale Cachedaten. Die Anwendung bleibt gesperrt, bis Sie einen Cache-Ordner auswählen und bestätigen.",
+    "cacheRequired": "Speicherort für den Cache-Ordner wählen (Pflicht)",
+    "cacheDefaultLabel": "Standardort (im Installationsordner)",
+    "cacheDefaultHint": "Der Cache wird im Ordner SSMT4CachedFolder im Installationsverzeichnis des Programms gespeichert.",
+    "cacheCustomLabel": "Eigener Ort",
+    "cacheCustomHint": "Cache an einem von Ihnen gewählten Ort auf einem beliebigen Laufwerk speichern.",
+    "cacheCustomEmpty": "Noch kein eigener Ordner gewählt — auf „Wählen“ klicken",
+    "cacheRequiredError": "Bitte wählen und bestätigen Sie zuerst einen Cache-Ordner.",
+    "confirmCacheGate": "Bestätigen und fortfahren"
   },
   "settings": {
     "sections": {

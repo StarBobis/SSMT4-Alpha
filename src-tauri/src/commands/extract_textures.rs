@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 fn resolve_lod_workspace_path(workspace_root_path: &str, lod_name: &str) -> Result<String, String> {
     let trimmed_workspace_root_path = workspace_root_path.trim();
@@ -98,11 +98,8 @@ pub async fn prepare_dds_webgl_preview(
     let max_dimension = max_dimension.filter(|value| *value > 0);
     max_dimension.hash(&mut hasher);
     let cache_key = format!("{:016x}", hasher.finish());
-    let cache_dir = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("SSMT4CachedFolder")
+    let cache_root = crate::config::path_manager::PathManager::ssmt_cache_root(&app);
+    let cache_dir = cache_root
         .join("DdsWebglPreview")
         .join(&cache_key);
     std::fs::create_dir_all(&cache_dir).map_err(|error| error.to_string())?;
