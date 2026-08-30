@@ -12,6 +12,7 @@ uniform float uFrame;
 uniform vec3 uElementColor;
 uniform float uEmissionStrength;
 uniform float uNormalStrength;
+uniform float uNormalMapFlipY;
 uniform float uMetalMaterial;
 uniform float uSpecularHighlights;
 uniform float uFaceSdfChannel;
@@ -214,7 +215,10 @@ void main() {
     vec3 normalWS = geometricNormal;
     if (uHasNormalMap > 0.5) {
         vec4 normalSample = texture2D(uNormalMap, vUv);
-        vec2 normalXY = (normalSample.rg * 2.0 - 1.0) * clamp(uNormalStrength, 0.0, 1.0);
+        vec2 normalXY = normalSample.rg * 2.0 - 1.0;
+        // DirectX-style normal maps store an inverted green channel.
+        normalXY.y = mix(normalXY.y, -normalXY.y, uNormalMapFlipY);
+        normalXY *= clamp(uNormalStrength, 0.0, 1.0);
         float normalZ = sqrt(max(1.0 - dot(normalXY, normalXY), 0.0));
         vec3 tangent = safeNormalize(vWorldTangent - geometricNormal * dot(geometricNormal, vWorldTangent), vec3(1.0, 0.0, 0.0));
         vec3 bitangent = safeNormalize(cross(geometricNormal, tangent) * vTangentHandedness, vec3(0.0, 0.0, 1.0));

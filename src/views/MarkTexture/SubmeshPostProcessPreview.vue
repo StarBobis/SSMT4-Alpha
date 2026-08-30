@@ -202,6 +202,10 @@ const PREVIEW_REFERENCE_FRAME_DIAMETER_METERS = 2;
 const PREVIEW_CAMERA_DISTANCE_MULTIPLIER = 1.65;
 const STRUCTURED_BUFFER_TYPES = new Set(['NORMAL', 'BLENDWEIGHT', 'TANGENTFRAME']);
 const REVERSED_WINDING_GAME_PRESETS = new Set(['WWMI', 'NTEMI', 'YYSLS', 'SNOWBREAK']);
+// These games author DirectX-convention normal maps with an inverted green
+// channel.  Decoding them as OpenGL-style maps flips the tangent-space Y and
+// makes the shaded model show up red, so the preview flips the normal instead.
+const FLIPPED_NORMAL_MAP_GAME_PRESETS = new Set(['WWMI', 'YYSLS', 'IDENTITYV']);
 const PREVIEW_POSITION_SCALE_BY_GAME_PRESET = new Map<string, number>([
 	// WWMI vertex positions are authored in centimetres while the preview scene
 	// and its validity threshold use metres.
@@ -381,6 +385,9 @@ let camera: THREE.PerspectiveCamera | undefined;
 let controls: OrbitControls | undefined;
 let zoomControls: OrbitControls | undefined;
 let material: THREE.ShaderMaterial | undefined;
+// The normal-map flip is baked into the shader at material creation.  Track
+// the flag of the active material so a game-preset change can rebuild it.
+let materialFlipNormalY = false;
 let mesh: THREE.Mesh | undefined;
 let previewRoot: THREE.Group | undefined;
 let framingMeshes: THREE.Mesh[] = [];
@@ -1263,7 +1270,11 @@ const getBufferData = async (
 	return data;
 };
 
-const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) => {
+const shouldFlipNormalMap = (gamePreset?: string): boolean => {
+	return FLIPPED_NORMAL_MAP_GAME_PRESETS.has(normalizeSemantic(gamePreset));
+};
+
+const createLegacyMaterial = (color = fallbackColor.value, needsReview = false, flipNormalY = false) => {
 	return new THREE.ShaderMaterial({
 		uniforms: {
 			uDiffuseMap: { value: null },
@@ -1271,6 +1282,7 @@ const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) 
 			uHasDiffuseMap: { value: 0 },
 			uHasNormalMap: { value: 0 },
 			uNormalStrength: { value: normalStrength.value },
+			uNormalMapFlipY: { value: flipNormalY ? 1 : 0 },
 			uFallbackColor: { value: color.clone() },
 			uNeedsReview: { value: needsReview ? 1 : 0 },
 			uEmissionEnabled: { value: diffuseAlphaEmissionEnabled.value ? 1 : 0 },
@@ -1299,6 +1311,7 @@ const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) 
 			uniform float uHasDiffuseMap;
 			uniform float uHasNormalMap;
 			uniform float uNormalStrength;
+			uniform float uNormalMapFlipY;
 			uniform vec3 uFallbackColor;
 			uniform float uNeedsReview;
 			uniform float uEmissionEnabled;
@@ -1359,6 +1372,8 @@ const createLegacyMaterial = (color = fallbackColor.value, needsReview = false) 
 					vec3 normal = normalize(vWorldNormal);
 					if (uHasNormalMap > 0.5) {
 						vec3 tangentNormal = decodeTangentNormal(texture2D(uNormalMap, vUv).rg, uNormalStrength);
+						// DirectX-style normal maps store an inverted green channel.
+						tangentNormal.y = mix(tangentNormal.y, -tangentNormal.y, uNormalMapFlipY);
 						normal = applyTangentNormal(normal, tangentNormal);
 					}
 					#ifdef PBR
@@ -1656,10 +1671,10 @@ const applyFaceRampIndex = (): void => {
 	outlineController.updateSettings(currentOutlineSettings());
 };
 
-const createPreviewMaterial = (color = fallbackColor.value, needsReview = false): THREE.ShaderMaterial => {
+const createPreviewMaterial = (color = fallbackColor.value, needsReview = false, flipNormalY = false): THREE.ShaderMaterial => {
 	const previewMaterial = isGIMIBodyPipeline()
-		? createGIMIHighFidelityMaterial(color, needsReview)
-		: createLegacyMaterial(color, needsReview);
+		? createGIMIHighFidelityMaterial(color, needsReview, flipNormalY)
+		: createLegacyMaterial(color, needsReview, flipNormalY);
 	if (isGIMIBodyPipeline()) gimiShaderController.attach(previewMaterial);
 	return previewMaterial;
 };
@@ -2861,9 +2876,11 @@ const getPreviewRootCentroid = (previewMeshes: THREE.Mesh[]): THREE.Vector3 => {
 
 const ensureActivePreviewMaterial = (): void => {
 	const requiresGIMI = isGIMIBodyPipeline();
-	if (material && isGIMIMaterial(material) === requiresGIMI) return;
+	const flipNormalY = shouldFlipNormalMap(activeDataType.value?.json.GamePreset);
+	if (material && isGIMIMaterial(material) === requiresGIMI && materialFlipNormalY === flipNormalY) return;
 	const previousMaterial = material;
-	const nextMaterial = createPreviewMaterial();
+	const nextMaterial = createPreviewMaterial(fallbackColor.value, false, flipNormalY);
+	materialFlipNormalY = flipNormalY;
 	// Do not clear the current scene before asynchronous geometry/texture work
 	// completes. A render-mode switch must keep the last valid preview visible.
 	if (mesh && mesh.material === previousMaterial) mesh.material = nextMaterial;
@@ -2918,10 +2935,10 @@ const buildPreviewGeometry = async (buildToken: number) => {
 			const geometry = source.uvLayer
 				? await createPreviewGeometry(source.dataType, source.uvLayer, buildToken)
 				: await createPermissivePreviewGeometry(source.dataType, buildToken);
-			return geometry ? { target, geometry } : undefined;
+			return geometry ? { target, geometry, gamePreset: source.dataType.json.GamePreset } : undefined;
 		} catch {
 			const geometry = await createPermissivePreviewGeometry(source.dataType, buildToken).catch(() => undefined);
-			return geometry ? { target, geometry } : undefined;
+			return geometry ? { target, geometry, gamePreset: source.dataType.json.GamePreset } : undefined;
 		}
 	}, () => buildToken === previewBuildToken);
 	const passiveRenderables = await mapWithConcurrency(passiveSources, async source => {
@@ -3021,7 +3038,8 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		);
 		const passiveMaterial = createPreviewMaterial(
 			getFallbackColorForKey(source.target.subMeshName),
-			source.geometry.needsReview === true
+			source.geometry.needsReview === true,
+			shouldFlipNormalMap(source.gamePreset),
 		);
 		if (isGIMIMaterial(passiveMaterial)) {
 			GIMITextureSet.applyDiffuseLayers(passiveMaterial, diffuseLayers);
@@ -3220,7 +3238,8 @@ const initializeRenderer = () => {
 	bloomPass = mainBloom?.bloomPass;
 	fxaaPass = mainBloom?.fxaaPass;
 	taaPass = mainBloom?.taaPass;
-	material = createPreviewMaterial();
+	materialFlipNormalY = shouldFlipNormalMap(activeDataType.value?.json.GamePreset);
+	material = createPreviewMaterial(fallbackColor.value, false, materialFlipNormalY);
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = false;
 	// Mouse drag is handled below as model rotation.  OrbitControls remains for
