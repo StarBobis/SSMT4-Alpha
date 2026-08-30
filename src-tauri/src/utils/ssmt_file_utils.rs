@@ -158,33 +158,35 @@ impl SSMTFileUtils {
         Ok(format!("{:x}", context.compute()))
     }
 
-    pub fn copy_boot_files(app: &AppHandle, target_dir: &Path) {
-        let resource_dir = PathManager::ssmt_resources_folder();
+    // ! Dead Code.
+    // pub fn copy_boot_files(app: &AppHandle, target_dir: &Path) {
+    //     let resource_dir = PathManager::ssmt_resources_folder();
 
-        let files = ["d3d11.dll", "d3dcompiler_47.dll", "Run.exe"];
+    //     let files = ["d3d11.dll", "d3dcompiler_47.dll", "Run.exe", "SSMT-Player-Tweaks.dll"];
 
-        for filename in files {
-            let dest_path = target_dir.join(filename);
-            let source_file_path = resource_dir.join(filename);
-            println!("Copying {} to {}", filename, dest_path.to_string_lossy());
-            println!("Source file path: {}", source_file_path.to_string_lossy());
-
-            if let Err(e) = fs::copy(&source_file_path, &dest_path) {
-                let msg = format!(
-                    "Failed to copy {}: {}.\nPlease ensure the game is closed.",
-                    filename, e
-                );
-                eprintln!("{}", msg);
-                app.dialog()
-                    .message(&msg)
-                    .title("Copy Failed")
-                    .kind(MessageDialogKind::Error)
-                    .show(|_| {});
-            } else {
-                println!("Copied {} successfully.", filename);
-            }
-        }
-    }
+    //     for filename in files {
+    //         let dest_path = target_dir.join(filename);
+    //         let source_file_path = resource_dir.join(filename);
+    //         println!("Copying {} to {}", filename, dest_path.to_string_lossy());
+    //         println!("aaa");
+    //         println!("Source file path: {}", source_file_path.to_string_lossy());
+    //         println!("bbb");
+    //         if let Err(e) = fs::copy(&source_file_path, &dest_path) {
+    //             let msg = format!(
+    //                 "Failed to copy {}: {}.\nPlease ensure the game is closed.",
+    //                 filename, e
+    //             );
+    //             eprintln!("{}", msg);
+    //             app.dialog()
+    //                 .message(&msg)
+    //                 .title("Copy Failed")
+    //                 .kind(MessageDialogKind::Error)
+    //                 .show(|_| {});
+    //         } else {
+    //             println!("Copied {} successfully.", filename);
+    //         }
+    //     }
+    // }
 
     /// Find the value of `attribute_name` in a migoto ini-like file.
     ///
