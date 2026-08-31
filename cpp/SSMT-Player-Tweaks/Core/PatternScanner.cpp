@@ -103,6 +103,12 @@ namespace SSMT::Tweaks
                 << section.Characteristics
 
                 << '\n';
+
+            output
+                << " RawOffset=0x"
+                << section.PointerToRawData
+                << " RawSize=0x"
+                << section.SizeOfRawData;
         }
     }
 
@@ -126,9 +132,112 @@ namespace SSMT::Tweaks
         throw std::invalid_argument(
             "PatternScanner: invalid hexadecimal digit.");
     }
-    std::uintptr_t PatternScanner::Find(std::string_view pattern) const
+    std::uintptr_t PatternScanner::Find(std::string_view patternText) const
     {
-        return std::uintptr_t();
+        const Pattern pattern = ParsePattern(patternText);
+
+        if (pattern.empty())
+        {
+            throw std::invalid_argument(
+                "PatternScanner: pattern is empty.");
+        }
+
+        for (const auto &section : executable_sections_)
+        {
+            if (section.size < pattern.size())
+            {
+                continue;
+            }
+
+            const auto *begin = reinterpret_cast<const std::uint8_t *>(
+                section.address);
+
+            const std::size_t lastStart = section.size - pattern.size();
+
+            for (std::size_t offset = 0; offset <= lastStart; ++offset)
+            {
+                const auto *current = begin + offset;
+
+                if (MatchAt(current, pattern))
+                {
+                    return reinterpret_cast<std::uintptr_t>(
+                        current);
+                }
+            }
+        }
+        return 0;
+    }
+    std::vector<std::uintptr_t> PatternScanner::FindAll(std::string_view patternText) const
+    {
+        const Pattern pattern = ParsePattern(patternText);
+
+        std::vector<std::uintptr_t> result{};
+
+        if (pattern.empty())
+        {
+            throw std::invalid_argument(
+                "PatternScanner: pattern is empty.");
+        }
+
+        for (const auto &section : executable_sections_)
+        {
+            if (section.size < pattern.size())
+            {
+                continue;
+            }
+
+            const auto *begin = reinterpret_cast<const std::uint8_t *>(
+                section.address);
+
+            const std::size_t lastStart = section.size - pattern.size();
+
+            for (std::size_t offset = 0; offset <= lastStart; ++offset)
+            {
+                const auto *current = begin + offset;
+
+                if (MatchAt(current, pattern))
+                {
+                    result.push_back(reinterpret_cast<std::uintptr_t>(
+                        current));
+                }
+            }
+        }
+        return result;
+    }
+    auto PatternScanner::IsExecutableAddress(std::uintptr_t address) const
+    {
+        for (const auto &section : executable_sections_)
+        {
+            const auto begin = section.address;
+            const auto end = section.address + section.size;
+
+            if (address >= begin && address < end)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    std::uintptr_t PatternScanner::ResolveRelativeCall(
+        std::uintptr_t address)
+    {
+        const std::int32_t displacement =
+            *reinterpret_cast<const std::int32_t *>(
+                address + 1);
+
+        const std::uintptr_t nextInstruction =
+            address + 5;
+
+        const std::intptr_t signedNextInstruction =
+            static_cast<std::intptr_t>(
+                nextInstruction);
+
+        const std::intptr_t target =
+            signedNextInstruction + static_cast<std::intptr_t>(
+                                        displacement);
+
+        return static_cast<std::uintptr_t>(
+            target);
     }
     Pattern PatternScanner::ParsePattern(std::string_view pattern)
     {
@@ -154,23 +263,20 @@ namespace SSMT::Tweaks
                 continue;
             }
 
-            if (i+1 >= pattern.size()) {
+            if (i + 1 >= pattern.size())
+            {
                 throw std::invalid_argument(
-                    "PatternScanner: incomplete hex byte."
-                );
+                    "PatternScanner: incomplete hex byte.");
             }
 
             const auto high = HexDigit(pattern[i]);
-            const auto low  = HexDigit(pattern[i+1]);
+            const auto low = HexDigit(pattern[i + 1]);
 
             const auto value = static_cast<std::uint8_t>(
-                (high << 4) | low
-            );
+                (high << 4) | low);
 
-            result.push_back({
-                value,
-                false
-            });
+            result.push_back({value,
+                              false});
 
             i += 2;
         }
@@ -179,10 +285,12 @@ namespace SSMT::Tweaks
     }
     bool PatternScanner::MatchAt(const std::uint8_t *address, const Pattern &pattern)
     {
-        for (std::size_t i = 0; i < pattern.size(); ++i) {
-            const auto& patternByte = pattern[i];
+        for (std::size_t i = 0; i < pattern.size(); ++i)
+        {
+            const auto &patternByte = pattern[i];
 
-            if (patternByte.wildcard) {
+            if (patternByte.wildcard)
+            {
                 continue;
             }
 

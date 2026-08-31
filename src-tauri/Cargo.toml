@@ -8,8 +8,8 @@ default-run = "ssmt4"
 
 [profile.dev]
 incremental = true      # 启用增量编译
-
-split-debuginfo = "unpacked"
+debug = 1          # 只保留行号，不要完整调试信息
+split-debuginfo = "unpacked"  # Windows 下减小 pdb 大小
 
 [profile.release]
 incremental = true

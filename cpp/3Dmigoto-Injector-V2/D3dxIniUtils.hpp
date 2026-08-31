@@ -42,7 +42,7 @@ public:
 		const char *ini_section;
 		HANDLE ini_file;
 
-		ini_file = CreateFile(d3dxIniFilePath.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		ini_file = CreateFileW(d3dxIniFilePath.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (ini_file == INVALID_HANDLE_VALUE)
 		{
 			parse_error = L"Can't open d3dx.ini\n";
@@ -128,8 +128,21 @@ public:
 			this->inject_dll = this->inject_dlls.front();
 		}
 
-		const std::wstring playerTweaksDll =
-			LR"(C:\Users\angel\Desktop\github\ssmt4-alpha\cpp\SSMT-Player-Tweaks\build\Release\SSMT-Player-Tweaks.dll)";
+		// const std::wstring playerTweaksDll =
+		// 	LR"(C:\Users\angel\Desktop\github\ssmt4-alpha\cpp\SSMT-Player-Tweaks\build\Release\SSMT-Player-Tweaks.dll)";
+
+		wchar_t executablePath[MAX_PATH]{};
+
+		GetModuleFileNameW(
+			nullptr,
+			executablePath,
+			static_cast<DWORD>(std::size(executablePath)));
+
+		const std::filesystem::path runPath{
+			executablePath};
+
+		const auto playerTweaksDll =
+			runPath.parent_path() / L"SSMT-Player-Tweaks.dll";
 
 		if (std::filesystem::exists(playerTweaksDll))
 		{

@@ -31,10 +31,17 @@ namespace SSMT::Tweaks
         void DumpSections(std::ostream &output) const;
 
         [[nodiscard]]
-        static std::uint8_t HexDigit(char c) const;
+        static std::uint8_t HexDigit(char c);
 
         [[nodiscard]]
         std::uintptr_t Find(std::string_view pattern) const;
+        [[nodiscard]]
+        std::vector<std::uintptr_t> FindAll(std::string_view pattern) const;
+
+        [[nodiscard]]
+        auto IsExecutableAddress(std::uintptr_t address) const;
+        [[nodiscard]]
+        static std::uintptr_t ResolveRelativeCall(std::uintptr_t address);
 
     private:
         HMODULE module_;

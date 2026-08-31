@@ -139,6 +139,8 @@ const constrainD3d11ReleasesForGame = (
         .map((release, index) => ({ ...release, is_latest: index === 0 }));
 };
 
+
+
 const D3D11_RELEASE_SOURCES: Record<D3d11Mode, D3d11ReleaseSource> = {
     dev: {
         repo: 'SpectrumQT/XXMI-Libs-Package',
