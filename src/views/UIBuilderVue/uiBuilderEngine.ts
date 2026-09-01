@@ -4896,6 +4896,28 @@ void main(vs2ps input, out float4 result : SV_Target0)
     }
 
     /**
+     * 预览侧联动"占用闩锁"判定：任一启用映射（linkedSlaves 且指向该组件）当前覆盖该组件时返回 true。
+     * 与导出端 $linked_active_<idx> 语义一致：联动激活期间物理自动驱动暂停，
+     * 从而保证预览与导出对 $auto 的处理一致（A8 修复；联动离开后恢复自动取决于绑定者/默认值）。
+     */
+    function isPreviewLinkActiveOnTarget(component) {
+        if(!component) return false;
+        const linkedValues = computeAllLinkedValues();
+        for(let s = 0; s < components.length; s++) {
+            const srcComp = components[s];
+            if(!srcComp || srcComp === component) continue;
+            const links = Array.isArray(srcComp.linkedSlaves) ? srcComp.linkedSlaves : [];
+            for(let li = 0; li < links.length; li++) {
+                const link = links[li];
+                if(!link || !link.enabled || !link.targetId || link.targetId !== component.id) continue;
+                const srcValue = getPreviewEffectiveSourceValue(srcComp, linkedValues);
+                if(computePreviewRangeActive('link', link, srcComp, component, srcValue)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 计算预览中组件的自动动画开启值（0/1/数值）。
      * 与导出生成的 Sync Bindings 一致：其他组件（开关/滑块/摇杆）可把 $auto_<索引>
      * 绑定为自己的输出变量，从而控制目标组件的自动动画。
@@ -4905,6 +4927,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         if(!component || component.autoAnimate !== true) return 0;
         const idx = components.indexOf(component);
         if(idx < 0) return 1;
+        // 联动占用闩锁：联动激活期间自动动画暂停（与导出端 $linked_active_<idx> 一致，A8 修复）
+        if(isPreviewLinkActiveOnTarget(component)) return 0;
         const autoVar = `$auto_${idx}`;
         let bound = null;
         components.forEach((src) => {
@@ -13105,10 +13129,22 @@ function buildDialogueIniRuntime() {
                     const isSingleToggleMode = !isToggleMultiMode(m);
                     let myVars = m.vars.flatMap(s => splitVarStr(s));
                     if(myVars.length === 0) myVars = [`$val_${i}`];
-                    myVars.forEach(v => {
-                        if(v === `$val_${i}`) return;
-                        out += isSingleToggleMode && m.toggleInvert === true ? `${indent}${v} = 1 - $val_${i}\n` : `${indent}${v} = $val_${i}\n`;
-                    });
+                    // 点击推送与 Sync Bindings 同级受 bindingExpr（组绑定模式）门控：bind mode 关闭时
+                    // 点击只翻转面板自身 $val，不再写绑定变量（否则 $auto 会被无条件改写，A6 修复）
+                    const clickBindingExpr = (componentExportMeta && componentExportMeta[i] && componentExportMeta[i].bindingExpr) || '1';
+                    const emitClickVarPushes = (targetVars, extraIndent) => {
+                        targetVars.forEach(v => {
+                            if(v === `$val_${i}`) return;
+                            out += isSingleToggleMode && m.toggleInvert === true ? `${indent}${extraIndent}${v} = 1 - $val_${i}\n` : `${indent}${extraIndent}${v} = $val_${i}\n`;
+                        });
+                    };
+                    if(clickBindingExpr === '1') {
+                        emitClickVarPushes(myVars, '');
+                    } else {
+                        out += `${indent}if ${clickBindingExpr}\n`;
+                        emitClickVarPushes(myVars, '    ');
+                        out += `${indent}endif\n`;
+                    }
                    if(m.switchGroup && m.switchGroup > 0) {
                        out += `${indent}if $val_${i} > 0\n`;
                        components.forEach((sibling, k) => {
@@ -13116,11 +13152,22 @@ function buildDialogueIniRuntime() {
                                out += `${indent}    $val_${k} = 0\n`;
                                let vars = sibling.vars.flatMap(s => splitVarStr(s));
                                if(vars.length === 0) vars = [`$val_${k}`];
+                               const siblingVarLines = [];
                                vars.forEach(v => {
                                    if(v === `$val_${k}`) return;
                                    const sibVal = sibling.toggleInvert === true ? 1 : 0;
-                                   out += `${indent}    ${v} = ${sibVal}\n`;
+                                   siblingVarLines.push(`${indent}    ${v} = ${sibVal}\n`);
                                });
+                               if(siblingVarLines.length > 0) {
+                                   // 兄弟开关的外部变量写入同样受 bindingExpr 门控（与 Sync Bindings 一致，A6 修复）
+                                   if(clickBindingExpr === '1') {
+                                       out += siblingVarLines.join('');
+                                   } else {
+                                       out += `${indent}    if ${clickBindingExpr}\n`;
+                                       siblingVarLines.forEach(line => { out += line; });
+                                       out += `${indent}    endif\n`;
+                                   }
+                               }
                            }
                        });
                        out += `${indent}endif\n`;
@@ -13632,6 +13679,9 @@ function buildDialogueIniRuntime() {
                         t+=`global $gravity_${i} = ${((m.gravity ?? 0)).toFixed(4)}\n`;
                         // 始终声明 $auto（关闭时设为 0）以覆盖 persist 存档残留
                         t+=`global persist $auto_${i} = ${autoDefault}\n`;
+                        // 联动占用闩锁：联动激活=1、离开=0；物理自动驱动条件组合 $auto==1 && $linked_active==0，
+                        // 使联动暂停/恢复自动动画不再直接写 $auto（避免覆盖绑定开关、触发 follow 反向拉值与 persist 污染）
+                        t+=`global $linked_active_${i} = 0\n`;
                         if (autoEnabled) {
                             t+=`global $auto_str_${i} = ${((m.autoStr ?? 0.1)).toFixed(4)}\n`;
                             t+=`global $auto_amp_x_${i} = ${((m.autoAmpX ?? 1)).toFixed(4)}\n`;
@@ -13671,6 +13721,9 @@ function buildDialogueIniRuntime() {
                         }
                         // 始终声明 $auto（关闭时设为 0）以覆盖 persist 存档残留
                         t+=`global persist $auto_${i} = ${autoDefault}\n`;
+                        // 联动占用闩锁：联动激活=1、离开=0；物理自动驱动条件组合 $auto==1 && $linked_active==0，
+                        // 使联动暂停/恢复自动动画不再直接写 $auto（避免覆盖绑定开关、触发 follow 反向拉值与 persist 污染）
+                        t+=`global $linked_active_${i} = 0\n`;
                         if (autoEnabled) {
                             t+=`global $auto_str_${i} = ${((m.autoStr ?? 0.1)).toFixed(4)}\n`;
                             t+=`global $auto_amp_x_${i} = ${((m.autoAmpX ?? 1)).toFixed(4)}\n`;
@@ -13942,6 +13995,12 @@ function buildDialogueIniRuntime() {
            dialogueIni.reset.forEach(line => { t+=`        ${line}\n`; });
             linkedPostTargets.forEach(tgtIdx => {
                 t+=`        $linked_post_${tgtIdx} = 0\n`;
+            });
+            // 布局变化时联动占用闩锁清零（与 $linked_post 同级处理；$linked_active 为瞬时状态非 persist）
+            components.forEach((m, i) => {
+                if(componentExportUsage[i] && componentExportUsage[i].physicsEnabled) {
+                    t+=`        $linked_active_${i} = 0\n`;
+                }
             });
             linkedSlaveTriggerStates.forEach(({ compIdx, linkIdx }) => {
                 t+=`        $linked_range_${compIdx}_${linkIdx} = 0\n`;
@@ -14533,12 +14592,12 @@ function buildDialogueIniRuntime() {
                             block += `        if $linked_post_${tgtIdx} != 0\n`;
                             block += `            $linked_post_${tgtIdx} = 0\n`;
                             if(tgtHasPhysics) {
-                                // 曾激活后离开四边形：归零回弹，避免 $rest 停留在最后映射值
+                                // 曾激活后离开四边形：归零回弹，避免 $rest 停留在最后映射值；
+                                // 复位联动占用闩锁 $linked_active（物理自动驱动条件 = $auto==1 && $linked_active==0），
+                                // 由 $auto 真实值决定是否恢复自动动画——不直接写 $auto，
+                                // 避免覆盖绑定开关并触发 Sync Bindings follow 反向拉值（A1 修复）
                                 block += `            $rest_${tgtIdx}_x = 0\n            $rest_${tgtIdx}_y = 0\n`;
-                                if(componentExportUsage[tgtIdx] && componentExportUsage[tgtIdx].autoEnabled) {
-                                    // 同时恢复目标自动动画
-                                    block += `            $auto_${tgtIdx} = 1\n`;
-                                }
+                                block += `            $linked_active_${tgtIdx} = 0\n`;
                             } else {
                                 block += `            $val_${tgtIdx}_x = 0\n            $val_${tgtIdx}_y = 0\n`;
                             }
@@ -14576,7 +14635,7 @@ function buildDialogueIniRuntime() {
                             block += `        $val_${tgtIdx}_x = $rtemp_x * 2 - 1\n`;
                             block += `        $val_${tgtIdx}_y = 1 - $rtemp_y * 2\n`;
                             if(tgtHasPhysics) {
-                                block += `        $rest_${tgtIdx}_x = $val_${tgtIdx}_x\n        $rest_${tgtIdx}_y = $val_${tgtIdx}_y\n        $auto_${tgtIdx} = 0\n`;
+                                block += `        $rest_${tgtIdx}_x = $val_${tgtIdx}_x\n        $rest_${tgtIdx}_y = $val_${tgtIdx}_y\n        $linked_active_${tgtIdx} = 1\n`;
                             }
                         } else {
                             const isTgtBidir = hasMappingTarget && tgtComp.paramMode === '2';
@@ -14608,7 +14667,7 @@ function buildDialogueIniRuntime() {
                             }
                             block += `        ${tgtVar} = ${mappedExpr}\n`;
                             if(tgtHasPhysics) {
-                                block += `        ${restVar} = ${tgtVar}\n        $vel_${tgtIdx} = 0\n        $auto_${tgtIdx} = 0\n`;
+                                block += `        ${restVar} = ${tgtVar}\n        $vel_${tgtIdx} = 0\n        $linked_active_${tgtIdx} = 1\n`;
                             }
                         }
 
@@ -14619,13 +14678,13 @@ function buildDialogueIniRuntime() {
                             block += `        ; Out of quad: reset with bounce\n`;
                             if(tgtIsJoystick) {
                                 if(tgtHasPhysics) {
-                                    block += `        $rest_${tgtIdx}_x = 0\n        $rest_${tgtIdx}_y = 0\n        $auto_${tgtIdx} = 0\n`;
+                                    block += `        $rest_${tgtIdx}_x = 0\n        $rest_${tgtIdx}_y = 0\n        $linked_active_${tgtIdx} = 0\n`;
                                 } else {
                                     block += `        $val_${tgtIdx}_x = 0\n        $val_${tgtIdx}_y = 0\n`;
                                 }
                             } else if(tgtHasPhysics) {
                                 const resetVal = isTgtBidir ? '0.5' : '0';
-                                block += `        ${restVar} = ${resetVal}\n        $auto_${tgtIdx} = 0\n`;
+                                block += `        ${restVar} = ${resetVal}\n        $linked_active_${tgtIdx} = 0\n`;
                             } else {
                                 const resetVal = isTgtBidir ? '0.5' : '0';
                                 block += `        ${tgtVar} = ${resetVal}\n`;
@@ -14765,9 +14824,8 @@ function buildDialogueIniRuntime() {
                     if(!tgtIsDir && tgtHasPhysics) {
                         block += `        ${restVar} = ${tgtVar}\n`;
                         block += `        $vel_${tgtIdx} = 0\n`;
-                        // 联动激活时暂停自动动画
-                        const autoVar = tgtIsJoystick ? `$auto_${tgtIdx}` : `$auto_${tgtIdx}`;
-                        block += `        ${autoVar} = 0\n`;
+                        // 联动激活：置联动占用闩锁 $linked_active 暂停物理自动驱动，不直接写 $auto（尊重外部绑定，A2 修复）
+                        block += `        $linked_active_${tgtIdx} = 1\n`;
                     }
                     
                     // 超出范围处理
@@ -14780,8 +14838,9 @@ function buildDialogueIniRuntime() {
                         block += `    else\n`;
                         block += `        ; Overflow: reset to ${resetVal}\n`;
                         if(tgtHasPhysics) {
-                            // 仅设弹簧目标，不设 val，让弹簧自然产生回弹
+                            // 仅设弹簧目标，不设 val，让弹簧自然产生回弹；同时复位联动闩锁恢复自动驱动（A3 修复）
                             block += `        ${restVar} = ${resetVal}\n`;
+                            block += `        $linked_active_${tgtIdx} = 0\n`;
                         } else {
                             // 无物理时直接设值
                             block += `        ${tgtVar} = ${resetVal}\n`;
@@ -14794,14 +14853,14 @@ function buildDialogueIniRuntime() {
                         block += `            ${tgtVar} = ${belowVal}\n`;
                         if(tgtHasPhysics) {
                             block += `            ${restVar} = ${belowVal}\n`;
-                            block += `            $auto_${tgtIdx} = 0\n`;
+                            block += `            $linked_active_${tgtIdx} = 1\n`;
                         }
                         block += `        else\n`;
                         block += `            ; Above range: hold max\n`;
                         block += `            ${tgtVar} = 1\n`;
                         if(tgtHasPhysics) {
                             block += `            ${restVar} = 1\n`;
-                            block += `            $auto_${tgtIdx} = 0\n`;
+                            block += `            $linked_active_${tgtIdx} = 1\n`;
                         }
                         block += `        endif\n`;
                     }
@@ -14809,12 +14868,13 @@ function buildDialogueIniRuntime() {
                     block += `    endif\n`;
                     block += `    endif\n`;
                     
-                    // 同步 $auto_goal/$auto_tgt 以防与自动动画冲突（方向摇杆不需要）
+                    // 同步 $auto_goal/$auto_tgt 以防与自动动画冲突（方向摇杆不需要）；
+                    // 仅在区间激活期间同步：联动未活动时不把目标钉在陈旧映射值上（A7 修复）
                     if(!tgtIsDir && tgtHasPhysics && componentExportUsage[tgtIdx].autoEnabled) {
                         if(tgtIsJoystick) {
-                            block += `    if ${targetDragGuard}\n    $auto_goal_${tgtIdx}_${tgtAxis} = ${tgtVar}\n    $auto_tgt_${tgtIdx}_${tgtAxis} = ${tgtVar}\n    endif\n`;
+                            block += `    if ${targetDragGuard}\n    if ${inRangeExpr}\n    $auto_goal_${tgtIdx}_${tgtAxis} = ${tgtVar}\n    $auto_tgt_${tgtIdx}_${tgtAxis} = ${tgtVar}\n    endif\n    endif\n`;
                         } else {
-                            block += `    if ${targetDragGuard}\n    $auto_goal_${tgtIdx} = ${tgtVar}\n    $auto_tgt_${tgtIdx} = ${tgtVar}\n    endif\n`;
+                            block += `    if ${targetDragGuard}\n    if ${inRangeExpr}\n    $auto_goal_${tgtIdx} = ${tgtVar}\n    $auto_tgt_${tgtIdx} = ${tgtVar}\n    endif\n    endif\n`;
                         }
                     }
                     
@@ -14948,7 +15008,7 @@ function buildDialogueIniRuntime() {
                     if(m.physicsProfile === 'breast') {
                         t+=`            $drive_${i}_x = $rest_${i}_x\n`;
                         t+=`            $drive_${i}_y = $rest_${i}_y\n`;
-                        t+=`            if $auto_${i} == 1\n`;
+                        t+=`            if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                         t+=`                if $auto_prev_${i} == 0\n`;
                         if (autoSource === 'chaos') {
                             t+=`                    $chaos_${i}_x = $auto_seed_x_${i}\n`;
@@ -15016,7 +15076,7 @@ function buildDialogueIniRuntime() {
                         }
                         t+=`            else\n`;
                         if (autoEnabled) {
-                            t+=`                if $auto_${i} == 1\n`;
+                            t+=`                if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                             t+=`                    if $auto_prev_${i} == 0\n`;
                             if (autoSource === 'chaos') {
                                 t+=`                        $chaos_${i}_x = $auto_seed_x_${i}\n`;
@@ -15067,7 +15127,7 @@ function buildDialogueIniRuntime() {
                         }
                         t+=`                $vel_${i}_x = ($vel_${i}_x + $force) * $spring_d_${i}\n                $val_${i}_x = $val_${i}_x + $vel_${i}_x\n`;
                         if (autoEnabled) {
-                            t+=`                if $auto_${i} == 1\n`;
+                            t+=`                if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                             t+=`                    $force = ($auto_tgt_${i}_y - $val_${i}_y) * $d3\n`;
                             t+=`                else\n`;
                         }
@@ -15082,7 +15142,7 @@ function buildDialogueIniRuntime() {
                             t+=`                if $val_${i}_y < -1\n $val_${i}_y = -1\n $vel_${i}_y = -$vel_${i}_y * $auto_bounce_${i}\n endif\n if $val_${i}_y > 1\n $val_${i}_y = 1\n $vel_${i}_y = -$vel_${i}_y * $auto_bounce_${i}\n endif\n`;
                         } else {
                             if (autoEnabled) {
-                                t+=`                if $auto_${i} == 1\n`;
+                                t+=`                if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                                 t+=`                if $val_${i}_x < -1\n $val_${i}_x = -1\n $vel_${i}_x = -$vel_${i}_x * $auto_bounce_${i}\n endif\n if $val_${i}_x > 1\n $val_${i}_x = 1\n $vel_${i}_x = -$vel_${i}_x * $auto_bounce_${i}\n endif\n`;
                                 t+=`                if $val_${i}_y < -1\n $val_${i}_y = -1\n $vel_${i}_y = -$vel_${i}_y * $auto_bounce_${i}\n endif\n if $val_${i}_y > 1\n $val_${i}_y = 1\n $vel_${i}_y = -$vel_${i}_y * $auto_bounce_${i}\n endif\n`;
                                 t+=`                else\n`;
@@ -15099,14 +15159,14 @@ function buildDialogueIniRuntime() {
                     t+=`            if $is_dragging == ${i+1} && $drag_action >= 2\n`;
                     t+=`                $vel_${i} = 0\n`;
                     if (autoEnabled) {
-                        t+=`                if $auto_${i} == 1\n`;
+                        t+=`                if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                         t+=`                    $auto_goal_${i} = $val_${i}\n                    $auto_tgt_${i} = $val_${i}\n`;
                         if (autoSource === 'chaos') t+=`                    $counter_${i} = $chaos_rate_${i} - 1\n`;
                         t+=`                endif\n`;
                     }
                     t+=`            else\n`;
                     if (autoEnabled) {
-                        t+=`                if $auto_${i} == 1\n`;
+                        t+=`                if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                         t+=`                    if $auto_prev_${i} == 0\n`;
                         if (autoSource === 'chaos') {
                             t+=`                        $chaos_${i}_x = $auto_seed_x_${i}\n`;
@@ -15154,7 +15214,7 @@ function buildDialogueIniRuntime() {
                     if ((m.gravity ?? 0) !== 0) {
                         t+=`                if $val_${i} < 0\n $val_${i} = 0\n $vel_${i} = -$vel_${i} * $auto_bounce_${i}\n endif\n if $val_${i} > 1\n $val_${i} = 1\n $vel_${i} = -$vel_${i} * $auto_bounce_${i}\n endif\n`;
                     } else {
-                        t+=`                if $auto_${i} == 1\n`;
+                        t+=`                if $auto_${i} == 1 && $linked_active_${i} == 0\n`;
                         t+=`                if $val_${i} < 0\n $val_${i} = 0\n $vel_${i} = -$vel_${i} * $auto_bounce_${i}\n endif\n if $val_${i} > 1\n $val_${i} = 1\n $vel_${i} = -$vel_${i} * $auto_bounce_${i}\n endif\n`;
                         t+=`                else\n`;
                         t+=`                if $val_${i} < 0\n $val_${i} = 0\n $vel_${i} = 0\n endif\n if $val_${i} > 1\n $val_${i} = 1\n $vel_${i} = 0\n endif\n`;
