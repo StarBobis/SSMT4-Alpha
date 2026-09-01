@@ -1,65 +1,60 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ssmt4",
-  "version": "4.1.89",
-  "identifier": "ssmt4",
-  "build": {
-    "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1422",
-    "beforeBuildCommand": "bun run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "center": false,
-        "title": "SSMT4",
-        "width": 1080,
-        "height": 600,
-        "minWidth": 1080,
-        "minHeight": 600,
-        "decorations": false,
-        "shadow": true,
-        "backgroundColor": "#000000",
-        "visible": false
-      }
-    ],
-    
-    "security": {
-      "csp": "default-src 'self' asset: http: https: file: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http: https: file: data:; media-src 'self' asset: http: https: file: data:; connect-src 'self' asset: http: https: file: data:; frame-src *;",
-      "dangerousDisableAssetCspModification": ["style-src"],
-      "assetProtocol": {
-        "enable": true,
-        "scope": [
-          "**",
-          "\\\\**"
-        ]
-      }
-    } 
-  },
-  "bundle": {
-    "active": true,
-    "createUpdaterArtifacts": true,
-    "targets": ["nsis"],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ], 
-      "resources": [
-        "resources/**/*"
-      ]
-  },
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": [
-        "https://github.com/StarBobis/SSMT4-Alpha/releases/latest/download/latest.json"
-      ],
-      "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxNDc5NzE3MjVCQ0M3MkEKUldRcXg3d2xGNWRIc1JKZU5pb1N0K1pMbE9DQU8rdDJYa0xhU1hBanpHOUF4Y1FHQkQvZGZ4M2wK"
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "ssmt4",
+    "version": "4.1.89",
+    "identifier": "ssmt4",
+    "build": {
+        "beforeDevCommand": "bun run dev",
+        "devUrl": "http://localhost:1422",
+        "beforeBuildCommand": "bun run build",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [
+            {
+                "center": false,
+                "title": "SSMT4",
+                "width": 1080,
+                "height": 600,
+                "minWidth": 1080,
+                "minHeight": 600,
+                "decorations": false,
+                "shadow": true,
+                "backgroundColor": "#000000",
+                "visible": false
+            }
+        ],
+
+        "security": {
+            "csp": "default-src 'self' asset: http: https: file: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http: https: file: data:; media-src 'self' asset: http: https: file: data:; connect-src 'self' asset: http: https: file: data:; frame-src *;",
+            "dangerousDisableAssetCspModification": ["style-src"],
+            "assetProtocol": {
+                "enable": true,
+                "scope": ["**", "\\\\**"]
+            }
+        }
+    },
+    "bundle": {
+        "active": true,
+        "createUpdaterArtifacts": true,
+        "targets": ["nsis"],
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ],
+        "resources": ["resources/**/*"]
+    },
+    "plugins": {
+        "updater": {
+            "active": true,
+            "endpoints": [
+                "https://github.com/StarBobis/SSMT4-Alpha/releases/latest/download/latest.json"
+            ],
+            "dialog": false,
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxNDc5NzE3MjVCQ0M3MkEKUldRcXg3d2xGNWRIc1JKZU5pb1N0K1pMbE9DQU8rdDJYa0xhU1hBanpHOUF4Y1FHQkQvZGZ4M2wK"
+        }
     }
-  }
 }

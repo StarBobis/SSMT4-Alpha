@@ -1,2 +1,12 @@
 [target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
+linker = "rust-lld"
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "split-debuginfo=packed"
+]
+
+[unstable]
+parallel-front-end = true
+
+[profile.dev]
+incremental = true

@@ -7,17 +7,34 @@ edition = "2021"
 default-run = "ssmt4"
 
 [profile.dev]
-incremental = true      # 启用增量编译
-debug = 1          # 只保留行号，不要完整调试信息
-split-debuginfo = "unpacked"  # Windows 下减小 pdb 大小
+incremental = true
+debug = 0
+split-debuginfo = "unpacked"
+opt-level = 0
+codegen-units = 256
+lto = false
+panic = "unwind"
 
 [profile.release]
-incremental = true
-
-opt-level = 1
-lto = false
-codegen-units = 16
+incremental = false
+debug = 0
+opt-level = 3
+lto = true
+codegen-units = 1
 panic = "abort"
+strip = true
+
+
+# dev 采用了比较激进的方案, 如果需要稍稳一些, 使用下面的配置:
+# cargo run --profile dev-with-debug
+# 或
+# bun tauri dev -- --profile dev-with-debug
+[profile.dev-with-debug]
+inherits = "dev"
+debug = 1
+incremental = true
+opt-level = 0
+codegen-units = 256
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
