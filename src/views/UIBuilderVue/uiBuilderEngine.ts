@@ -1,1497 +1,33 @@
-<!-- START OF FILE UI 构造器 v79.html -->
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <title>3Dmigoto UI 构造器 v79（增强版）</title>
-    <script src="./vendor/jszip.min.js"></script>
-    <style>
-        :root {
-            --bg-color: #08111d; --panel-bg: rgba(16, 24, 38, 0.78); --panel-strong: rgba(22, 34, 52, 0.96); --input-bg: rgba(8, 14, 24, 0.92);
-            --text-color: #ffffff; --muted-color: #c7d2e2; --border-color: rgba(124, 178, 255, 0.18); --accent-color: #72d2ff;
-            --accent-warm: #ffd27a; --group-color: #5df2c1; --canvas-bg: #050914; --grid-line: rgba(128, 174, 255, 0.10);
-            --shadow: rgba(0,0,0,0.55); --shadow-strong: rgba(0,0,0,0.75); --var-color: #ffbe5c;
-            --glow: rgba(114, 210, 255, 0.42); --glow-strong: rgba(114, 210, 255, 0.7);
-            --on-dark: #ffffff; --on-light: #000000; --accent-text: #001018; --group-text: #00120c;
-            --fixed-dark-bg: #253247; --fixed-dark-muted: #c7d2e2;
-            --ui-scale: 1.0; --base-font: 12px; --surface-radius: 14px;
-        }
-        body.light-mode {
-            --bg-color: #eaf1fb; --panel-bg: rgba(255,255,255,0.82); --panel-strong: rgba(255,255,255,0.96); --input-bg: rgba(255,255,255,0.96);
-            --text-color: #000000; --muted-color: #46515f; --border-color: rgba(72, 117, 166, 0.18); --accent-color: #0b6fc2;
-            --accent-warm: #d97706; --group-color: #0b7a4b; --canvas-bg: #f6fbff; --grid-line: rgba(72, 117, 166, 0.12);
-            --shadow: rgba(39, 71, 112, 0.12); --shadow-strong: rgba(39, 71, 112, 0.18); --var-color: #c55a15;
-            --glow: rgba(11, 123, 220, 0.22); --glow-strong: rgba(11, 123, 220, 0.34);
-            --accent-text: #ffffff; --group-text: #ffffff;
-        }
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            color-scheme: dark;
-            background:
-                radial-gradient(circle at top left, rgba(114,210,255,0.14), transparent 32%),
-                radial-gradient(circle at bottom right, rgba(93,242,193,0.10), transparent 26%),
-                var(--bg-color);
-            color: var(--text-color); margin: 0; height: 100vh; display: flex; overflow: hidden; transition: 0.35s;
-        }
-        body.light-mode { color-scheme: light; }
-        
-        .sidebar { 
-            width: min(520px, 62vw); min-width: 360px; max-width: 78vw;
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.08), transparent 18%),
-                var(--panel-bg); border-right: 1px solid var(--border-color); padding: 10px; 
-            display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; z-index: 50; 
-            box-shadow: 8px 0 30px var(--shadow-strong); resize: horizontal;
-            backdrop-filter: blur(18px) saturate(140%);
-            -webkit-backdrop-filter: blur(18px) saturate(140%);
-            font-size: calc(var(--base-font) * var(--ui-scale));
-            box-sizing: border-box;
-        }
-        .sidebar,
-        .hierarchy-sidebar,
-        .viewport {
-            min-width: 0;
-            min-height: 0;
-        }
-        .sidebar.with-anim {
-            width: min(760px, 78vw);
-            max-width: 78vw;
-        }
-        .sidebar > * { flex-shrink: 0; }
-        .sidebar-top {
-            display: flex;
-            gap: 12px;
-            align-items: flex-start;
-            width: 100%;
-            min-width: 0;
-        }
-        .menu-column {
-            flex: 1 1 auto;
-            min-width: 0;
-            max-width: none;
-            min-height: 0;
-        }
-        .sidebar.with-anim .menu-column {
-            flex: 0 0 360px;
-            min-width: 300px;
-            max-width: 360px;
-        }
-        .menu-column > .panel:last-child {
-            margin-bottom: 0;
-        }
-        .anim-column {
-            flex: 0 0 360px;
-            min-width: 300px;
-            max-width: 360px;
-            display: none;
-            min-height: 0;
-        }
-        .sidebar.with-anim .anim-column {
-            display: block;
-        }
-        .component-panel-wrap {
-            display: none;
-            width: 100%;
-            margin-top: 12px;
-            min-width: 0;
-        }
-        .hierarchy-sidebar {
-            width: min(320px, 24vw);
-            min-width: 260px;
-            max-width: 420px;
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.08), transparent 18%),
-                var(--panel-bg);
-            border-left: 1px solid var(--border-color);
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            overflow-x: hidden;
-            z-index: 40;
-            box-shadow: -8px 0 30px var(--shadow-strong);
-            backdrop-filter: blur(18px) saturate(140%);
-            -webkit-backdrop-filter: blur(18px) saturate(140%);
-            font-size: calc(var(--base-font) * var(--ui-scale));
-            box-sizing: border-box;
-        }
-        .hierarchy-sidebar .panel {
-            flex: 1 1 auto;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            margin-bottom: 0;
-        }
-        .hierarchy-sidebar .panel h4 {
-            flex: 0 0 auto;
-        }
-        .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px; flex-wrap: wrap; gap: 5px; }
-        .header-row h2 { margin: 0; font-size: 1.4em; color: var(--accent-color); text-shadow: 0 0 18px var(--glow); }
-        .scale-control { display: flex; align-items: center; gap: 5px; width: 100%; margin-top: 5px; font-size: 0.9em; color: var(--muted-color); }
-        .scale-control input { flex: 1; cursor: pointer; }
+// @ts-nocheck
+/* ═══════════════════════════════════════════════════════════════
+   UI 构造器引擎 — 由 public/ui-builder-v79.html 内嵌脚本机械移植而来。
 
-        .panel { background:
-                linear-gradient(180deg, rgba(255,255,255,0.08), transparent 22%),
-                var(--panel-strong); padding: 0.8em; border-radius: var(--surface-radius); margin-bottom: 10px; border: 1px solid var(--border-color); box-shadow: 0 12px 30px var(--shadow); position: relative; overflow: hidden; }
-        .panel::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent 26%, transparent 70%, rgba(114,210,255,0.08)); }
-        .panel h4 { margin: 0 0 0.8em 0; font-size: 0.9em; color: var(--muted-color); text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
-        .fold-block { margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 12px; background: rgba(0,0,0,0.16); overflow: hidden; box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
-        .fold-block summary { cursor: pointer; list-style: none; padding: 6px 8px; color: var(--accent-color); font-weight: bold; user-select: none; }
-        .fold-block summary::-webkit-details-marker { display: none; }
-        .fold-body { font-size: 0.75em; color: var(--muted-color); padding: 0 8px 8px 8px; line-height: 1.6; }
-        .fold-body.controls-body { font-size: 1em; color: var(--text-color); }
-        .fold-body, .panel, .input-row, .var-list, .seq-list { min-width: 0; }
-        button { width: 100%; background:
-                linear-gradient(180deg, rgba(255,255,255,0.08), transparent 30%),
-                var(--panel-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.6em; margin-bottom: 5px; cursor: pointer; text-align: left; border-radius: 12px; font-size: 1em; transition: 0.22s ease; display: flex; align-items: center; gap: 8px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
-        button:hover { border-color: var(--accent-color); transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(114,210,255,0.18), 0 10px 22px rgba(0,0,0,0.18); }
-        button { white-space: normal; word-break: break-word; }
-        button:active { transform: translateY(0); }
-        button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
-        button:disabled:hover { border-color: var(--border-color); transform: none; box-shadow: none; }
-        button.primary { background: linear-gradient(180deg, rgba(255,255,255,0.16), transparent), var(--accent-color); color: var(--accent-text); border: none; font-weight: bold; justify-content: center; padding: 0.8em; margin-top: 10px; box-shadow: 0 0 20px var(--glow); }
-        button.group-btn { background: linear-gradient(180deg, rgba(255,255,255,0.16), transparent), var(--group-color); color: var(--group-text); border: none; font-weight: bold; justify-content: center; }
-        button.danger { background: linear-gradient(180deg, rgba(255,255,255,0.10), transparent), #8b0000; border-color: #a00; color: #fff; justify-content: center; }
-        button.copy-btn { background: linear-gradient(180deg, rgba(255,255,255,0.14), transparent), #8a2be2; color: #fff; border: none; font-weight: bold; justify-content: center; margin-bottom: 10px; }
-        button.file-btn { background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent), #2f3b50; color: var(--on-dark); justify-content: center; font-weight: bold; }
-        button.add-var-btn { background: linear-gradient(180deg, rgba(255,255,255,0.12), transparent), #27ae60; color: var(--on-light); justify-content: center; font-size: 0.9em; padding: 4px; }
+   - 原引擎为单文件 iframe 页面;移植后由 UIBuilderApp.vue 在挂载时
+     调用 createUIBuilderEngine(root) 注入,内部 DOM 绑定以挂载后的
+     根节点为准。
+   - 原页面内联 onclick/onchange 等处理器依赖全局作用域;移植后统一
+     挂到 window.UIB 命名空间(事件属性已做前缀转换)。
+   - postMessage 宿主桥替换为 hostBridge.ts 直连工作空间保存。
+   - alert/confirm/prompt 由 dialogs.ts 全局替换为自绘制弹窗
+     (confirm/prompt 调用点已改为异步)。
+   - 新增 __onWindow/__onDocument 注册表,供 destroy() 清理。
+   ═══════════════════════════════════════════════════════════════ */
+import { createDirectSsmHostBridge } from './hostBridge'
 
-        .input-group { margin-bottom: 0.8em; border-top: 1px dashed var(--border-color); padding-top: 0.8em; }
-        
-        .input-row { display: flex; gap: 0.5em; margin-bottom: 0.5em; align-items: center; justify-content: space-between; }
-        .input-row label { flex: 0 0 7em; font-size: 0.9em; color: var(--muted-color); text-align: right; }
-        .input-row input[type="text"], .input-row input[type="number"], .input-row select { flex: 1; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-color); padding: 0.5em 0.55em; font-family: monospace; font-size: 0.95em; min-width: 0; border-radius: 10px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.22); }
-        .input-row textarea { flex: 1; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--accent-color); padding: 0.6em; font-family: monospace; font-size: 0.95em; min-height: 4em; resize: vertical; border-radius: 12px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.22); }
-        .input-row .checkbox-wrapper { flex: 1; display: flex; align-items: center; }
-        .input-row input[type="checkbox"] { width: 1.2em; height: 1.2em; cursor: pointer; margin: 0; appearance: auto; accent-color: var(--accent-color); }
-        .input-row > * { min-width: 0; }
-        .shortcut-settings { margin-top: 8px; }
-        .shortcut-settings .input-row label { flex-basis: 8.5em; }
-        .shortcut-settings input[aria-invalid="true"] { border-color: #ff6b6b; box-shadow: 0 0 0 1px rgba(255,107,107,0.3); }
-        .shortcut-status { min-height: 1.5em; margin: 2px 0 6px; color: var(--muted-color); font-size: 0.82em; }
-        .shortcut-status.error { color: #ff8f8f; }
-        
-        .pinned-row { display: flex; align-items: center; background: linear-gradient(180deg, rgba(0, 255, 255, 0.10), rgba(0, 255, 255, 0.04)); padding: 0.6em; border: 1px solid rgba(0,204,204,0.45); border-radius: 12px; margin-bottom: 5px; justify-content: space-between; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);}
-        .pinned-row div { display: flex; align-items: center; }
-        .pinned-row input { width: 1.5em; height: 1.5em; cursor: pointer; margin-right: 10px; accent-color: #00ffff; }
-        .pinned-row span.lbl { font-size: 1em; font-weight: bold; color: var(--text-color); }
-        
-        .phys-row { display: flex; align-items: center; background: linear-gradient(180deg, rgba(0, 255, 0, 0.10), rgba(0, 255, 0, 0.04)); padding: 0.6em; border: 1px solid rgba(0,102,0,0.55); border-radius: 12px; margin-bottom: 5px; justify-content: space-between; }
-        .phys-row div { display: flex; align-items: center; }
-        .phys-row input { width: 1.5em; height: 1.5em; cursor: pointer; margin-right: 10px; accent-color: #00ff00; }
-        .phys-row span.lbl { font-size: 1em; font-weight: bold; color: var(--text-color); }
+export function createUIBuilderEngine(root: HTMLElement) {
+  const __windowListeners: Array<[string, EventListenerOrEventListenerObject, boolean | AddEventListenerOptions | undefined]> = []
+  const __documentListeners: Array<[string, EventListenerOrEventListenerObject, boolean | AddEventListenerOptions | undefined]> = []
+  const __onWindow = (type: string, fn: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
+    window.addEventListener(type, fn, opts)
+    __windowListeners.push([type, fn, opts])
+  }
+  const __onDocument = (type: string, fn: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
+    document.addEventListener(type, fn, opts)
+    __documentListeners.push([type, fn, opts])
+  }
 
-        .bind-row { display: flex; align-items: center; background: linear-gradient(180deg, rgba(155, 89, 182, 0.10), rgba(155, 89, 182, 0.04)); padding: 0.6em; border: 1px solid rgba(155,89,182,0.55); border-radius: 12px; margin-bottom: 5px; justify-content: space-between; }
-        .bind-row div { display: flex; align-items: center; }
-        .bind-row input { width: 1.5em; height: 1.5em; cursor: pointer; margin-right: 10px; accent-color: #9b59b6; }
-        .bind-row span.lbl { font-size: 1em; font-weight: bold; color: var(--text-color); }
-        
-        .var-tag { font-family: Consolas, monospace; font-size: 0.85em; background: var(--fixed-dark-bg); color: var(--on-dark); padding: 2px 5px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 0 16px rgba(114,210,255,0.08); }
-
-        .var-list { display: flex; flex-direction: column; gap: 3px; background: rgba(255, 165, 0, 0.05); padding: 5px; border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 12px; }
-        .var-item { display: flex; align-items: center; gap: 5px; }
-        .var-item button { width: 25px; height: 25px; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; background: #c0392b; border: none; color: white; flex-shrink: 0; }
-        .var-label { font-size: 0.85em; color: var(--var-color); width: 60px; text-align: right; font-weight: bold; }
-        .var-input { color: var(--var-color) !important; font-weight: bold; border-color: var(--var-color) !important; flex: 1; }
-
-        .res-row { display: grid; grid-template-columns: 4.4em 52px minmax(0, 1fr) 64px auto; align-items: center; margin-bottom: 8px; gap: 6px; }
-        .res-row.resource-drop-target { padding: 4px; margin: -4px -4px 4px; border: 1px dashed transparent; border-radius: 8px; transition: border-color 0.14s ease, background 0.14s ease; }
-        .res-row.resource-drop-target.drag-over { border-color: var(--accent-color); background: rgba(114,210,255,0.10); }
-        .res-label { width: auto; font-size: 0.85em; color: var(--muted-color); }
-        .res-preview { width: 52px; height: 52px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.22) center/cover no-repeat; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
-        .res-preview.empty { display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--muted-color); background: rgba(255,255,255,0.04); }
-        .res-path { min-width: 0; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--accent-color); font-family: monospace; font-size: 0.85em; padding: 3px; border-radius: 10px; }
-        .res-alpha { width: 64px; text-align: center; background: var(--input-bg); border: 1px solid var(--border-color); color: #ffd879; font-size: 0.85em; padding: 3px; border-radius: 10px; }
-        .res-upload { width: auto; min-width: 3.6em; font-size: 0.85em; padding: 0.45em 0.6em; text-align: center; cursor: pointer; background: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 10px; justify-content: center; margin: 0; }
-        .resource-window-scope { margin-bottom: 8px; color: var(--muted-color); font-size: 0.82em; line-height: 1.5; }
-        .resource-window-scope strong { color: var(--accent-color); }
-        .resource-global-list { display: flex; flex-direction: column; gap: 7px; }
-        .resource-global-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-color); }
-        .resource-global-row:last-child { border-bottom: 0; }
-        .resource-global-path { display: block; overflow-wrap: anywhere; color: var(--accent-color); font-family: monospace; font-size: 0.86em; }
-        .resource-global-meta { margin-top: 4px; color: var(--muted-color); font-size: 0.76em; line-height: 1.45; }
-        .hierarchy-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
-        .hierarchy-actions button { justify-content: center; margin: 0; }
-
-        /* Sequence List Styles */
-        .seq-list { display: flex; flex-direction: column; gap: 5px; background: rgba(0, 0, 0, 0.2); padding: 5px; border: 1px solid #444; border-radius: 12px; max-height: 200px; overflow-y: auto; }
-        .seq-item { display: grid; grid-template-columns: 52px auto 48px minmax(0, 1fr) auto auto; align-items: center; gap: 5px; background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent), #2a2a2a; color: var(--on-dark); padding: 5px; border-radius: 10px; }
-        .seq-thumb { width: 52px; height: 52px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.24) center/cover no-repeat; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
-        .seq-thumb.empty { display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--fixed-dark-muted); }
-        .seq-val-input { width: 48px !important; text-align: center; color: #0f0 !important; font-weight: bold; }
-        .seq-item .res-path { width: 100%; min-width: 0; }
-        .seq-item .res-upload, .seq-item .seq-del-btn { margin: 0; justify-content: center; }
-        .seq-del-btn { width: 25px; height: 25px; background: #c42b1c; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
-
-        .viewport { flex: 1 1 auto; background: radial-gradient(circle at 50% 20%, rgba(114,210,255,0.08), transparent 35%), var(--canvas-bg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
-        #workArea { 
-            width: 1280px; height: 720px; background: var(--input-bg); position: relative; 
-            border: 1px solid rgba(114,210,255,0.18); border-radius: 18px; overflow: hidden;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 18px 65px rgba(0,0,0,0.48);
-            background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px), radial-gradient(circle at top, rgba(114,210,255,0.08), transparent 42%);
-            transform-origin: center;
-            transition: width 0.3s, height 0.3s;
-        }
-
-        .node { position: absolute; box-sizing: border-box; cursor: grab; user-select: none; transform-origin: center; border-radius: 14px; overflow: hidden; will-change: transform, box-shadow, filter; }
-        .node:active { cursor: grabbing; }
-        .node.selected { outline: 2px solid var(--accent-color); box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 18px var(--glow-strong); }
-        .node.selected-multi { outline: 2px dashed #888; }
-        .group-node { position:absolute; box-sizing:border-box; border:1px dashed rgba(93,242,193,0.55); border-radius:18px; pointer-events:auto; box-shadow: inset 0 0 0 1px rgba(93,242,193,0.14); background:rgba(93,242,193,0.02); }
-        .group-node.selected { border-color: var(--accent-color); box-shadow: inset 0 0 0 1px rgba(114,210,255,0.36), 0 0 0 1px rgba(114,210,255,0.2); }
-        .group-node.selected-multi { border-style:dashed; border-color:#9ab8ff; }
-        .group-node-badge { position:absolute; top:-14px; left:8px; z-index:6; pointer-events:auto; cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:999px; background:rgba(7,18,28,0.96); color:#d7fff4; border:1px solid rgba(93,242,193,0.42); font-size:11px; box-shadow:0 8px 18px rgba(0,0,0,0.28); white-space:nowrap; }
-        .group-node-badge strong { color:#ffffff; font-weight:600; }
-        .hierarchy-panel { display:flex; flex:1 1 auto; flex-direction:column; gap:4px; min-height:0; max-height:none; overflow:auto; }
-        .hierarchy-item { border-radius:10px; }
-        .hierarchy-item.selected { background:rgba(114,210,255,0.12); }
-        .hierarchy-row { width:100%; display:flex; align-items:center; gap:6px; padding:6px 8px; background:transparent; border:none; color:inherit; cursor:pointer; text-align:left; }
-        .hierarchy-fold { display:inline-flex; width:16px; justify-content:center; color:var(--accent-color); cursor:pointer; user-select:none; flex:0 0 auto; font-size:0.9em; }
-        .hierarchy-row.dragging { opacity:0.5; }
-        .hierarchy-row.drag-over { outline:2px dashed var(--accent-color); outline-offset:-2px; background:rgba(93,242,193,0.12); }
-        .hierarchy-panel.drop-root { outline:2px dashed var(--accent-color); outline-offset:-2px; border-radius:6px; }
-        .hierarchy-sidebar { position:relative; flex-shrink:0; }
-        .hierarchy-resizer { position:absolute; left:0; top:0; bottom:0; width:7px; cursor:ew-resize; z-index:60; }
-        .hierarchy-resizer:hover, .hierarchy-resizer.active { background:rgba(93,242,193,0.25); }
-        .hierarchy-badge { font-size:10px; line-height:1; padding:2px 6px; border-radius:999px; background:rgba(93,242,193,0.16); color:var(--group-color); border:1px solid rgba(93,242,193,0.28); }
-        .hierarchy-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .hierarchy-help { margin-top:10px; color:var(--muted-color); font-size:0.82em; line-height:1.55; }
-        
-        .mod-node { 
-            background: rgba(40,40,40,0.85); 
-            border: 1px solid rgba(255,255,255,0.2); 
-            display: flex; justify-content: center; align-items: center;
-            background-size: 100% 100% !important;
-        }
-        .mod-node:hover { border-color: #fff; background-color: rgba(60,60,60,0.9); }
-        .mod-node.grouped { border: 2px solid var(--group-color); }
-        .mod-node.grouped::after { content: 'GRP'; position: absolute; top: -15px; right: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
-        .mod-node.pinned { border: 2px solid #0ff; }
-        .mod-node.pinned::before { content: 'PIN'; position: absolute; top: -15px; left: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
-        
-        .mod-node.text-mode { overflow: hidden; justify-content: flex-start; }
-        .char-item { box-sizing: border-box; display: flex; align-items: center; justify-content: center; line-height: 1; position: absolute; overflow: hidden; }
-
-        .vis-label { position: absolute; top: -18px; left: 0; background: var(--var-color); color: #000; font-size: 9px; padding: 2px 4px; border-radius: 2px; white-space: nowrap; pointer-events: none; opacity: 1.0; font-weight: bold; }
-        
-        .track, .bar-bg, .bar-fill { pointer-events: none; position: absolute; }
-        .handle { position: absolute; cursor: grab; }
-        .handle:active { cursor: grabbing; }
-        
-        .track { background: #333; border-radius: 2px; }
-        .bar-bg { background: #1976d2; opacity: 0.9; background-size: 100% 100% !important; } 
-        .bar-fill { background: #d32f2f; opacity: 0.9; background-size: 100% 100% !important; z-index: 5; } 
-        .handle { background: #eee; box-shadow: 0 0 2px #000; border-radius: 2px; background-size: 100% 100% !important; z-index: 10; }
-
-        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 20000; justify-content: center; align-items: center; }
-        #modal-content { width: 85%; height: 85%; background: var(--panel-bg); border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 10px; }
-        textarea.code-out { flex: 1; background: var(--input-bg); color: var(--accent-color); border: none; padding: 15px; font-family: Consolas, monospace; resize: none; font-size: 12px; }
-        .close-btn { align-self: flex-end; background: #c42b1c; border: none; color: white; padding: 5px 15px; cursor: pointer; margin-bottom: 5px; }
-
-        .viewport { background: radial-gradient(circle at 50% 20%, rgba(114,210,255,0.08), transparent 35%), var(--canvas-bg); }
-        #workArea {
-            border: 1px solid rgba(114,210,255,0.18) !important;
-            border-radius: 18px !important;
-            overflow: hidden;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 18px 65px rgba(0,0,0,0.48) !important;
-            background-image:
-                linear-gradient(var(--grid-line) 1px, transparent 1px),
-                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-                radial-gradient(circle at top, rgba(114,210,255,0.08), transparent 42%) !important;
-        }
-        #workArea::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            opacity: 0;
-            border-radius: inherit;
-            transition: opacity 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
-        }
-        #workArea[data-dock-edge]::after {
-            opacity: 1;
-        }
-        #workArea[data-dock-edge="left"]::after {
-            background: linear-gradient(90deg, rgba(114,210,255,0.34), rgba(114,210,255,0.10) 22%, transparent 40%);
-            box-shadow: inset 6px 0 0 rgba(114,210,255,0.92), inset 18px 0 28px rgba(114,210,255,0.16);
-        }
-        #workArea[data-dock-edge="right"]::after {
-            background: linear-gradient(270deg, rgba(114,210,255,0.34), rgba(114,210,255,0.10) 22%, transparent 40%);
-            box-shadow: inset -6px 0 0 rgba(114,210,255,0.92), inset -18px 0 28px rgba(114,210,255,0.16);
-        }
-        #workArea[data-dock-edge="top"]::after {
-            background: linear-gradient(180deg, rgba(114,210,255,0.34), rgba(114,210,255,0.10) 22%, transparent 40%);
-            box-shadow: inset 0 6px 0 rgba(114,210,255,0.92), inset 0 18px 28px rgba(114,210,255,0.16);
-        }
-        #workArea[data-dock-edge="bottom"]::after {
-            background: linear-gradient(0deg, rgba(114,210,255,0.34), rgba(114,210,255,0.10) 22%, transparent 40%);
-            box-shadow: inset 0 -6px 0 rgba(114,210,255,0.92), inset 0 -18px 28px rgba(114,210,255,0.16);
-        }
-        @media (max-width: 1360px) {
-            .sidebar {
-                width: min(460px, 36vw);
-                min-width: 320px;
-            }
-            .sidebar.with-anim {
-                width: min(700px, 56vw);
-            }
-            .hierarchy-sidebar {
-                width: min(280px, 22vw);
-                min-width: 220px;
-            }
-        }
-        .node {
-            border-radius: 14px;
-            overflow: hidden;
-            will-change: transform, box-shadow, filter;
-        }
-        .node.selected {
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 18px var(--glow-strong) !important;
-        }
-        .mod-node {
-            background:
-                linear-gradient(135deg, rgba(255,255,255,0.10), transparent 20%),
-                linear-gradient(180deg, rgba(255,255,255,0.04), transparent 26%),
-                rgba(18, 25, 38, 0.88) !important;
-            border: 1px solid rgba(255,255,255,0.18) !important;
-            box-shadow:
-                inset 0 1px 0 rgba(255,255,255,0.08),
-                inset 0 -1px 0 rgba(0,0,0,0.22),
-                0 10px 22px rgba(0,0,0,0.24) !important;
-            transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, border-color 0.18s ease;
-        }
-        .mod-node:hover {
-            border-color: rgba(255,255,255,0.36) !important;
-            filter: brightness(1.06) saturate(1.08);
-        }
-        .mod-node::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            background: linear-gradient(120deg, transparent 18%, rgba(255,255,255,0.18) 35%, transparent 52%);
-            transform: translateX(-130%);
-            opacity: 0;
-        }
-        .mod-node:hover::after { opacity: 1; animation: sweep-glow 16s ease infinite; }
-        .mod-node.grouped {
-            border: 1px solid var(--group-color) !important;
-            box-shadow: 0 0 0 1px rgba(93,242,193,0.12), 0 0 20px rgba(93,242,193,0.12) !important;
-        }
-        .mod-node.grouped::after { content: 'GRP'; position: absolute; top: 6px; right: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; opacity: 0.9; }
-        .mod-node.pinned {
-            border: 1px solid #59f0ff !important;
-            box-shadow: 0 0 0 1px rgba(89,240,255,0.12), 0 0 20px rgba(89,240,255,0.16) !important;
-        }
-        .mod-node.pinned::before { content: 'PIN'; position: absolute; top: 6px; left: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; opacity: 0.9; }
-        .mod-node.text-mode { backdrop-filter: blur(6px); }
-        .char-item { text-shadow: 0 0 10px rgba(255,255,255,0.08); }
-        .mod-node.text-mode.text-hover-enabled:hover {
-            --text-hover-scale: 1.08;
-            border-color: rgba(126, 226, 255, 0.92) !important;
-            box-shadow: 0 0 0 1px rgba(126,226,255,0.52), 0 0 22px rgba(72,190,255,0.48), inset 0 0 16px rgba(170,238,255,0.13) !important;
-            filter: brightness(1.12) saturate(1.12);
-        }
-        .vis-label {
-            top: 8px !important;
-            left: 8px !important;
-            background: rgba(0,0,0,0.35) !important;
-            color: #fff !important;
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 999px !important;
-            padding: 2px 6px !important;
-            backdrop-filter: blur(8px);
-        }
-        .track {
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.10), transparent 28%),
-                rgba(36, 52, 74, 0.92) !important;
-            border-radius: 999px !important;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), inset 0 -6px 14px rgba(0,0,0,0.28) !important;
-        }
-        .bar-bg {
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.16), transparent 20%),
-                linear-gradient(90deg, rgba(114,210,255,0.35), rgba(114,210,255,0.08)) !important;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 0 14px rgba(114,210,255,0.12) !important;
-            border-radius: inherit !important;
-        }
-        .bar-fill {
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.18), transparent 20%),
-                linear-gradient(90deg, rgba(255,210,122,0.95), rgba(255,114,162,0.9)) !important;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10), 0 0 18px rgba(255,190,92,0.16) !important;
-            border-radius: inherit !important;
-        }
-        .handle {
-            background:
-                radial-gradient(circle at 30% 25%, rgba(255,255,255,0.95), rgba(255,255,255,0.18) 22%, transparent 35%),
-                linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02)),
-                rgba(233, 241, 255, 0.94) !important;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.18), 0 0 18px rgba(255,255,255,0.18), inset 0 0 0 1px rgba(0,0,0,0.08) !important;
-            border-radius: 999px !important;
-        }
-        @keyframes sweep-glow { 0% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
-        @keyframes breathe { 0%, 100% { filter: brightness(1) saturate(1); } 50% { filter: brightness(1.08) saturate(1.1); } }
-        .mod-node[data-animated="1"] { animation: none; }
-        .node-shell {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
-            background:
-                radial-gradient(circle at 30% 20%, var(--node-accent, rgba(114,210,255,0.28)), transparent 38%),
-                radial-gradient(circle at 70% 110%, rgba(255,255,255,0.10), transparent 36%);
-            opacity: 0.65;
-        }
-        .node-sheen {
-            position: absolute;
-            inset: -25% -20%;
-            z-index: 1;
-            pointer-events: none;
-            background:
-                linear-gradient(125deg, transparent 20%, rgba(255,255,255,0.16) 35%, transparent 50%),
-                linear-gradient(180deg, rgba(255,255,255,0.04), transparent 30%);
-            transform: translateX(-35%) rotate(10deg);
-            opacity: 0.35;
-            animation: none;
-        }
-        .node-content { position: absolute; inset: 0; z-index: 2; }
-        .text-layout {
-            position: absolute;
-            inset: 0;
-            z-index: 2;
-            overflow: hidden;
-            pointer-events: none;
-        }
-        .component-bg, .component-surface {
-            position: absolute;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-size: 100% 100%;
-        }
-        .component-bg {
-            inset: 0;
-            border-radius: inherit;
-            overflow: hidden;
-            z-index: 0;
-        }
-        .component-surface.placeholder {
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            color:var(--fixed-dark-muted);
-            font-size:11px;
-            background:rgba(255,255,255,0.05);
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
-        }
-        .mod-node .vis-label { z-index: 4; }
-        .anim-note {
-            font-size: 0.76em;
-            line-height: 1.55;
-            color: var(--muted-color);
-            padding: 6px 8px;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid var(--border-color);
-        }
-        .anim-note strong { color: var(--accent-color); }
-        #propPanel {
-            width: 100%;
-            box-sizing: border-box;
-        }
-        #animPanel {
-            width: 100%;
-            box-sizing: border-box;
-        }
-        #animPanel .anim-local-block {
-            margin-top: 10px;
-            border-top: 1px dashed var(--border-color);
-            padding-top: 10px;
-        }
-
-        /* Compact windowed workspace: the canvas stays central while tools float independently. */
-        .sidebar {
-            width: 62px;
-            min-width: 62px;
-            max-width: 62px;
-            padding: 8px;
-            overflow: visible;
-            z-index: 120;
-            background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent 22%), var(--panel-bg);
-        }
-        .sidebar.with-anim { width: 62px; max-width: 62px; }
-        .sidebar-top { display: contents; }
-        .menu-column,
-        .sidebar.with-anim .menu-column {
-            position: fixed;
-            left: 74px;
-            top: 12px;
-            width: min(390px, calc(100vw - 150px));
-            max-width: calc(100vw - 150px);
-            max-height: calc(100vh - 24px);
-            overflow: auto;
-            padding: 10px;
-            box-sizing: border-box;
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 14px;
-            box-shadow: 12px 18px 42px var(--shadow-strong);
-            backdrop-filter: blur(18px) saturate(140%);
-            -webkit-backdrop-filter: blur(18px) saturate(140%);
-            z-index: 220;
-        }
-        .anim-column {
-            position: fixed;
-            left: 74px;
-            top: 12px;
-            width: min(390px, calc(100vw - 150px));
-            max-width: calc(100vw - 150px);
-            max-height: calc(100vh - 24px);
-            overflow: auto;
-            padding: 10px;
-            box-sizing: border-box;
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 14px;
-            box-shadow: 12px 18px 42px var(--shadow-strong);
-            z-index: 230;
-        }
-        .component-panel-wrap {
-            position: fixed;
-            left: 74px;
-            top: 12px;
-            width: min(430px, calc(100vw - 150px));
-            max-width: calc(100vw - 150px);
-            max-height: calc(100vh - 24px);
-            overflow: auto;
-            margin-top: 0;
-            padding: 10px;
-            box-sizing: border-box;
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 14px;
-            box-shadow: 12px 18px 42px var(--shadow-strong);
-            z-index: 240;
-        }
-        .resource-window {
-            position: fixed;
-            left: 74px;
-            top: 12px;
-            width: min(460px, calc(100vw - 150px));
-            max-width: calc(100vw - 150px);
-            max-height: calc(100vh - 24px);
-            overflow: auto;
-            padding: 10px;
-            box-sizing: border-box;
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 14px;
-            box-shadow: 12px 18px 42px var(--shadow-strong);
-            backdrop-filter: blur(18px) saturate(140%);
-            -webkit-backdrop-filter: blur(18px) saturate(140%);
-            z-index: 250;
-        }
-        .tool-window-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            min-height: 30px;
-            margin: -2px -2px 8px;
-            padding: 2px 4px 8px;
-            border-bottom: 1px solid var(--border-color);
-            color: var(--accent-color);
-            font-weight: 700;
-            cursor: move;
-            user-select: none;
-        }
-        .tool-window-bar button {
-            width: 28px;
-            min-height: 28px;
-            padding: 0;
-            margin: 0;
-            justify-content: center;
-            text-align: center;
-            border-radius: 7px;
-            font-size: 16px;
-            line-height: 1;
-        }
-        .window-dock {
-            position: fixed;
-            left: 8px;
-            top: 10px;
-            bottom: 10px;
-            width: 46px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            z-index: 1000;
-        }
-        .window-dock button {
-            width: 46px;
-            min-height: 40px;
-            padding: 5px 2px;
-            margin: 0;
-            justify-content: center;
-            text-align: center;
-            line-height: 1.15;
-            font-size: 11px;
-            border-radius: 9px;
-        }
-        .window-dock button.is-open {
-            border-color: var(--accent-color);
-            color: var(--accent-color);
-            box-shadow: 0 0 0 1px rgba(114,210,255,0.22), 0 0 16px rgba(114,210,255,0.18);
-        }
-        .window-dock .dock-command {
-            color: var(--accent-warm);
-            border-color: rgba(255,210,122,0.42);
-        }
-        .window-dock .dock-command.first { margin-top: 8px; }
-        .window-dock .dock-theme { margin-top: auto; }
-        .tool-window-dragging { user-select: none; }
-        .text-logic-window {
-            position: fixed; left: 74px; top: 12px; width: min(440px, calc(100vw - 150px));
-            max-width: calc(100vw - 150px); max-height: calc(100vh - 24px); overflow: auto;
-            padding: 10px; box-sizing: border-box; background: var(--panel-bg);
-            border: 1px solid rgba(255,174,94,0.5); border-radius: 8px;
-            box-shadow: 12px 18px 42px var(--shadow-strong); z-index: 255;
-        }
-        .text-logic-window .panel { border-color: rgba(255,174,94,0.38); }
-        .workspace-mode-bar {
-            position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 180;
-            display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border-color);
-            background: var(--panel-strong); box-shadow: 0 8px 24px var(--shadow); border-radius: 8px;
-        }
-        .workspace-mode-bar button { width: auto; min-width: 72px; margin: 0; justify-content: center; border-radius: 6px; }
-        .workspace-mode-bar button.active { background: var(--accent-color); color: var(--accent-text); }
-        .blueprint-workspace {
-            position: absolute; inset: 0; z-index: 60; overflow: hidden; display: none;
-            background-color: var(--canvas-bg);
-            background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-            background-size: 24px 24px;
-        }
-        .blueprint-toolbar { position:absolute; left:12px; top:58px; right:12px; z-index:4; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-        .blueprint-toolbar button, .blueprint-toolbar select { width:auto; margin:0; min-height:32px; }
-        .blueprint-breadcrumb { color:var(--accent-color); font-weight:700; margin-right:auto; }
-        .blueprint-stage { position:absolute; inset:0; transform-origin:0 0; }
-        .bp-node { position:absolute; width:280px; min-height:96px; padding:8px; box-sizing:border-box; border:1px solid var(--border-color); border-radius:7px; background:var(--panel-strong); box-shadow:0 8px 22px var(--shadow); z-index:2; }
-        .bp-node.selected { border-color:var(--accent-color); box-shadow:0 0 0 2px var(--glow); }
-        .bp-node-title { display:flex; align-items:center; justify-content:space-between; gap:6px; font-weight:700; color:var(--accent-color); margin-bottom:6px; cursor:move; user-select:none; }
-        .bp-node-body { font-size:11px; color:var(--muted-color); line-height:1.45; word-break:break-word; }
-        .bp-node-editor { display:flex; flex-direction:column; gap:5px; }
-        .bp-field { display:grid; grid-template-columns:72px minmax(0,1fr) auto; gap:5px; align-items:center; }
-        .bp-field label { color:var(--muted-color); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .bp-field input, .bp-field select { width:100%; min-width:0; box-sizing:border-box; padding:4px 5px; background:var(--input-bg); color:var(--text-color); border:1px solid var(--border-color); border-radius:5px; }
-        .bp-mini-button { width:26px; height:26px; min-height:26px; margin:0; padding:0; justify-content:center; border-radius:5px; }
-        .bp-add-button { width:auto; min-height:28px; padding:4px 7px; margin:1px 0 0; justify-content:center; }
-        .bp-port { width:14px; height:14px; border-radius:50%; border:2px solid var(--panel-strong); background:var(--accent-color); position:absolute; cursor:crosshair; z-index:5; }
-        .bp-port.in { left:-8px; } .bp-port.out { right:-8px; background:var(--group-color); }
-        .bp-port-label { position:absolute; max-width:110px; overflow:hidden; text-overflow:ellipsis; font-size:10px; line-height:14px; color:var(--muted-color); pointer-events:none; white-space:nowrap; background:var(--panel-strong); padding:0 3px; border-radius:3px; }
-        .bp-port-label.in { left:-12px; transform:translateX(-100%); text-align:right; }
-        .bp-port-label.out { right:-12px; transform:translateX(100%); text-align:left; }
-        .bp-node-ports { position:absolute; inset:0; pointer-events:none; }
-        .bp-node-ports .bp-port { pointer-events:auto; }
-        .bp-edges { position:absolute; inset:0; z-index:1; overflow:visible; pointer-events:none; }
-        .bp-edge { fill:none; stroke:var(--accent-color); stroke-width:2; opacity:.78; }
-        .bp-edge-preview { fill:none; stroke:var(--group-color); stroke-width:2; stroke-dasharray:7 5; }
-        .bp-edge-preview.cut { stroke:#ff6b6b; stroke-width:3; }
-        .bp-selection-marquee { position:absolute; z-index:20; display:none; border:1px solid var(--accent-color); background:rgba(114,210,255,0.13); pointer-events:none; box-sizing:border-box; }
-        .runtime-inspector { position:absolute; right:12px; top:58px; width:min(330px, calc(100% - 24px)); max-height:calc(100% - 72px); overflow:auto; z-index:80; display:none; padding:10px; box-sizing:border-box; background:var(--panel-strong); border:1px solid var(--border-color); border-radius:8px; box-shadow:0 12px 30px var(--shadow); }
-        .runtime-row { display:grid; grid-template-columns:minmax(0,1fr) 90px; gap:6px; align-items:center; margin-bottom:6px; }
-        .runtime-row input { width:100%; box-sizing:border-box; background:var(--input-bg); color:var(--var-color); border:1px solid var(--border-color); padding:5px; }
-        body.preview-running .group-node, body.preview-running .selection-box { display:none !important; }
-        body.preview-running #workArea .mod-node { cursor:pointer; }
-        .viewport {
-            box-sizing: border-box;
-            transition: padding-left 0.18s ease, padding-right 0.18s ease;
-        }
-        @media (max-width: 760px) {
-            .window-dock button { min-height: 34px; }
-            .workspace-mode-bar { top:auto; bottom:10px; left:70px; right:10px; transform:none; justify-content:center; z-index:1100; }
-            .workspace-mode-bar button { min-width:64px; }
-            .menu-column,
-            .sidebar.with-anim .menu-column,
-            .anim-column,
-            .component-panel-wrap,
-            .resource-window,
-            .text-logic-window {
-                left: 66px;
-                width: calc(100vw - 76px);
-                max-width: calc(100vw - 76px);
-            }
-            .hierarchy-sidebar { width: 240px; min-width: 220px; }
-        }
-    </style>
-</head>
-<body class="dark-mode">
-
-<div class="window-dock" id="windowDock" aria-label="工具窗口">
-    <button type="button" data-window="settings" aria-pressed="true" onclick="toggleToolWindow('settings')">设置</button>
-    <button type="button" data-window="animation" aria-pressed="false" onclick="toggleToolWindow('animation')">动画</button>
-    <button type="button" data-window="properties" aria-pressed="false" onclick="toggleToolWindow('properties')">属性</button>
-    <button type="button" data-window="hierarchy" aria-pressed="true" onclick="toggleToolWindow('hierarchy')">层级</button>
-    <button type="button" data-window="resources" aria-pressed="false" onclick="toggleToolWindow('resources')">资源</button>
-    <button type="button" data-window="textLogic" id="textLogicDockBtn" aria-pressed="false" onclick="toggleToolWindow('textLogic')" style="display:none;">文本</button>
-    <button type="button" class="dock-command first" id="generateIniDockBtn" onclick="generateINI()">生成<br>INI</button>
-    <button type="button" class="dock-command" id="generateAssetsDockBtn" onclick="generateAndDownloadAssets()">生成<br>资源</button>
-    <button type="button" class="dock-theme" onclick="toggleTheme()">主题</button>
-</div>
-
-<div class="sidebar">
-    <div class="sidebar-top">
-    <div class="menu-column" id="settingsWindow">
-        <div class="tool-window-bar" onmousedown="startToolWindowDrag(event, 'settingsWindow')">
-            <span>设置窗口</span>
-            <button type="button" title="关闭设置窗口" onclick="closeToolWindow('settings')">×</button>
-        </div>
-        <div class="header-row">
-            <h2>UI 构造器 v79</h2>
-            <div class="scale-control">
-                <label>UI 缩放:</label>
-                <input type="range" id="ui_scale_input" min="0.8" max="1.5" step="0.05" value="1.0" oninput="updateUIScale(this.value)">
-                <span id="ui_scale_val">100%</span>
-            </div>
-        </div>
-        
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:10px;">
-            <button class="file-btn" onclick="savePreset()">保存预设</button>
-            <button class="file-btn" onclick="document.getElementById('file_import').click()">导入预设</button>
-            <input type="file" id="file_import" style="display:none" onchange="loadPreset(this)" accept=".json">
-        </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:10px;">
-            <button class="file-btn" id="undo_btn" onclick="undoHistory()" disabled>撤销 (Ctrl+Z)</button>
-            <button class="file-btn" id="redo_btn" onclick="redoHistory()" disabled>重做 (Ctrl+Y)</button>
-        </div>
-
-        <div class="panel">
-            <h4>全局设置</h4>
-            <div class="input-row"><label>工作空间:</label><span id="ui_builder_workspace_name" style="flex:1;color:#0f0;font-weight:bold;">未连接</span></div>
-            <div class="input-row"><label>Hash:</label><input type="text" id="char_hash" value="c209c22b" style="color:#0f0;font-weight:bold;"></div>
-            <div class="input-row"><label>Match Index:</label><input type="text" id="match_index" placeholder="59679" style="color:#0f0;"></div>
-            <div class="input-row"><label>First Index:</label><input type="text" id="match_first_index" placeholder="0" style="color:#0f0;"></div>
-            <div class="input-row">
-                <label>屏幕宽高比:</label>
-                <input type="number" id="global_aspect" value="1.777" step="0.001" onchange="updateAspectRatio()">
-            </div>
-            <div class="input-row">
-                <label>网格宽比例:</label>
-                <input type="number" id="grid_snap_x" value="0.02" step="0.005" min="0" oninput="updateGridSnapX()">
-            </div>
-            <div class="input-row">
-                <label>网格高比例:</label>
-                <input type="number" id="grid_snap_y" value="0.03554" step="0.005" min="0" oninput="updateGridSnapY()">
-            </div>
-            <div class="bind-row" style="margin-top:5px;">
-                <div>
-                    <input type="checkbox" id="grid_snap_auto_y" checked onchange="toggleGridSnapAutoY()">
-                    <span class="lbl">高按宽高比自动同步</span>
-                </div>
-                <span class="var-tag">Grid XY</span>
-            </div>
-            <details class="fold-block shortcut-settings" open>
-                <summary>导出快捷键</summary>
-                <div class="fold-body controls-body">
-                    <div class="input-row"><label for="shortcut_help">面板开关:</label><input type="text" id="shortcut_help" value="no_ctrl no_alt home" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_layout">布局模式:</label><input type="text" id="shortcut_layout" value="ctrl e" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_reset">重置位置:</label><input type="text" id="shortcut_reset" value="ctrl home" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_zoom_in">放大:</label><input type="text" id="shortcut_zoom_in" value="up" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_zoom_out">缩小:</label><input type="text" id="shortcut_zoom_out" value="down" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_dock">停靠修饰键:</label><input type="text" id="shortcut_dock" value="alt" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_drag">备用拖拽:</label><input type="text" id="shortcut_drag" value="no_ctrl alt Q" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div class="input-row"><label for="shortcut_mouse">鼠标拖拽:</label><input type="text" id="shortcut_mouse" value="VK_LBUTTON" oninput="validateShortcutSettings()" onchange="normalizeShortcutInput(this)"></div>
-                    <div id="shortcut_status" class="shortcut-status" aria-live="polite"></div>
-                    <button type="button" onclick="resetShortcutSettings()">恢复默认快捷键</button>
-                </div>
-            </details>
-            <div class="bind-row" style="margin-top:5px;">
-                <div>
-                    <input type="checkbox" id="show_anim_panel" onchange="toggleAnimationPanel()">
-                    <span class="lbl">显示动画面板</span>
-                </div>
-                <span class="var-tag">Anim UI</span>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h4>添加组件</h4>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
-                <button onclick="addComponent('slider_h')">水平滑条</button>
-                <button onclick="addComponent('slider_v')">垂直滑条</button>
-                <button onclick="addComponent('joystick')">摇杆</button>
-                <button onclick="addComponent('toggle')">开关</button>
-                <button onclick="addComponent('accum')" style="background:#8c2f39; color:white;">积蓄条</button>
-                <button onclick="addComponent('static')">静态图片</button>
-                <button onclick="addComponent('sequence')" style="background: #8e44ad; color:white;">序列动画</button>
-                <button onclick="addComponent('text')" style="grid-column: span 2; background: #d35400; color:var(--on-light);">文本框（增强版）</button>
-            </div>
-        </div>
-    </div>
-
-<div class="anim-column" id="animColumn">
-    <div class="tool-window-bar" onmousedown="startToolWindowDrag(event, 'animColumn')">
-        <span>动画窗口</span>
-        <button type="button" title="关闭动画窗口" onclick="closeToolWindow('animation')">×</button>
-    </div>
-    <div class="panel" id="animPanel" style="display:none; border-color:var(--group-color);">
-        <h4 style="color:var(--group-color)">动画面板</h4>
-        <details class="fold-block" open>
-            <summary>全局动画（始终显示 / 编组共享）</summary>
-            <div class="fold-body controls-body">
-                <div class="input-row">
-                    <label>全局效果:</label>
-                    <select id="p_anim_global_mode" onchange="updateGlobalAnimMode()">
-                        <option value="none">无</option>
-                        <option value="edge_dock">靠边收纳</option>
-                        <option value="group_float_y">整体浮动</option>
-                        <option value="group_float_x">整体横移</option>
-                        <option value="group_pulse">整体呼吸</option>
-                    </select>
-                </div>
-                <div class="input-row" id="row_anim_global_edge" style="display:none;">
-                    <label>停靠边缘:</label>
-                    <select id="p_anim_global_edge" onchange="updateGlobalAnimEdge()">
-                        <option value="auto">自动判定</option>
-                        <option value="left">左侧</option>
-                        <option value="right">右侧</option>
-                        <option value="top">顶部</option>
-                        <option value="bottom">底部</option>
-                    </select>
-                </div>
-                <div class="input-row" id="row_anim_global_strength">
-                    <label id="lbl_anim_global_strength">幅度:</label>
-                    <input type="number" id="p_anim_global_strength" step="0.005" min="0" max="0.5" onchange="updateGlobalAnimStrength()">
-                </div>
-                <div class="input-row">
-                    <label>动画速度:</label>
-                    <input type="number" id="p_anim_global_speed" step="0.001" min="0.001" max="0.2" onchange="updateGlobalAnimSpeed()">
-                </div>
-                <div class="input-row" id="row_anim_global_reveal" style="display:none;">
-                    <label>露出宽度:</label>
-                    <input type="number" id="p_anim_global_reveal" step="0.005" min="0.005" max="0.3" onchange="updateGlobalAnimReveal()">
-                </div>
-                <div class="input-row" id="row_anim_global_trigger" style="display:none;">
-                    <label>触发区域(屏幕比例):</label>
-                    <input type="number" id="p_anim_global_trigger" step="0.005" min="0.01" max="0.4" onchange="updateGlobalAnimTrigger()">
-                </div>
-                <div class="input-row" id="row_anim_global_ease" style="display:none;">
-                    <label>展开缓动:</label>
-                    <input type="number" id="p_anim_global_ease" step="0.01" min="0.02" max="1" onchange="updateGlobalAnimEase()">
-                </div>
-                <div id="anim_global_hint" class="anim-note"></div>
-            </div>
-        </details>
-        <details class="fold-block" open>
-            <summary>常驻动画（所有组件默认节奏）</summary>
-            <div class="fold-body controls-body">
-                <div class="input-row">
-                    <label>启用常驻流光与表面高光:</label>
-                    <input type="checkbox" id="p_anim_persistent_enabled" checked onchange="updatePersistentAnimEnabled()">
-                </div>
-                <div class="input-row" id="row_anim_persistent_speed">
-                    <label>常驻流光速度:</label>
-                    <input type="number" id="p_anim_persistent_speed" value="0.03" step="0.005" min="0" max="0.5" onchange="updatePersistentAnimSpeed()">
-                </div>
-                <div class="input-row">
-                    <label>局部流光倍率:</label>
-                    <input type="number" id="p_anim_persistent_flow_speed" value="0.1" step="0.01" min="0" max="2" onchange="updatePersistentAnimFlowSpeed()">
-                </div>
-                <div class="anim-note">
-                    关闭后会完整移除默认顶部高光、斜向流光、对角线/角落/边缘/径向增亮和边框提亮。<br>
-                    “常驻流光速度”控制每个组件默认都会有的那层常驻扫光。<br>
-                    “局部流光倍率”只额外作用于独立动画里的流光 / 扫光类效果。
-                </div>
-            </div>
-        </details>
-        <div class="anim-local-block" id="anim_local_block">
-            <h4 style="margin-bottom:0.6em;">独立动画（随组件切换）</h4>
-            <div id="anim_local_empty" class="anim-note" style="display:none; margin-bottom:8px;">
-                当前未选中组件。全局动画仍可编辑，独立动画会在你选中具体组件后切换到对应类型。
-            </div>
-            <details class="fold-block" open>
-                <summary id="anim_local_title">独立动画</summary>
-                <div class="fold-body controls-body">
-                    <div class="input-row">
-                        <label>独立效果:</label>
-                        <select id="p_anim_local_mode" onchange="updateLocalAnimMode()"></select>
-                    </div>
-                    <div class="input-row">
-                        <label id="lbl_anim_local_strength">强度:</label>
-                        <input type="number" id="p_anim_local_strength" step="0.01" min="0" max="1" onchange="updateLocalAnimStrength()">
-                    </div>
-                    <div class="input-row">
-                        <label>动画速度:</label>
-                        <input type="number" id="p_anim_local_speed" step="0.001" min="0.001" max="0.2" onchange="updateLocalAnimSpeed()">
-                    </div>
-                    <div id="anim_local_hint" class="anim-note"></div>
-                </div>
-            </details>
-        </div>
-    </div>
-    </div>
-    </div>
-
-    <div class="component-panel-wrap" id="componentPanelWrap">
-    <div class="tool-window-bar" onmousedown="startToolWindowDrag(event, 'componentPanelWrap')">
-        <span>属性窗口</span>
-        <button type="button" title="关闭属性窗口" onclick="closeToolWindow('properties')">×</button>
-    </div>
-    <div class="panel" id="propPanel" style="display:none; border-color:var(--accent-color);">
-        <h4 style="color:var(--accent-color)">属性设置</h4>
-        <button class="copy-btn" onclick="copyPropsToSelection()">应用属性到同类选中项</button>
-
-        <div id="group_prop_panel" style="display:none;">
-            <div class="input-group">
-                <div class="input-row">
-                    <label>编组名称:</label>
-                    <input type="text" id="g_name" oninput="updateGroupProps()">
-                </div>
-                <div class="input-row">
-                    <label>显示变量:</label>
-                    <input type="text" id="g_vis_var" placeholder="$Show_Group" oninput="updateGroupProps()">
-                </div>
-                <div class="bind-row">
-                    <div>
-                        <input type="checkbox" id="g_vis_default" onchange="updateGroupProps()">
-                        <span class="lbl">显示变量默认开启</span>
-                    </div>
-                    <span id="g_vis_var_name" class="var-tag"></span>
-                </div>
-                <div class="pinned-row">
-                    <div>
-                        <input type="checkbox" id="g_pinned" onchange="updateGroupProps()">
-                        <span class="lbl">默认固定</span>
-                    </div>
-                    <span id="g_pin_var_name" class="var-tag"></span>
-                </div>
-                <div class="bind-row">
-                    <div>
-                        <input type="checkbox" id="g_binding_enabled" onchange="updateGroupProps()">
-                        <span class="lbl">启用参数绑定</span>
-                    </div>
-                    <span id="g_bind_var_name" class="var-tag"></span>
-                </div>
-            </div>
-        </div>
-
-        <div id="component_prop_panel" style="display:none;">
-        <div id="component_group_notice" class="anim-note" style="display:none; margin-bottom:8px;"></div>
-
-        <!-- Toggle Initial Value -->
-        <div class="input-row" id="row_initial_val" style="display:none; background:rgba(255,255,255,0.05); padding:5px; border-radius:3px;">
-            <div class="checkbox-wrapper">
-                <label style="flex:1; text-align:left; color:var(--text-color);">初始状态（默认开启）:</label>
-                <input type="checkbox" id="p_initial_val" onchange="updateData()">
-            </div>
-        </div>
-        <div class="input-row" id="row_toggle_invert" style="display:none; background:rgba(255,190,92,0.08); padding:5px; border-radius:3px;">
-            <div class="checkbox-wrapper">
-                <label style="flex:1; text-align:left; color:var(--text-color);" title="开启后：默认开启时绑定变量=0，关闭时=1（与开关状态相反）">反转绑定变量:</label>
-                <input type="checkbox" id="p_toggle_invert" onchange="updateData()">
-            </div>
-        </div>
-        <div class="input-row" id="row_initial_num" style="display:none; background:rgba(255,255,255,0.05); padding:5px; border-radius:3px;">
-            <label style="color:var(--text-color);">初始数值:</label>
-            <input type="number" id="p_initial_num" step="1" min="0" value="0" onchange="updateData()">
-        </div>
-
-        <!-- Sequence Logic -->
-        <div id="seq_editor_group" style="display:none; padding:5px; border:1px solid #8e44ad; margin-bottom:8px;">
-            <div class="input-row">
-                <label style="color:#0f0;">控制变量:</label>
-                <input type="text" id="p_seq_var" placeholder="$State" oninput="updateSeqVar()" style="color:#0f0; border-color:#006600;">
-            </div>
-            <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:5px;">
-                <button style="flex:1; background:#006600;" onclick="document.getElementById('u_batch_seq').click()">批量导入</button>
-                <input type="file" id="u_batch_seq" multiple style="display:none" onchange="batchUploadSeq(this)" accept="image/*">
-                <button style="flex:0.5;" onclick="addFrame()">+</button>
-                <button style="flex:0.5; background:#880000;" onclick="clearFrames()">清空</button>
-            </div>
-            <div id="seq_list_container" class="seq-list"></div>
-        </div>
-
-        <div id="text_editor_group" style="display:none; background:rgba(211, 84, 0, 0.1); padding:5px; border:1px solid #d35400; margin-bottom:8px;">
-            <div class="input-row"><label style="color:#e67e22; font-weight:bold;">文本内容:</label></div>
-            <div class="input-row"><textarea id="p_text_content" oninput="updateTextContent()"></textarea></div>
-            
-            <div class="input-row">
-                <label>字体:</label>
-                <input type="text" id="p_font_family" list="font_list" value="Microsoft YaHei" onchange="updateTextProps()">
-                <datalist id="font_list">
-                    <option value="Microsoft YaHei">微软雅黑</option>
-                    <option value="SimHei">黑体</option>
-                    <option value="SimSun">宋体</option>
-                    <option value="Arial">Arial</option>
-                    <option value="Impact">Impact</option>
-                </datalist>
-            </div>
-            
-            <div class="input-row">
-                <label style="color:var(--text-color)">样式:</label>
-                <div class="checkbox-wrapper">
-                    <label style="flex:0; margin-right:5px;">加粗</label>
-                    <input type="checkbox" id="p_font_bold" onchange="updateTextProps()">
-                    <label style="flex:0; margin-left:10px; margin-right:5px;">斜体</label>
-                    <input type="checkbox" id="p_font_italic" onchange="updateTextProps()">
-                </div>
-            </div>
-
-            <div class="input-row">
-                <label>排布方向:</label>
-                <select id="p_text_flow" onchange="updateTextProps()">
-                    <option value="horizontal">横向排列</option>
-                    <option value="vertical">竖向排列</option>
-                </select>
-            </div>
-
-            <div class="input-group" style="margin:8px 0; border-color:rgba(79,193,255,0.38);">
-                <h4 style="margin:0 0 6px; color:#7fd7ff;">独立显示</h4>
-                <div class="bind-row">
-                    <div>
-                        <input type="checkbox" id="p_text_visibility_enabled" onchange="updateTextProps()">
-                        <span class="lbl">启用显示变量</span>
-                    </div>
-                    <input type="text" id="p_text_vis_var" aria-label="显示变量" placeholder="$text_show_0" oninput="updateTextProps()" style="flex:1;min-width:0;margin-left:8px;background:var(--input-bg);border:1px solid var(--border-color);color:var(--text-color);padding:0.5em;border-radius:6px;font-family:monospace;">
-                    <span id="p_text_vis_var_name" style="display:none;"></span>
-                </div>
-                <div class="bind-row">
-                    <div>
-                        <input type="checkbox" id="p_text_vis_default" onchange="updateTextProps()">
-                        <span class="lbl">默认显示</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bind-row" style="margin-bottom:8px;">
-                <div>
-                    <input type="checkbox" id="p_text_hover_effect" onchange="updateTextProps()">
-                    <span class="lbl">悬停放大与边缘高光</span>
-                </div>
-            </div>
-
-            <div class="input-group" style="margin:8px 0; border-color:rgba(255,174,94,0.42);">
-                <h4 style="margin:0 0 6px; color:#ffae5e;">点击开关</h4>
-                <div class="input-row">
-                    <label>绑定变量:</label>
-                    <input type="text" id="p_text_click_var" placeholder="$text_show_0" oninput="updateTextProps()" style="color:#ffca8a; border-color:#8a5725;">
-                </div>
-            </div>
-
-            <div class="input-row" style="background:rgba(255,255,255,0.05); border:1px solid #555; padding:5px;">
-                <label style="color:var(--text-color);">颜色设置:</label>
-                <input type="color" id="p_font_color" value="#ffffff" style="flex:1; height:30px; cursor:pointer;" oninput="applyTextColor(this.value)">
-                <div style="flex:2; font-size:0.8em; color:var(--muted-color); margin-left:5px; line-height:1.2;">
-                    * 选中文字修改局部<br>* 未选中则修改默认
-                </div>
-            </div>
-
-            <div class="input-row">
-                <label style="color:#0f0;">数值变量:</label>
-                <input type="text" id="p_val_var" placeholder="{val}，导出为 000~999" title="运行时取整并限制到 0~999，始终显示三位" oninput="updateTextProps()" style="color:#0f0; border-color:#006600;">
-            </div>
-
-            <div class="input-row"><label>字符大小:</label><input type="number" id="p_char_size" step="0.001" onchange="updateTextProps()"></div>
-            <div class="input-row"><label>行间距:</label><input type="number" id="p_line_gap" step="0.001" onchange="updateTextProps()"></div>
-            <div class="input-row"><label>导出像素:</label><input type="number" id="gen_tex_size" value="128" step="16" title="字体图片分辨率"></div>
-        </div>
-
-        <div id="logic_wrapper">
-            <div class="phys-row" id="row_phys">
-                <div>
-                    <input type="checkbox" id="p_phys" onchange="updateData()">
-                    <span id="phys_label" class="lbl">物理效果</span>
-                </div>
-                <span id="phys_var_name" class="var-tag"></span>
-            </div>
-            <div id="phys_config_panel" style="display:none; background:rgba(0, 255, 0, 0.05); padding:8px; border:1px solid #006600; border-radius:4px; margin-bottom:8px;">
-                <h4 style="margin:0 0 8px 0; color:#0f0; font-size:0.9em;">物理与自动动画控制</h4>
-                <details class="fold-block">
-                    <summary>物理模式说明</summary>
-                    <div class="fold-body controls-body">
-                        - <b>弹性 (K)</b> 越大，回弹越快，动作越紧致。<br>
-                        - <b>阻尼 (D)</b> 越大，晃动越少，接近 1 时更稳定。<br>
-                        - <b>自动动画</b> 组件空闲时也可按设定持续运动。<br>
-                        - <b>乳摇模式</b> 会保留更多惯性尾部和拖拽延迟。<br>
-                        - <b>重力</b> 用于制造额外下坠感。
-                    </div>
-                </details>
-                <details class="fold-block">
-                    <summary>自动动画 / 轨迹说明</summary>
-                    <div class="fold-body controls-body">
-                        - <b>自动动画</b> 开启后会生成对应的 <code>$auto_x</code> 等控制变量。<br>
-                        - <b>轨迹刷新</b> 用于控制混沌轨迹多久重算一次。<br>
-                        - <b>幅度 / 幅度范围</b> 用于控制自动运动范围。<br>
-                        - <b>随机 / 轨迹种子</b> 用于改变轨迹初始状态。<br>
-                        - <b>动画速度</b> 控制函数或轨迹在 0 到 1 内的推进速度。<br>
-                        - <b>响应 / 回弹 / 重力</b> 用于调整整体动态手感。
-                    </div>
-                </details>
-                <div style="display:none; font-size:0.75em; color:var(--muted-color); margin-bottom:8px; padding:5px; background:rgba(0,0,0,0.3); border-radius:3px;">
-                    <b style="color:#0f0;">算法说明:</b><br>
-                    - <b>弹性 (K)</b> 影响回弹速度，值越大越灵敏。<br>
-                    - <b>阻尼 (D)</b> 控制速度衰减，越接近 1 越稳定。<br>
-                    - <b>自动强度</b> 为 1 时完全跟随自动轨迹，0 时关闭。<br>
-                    - <b>自动范围</b> 控制自动运动时的最大偏移。<br>
-                    - <b>随机 / 轨迹种子</b> 影响轨迹的相位和形态。<br>
-                    - <b>幅度 / 幅度范围</b> 影响函数模式或混沌模式的振幅。<br>
-                    - <b>轨迹刷新</b> 控制混沌模式的采样频率。<br>
-                    - <b>乳摇模式</b> 会产生更多拖尾和延迟。<br>
-                    - <b>重力</b> 用于增加向下偏移。<br>
-                    - 适合摇杆、跟随滑条、双态控件等需要动态反馈的组件。
-                </div>
-                <div class="input-row">
-                    <label style="color:#0f0;">弹性强度 (K):</label>
-                    <input type="number" id="p_spring_k_val" value="0.05" step="0.01" min="0" max="1" onchange="updatePhysParamsDirect()" style="flex:1; color:#0f0; border-color:#006600;">
-                </div>
-                <div class="input-row">
-                    <label style="color:#0f0;">阻尼系数 (D):</label>
-                    <input type="number" id="p_spring_d_val" value="0.95" step="0.01" min="0" max="1" onchange="updatePhysParamsDirect()" style="flex:1; color:#0f0; border-color:#006600;">
-                </div>
-                <div class="input-row" id="row_phys_profile" style="display:none;">
-                    <label style="color:#6cf;">物理模式:</label>
-                    <select id="p_phys_profile" onchange="updatePhysProfile()" style="flex:1; color:#6cf; border-color:#225577;">
-                        <option value="normal">普通模式</option>
-                        <option value="breast">乳摇模式</option>
-                    </select>
-                </div>
-                <div id="phys_profile_hint" style="display:none; color:#7fd7ff; font-size:12px; line-height:1.5; padding:4px 2px 6px;">
-                    乳摇模式会保留更多边缘延迟、回弹和下坠感，适合柔性摆动部件。
-                </div>
-                <details id="auto_anim_section" class="fold-block">
-                    <summary>自动动画参数</summary>
-                    <div class="fold-body controls-body">
-                <div class="input-row" style="justify-content:space-between; align-items:center;">
-                    <label style="color:#ff0;">自动动画:</label>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <input type="checkbox" id="p_auto_animate" onchange="updateAutoAnimate()" style="width:1.2em; height:1.2em;">
-                        <span id="auto_var_name" class="var-tag"></span>
-                    </div>
-                </div>
-                <div class="input-row">
-                    <label style="color:#ff0;">牵引强度:</label>
-                    <input type="number" id="p_auto_str" value="0.10" step="0.01" min="0" max="1" onchange="updateAutoStr()" style="flex:1; color:#ff0; border-color:#996600;">
-                </div>
-                <div class="input-row" id="row_auto_source">
-                    <label style="color:#6cf;">轨迹来源:</label>
-                    <select id="p_auto_source" onchange="updateAutoSource()" style="flex:1; color:#6cf; border-color:#225577;">
-                        <option value="chaos">混沌轨迹</option>
-                        <option value="function">自定义函数</option>
-                    </select>
-                </div>
-                <div class="input-row" id="row_auto_amp_x">
-                    <label id="lbl_auto_amp_x" style="color:#ff0;">幅度范围:</label>
-                    <input type="number" id="p_auto_amp_x" value="1" step="0.01" min="0" max="3" onchange="updateAutoAmpX()" style="flex:1; color:#ff0; border-color:#996600;">
-                </div>
-                <div class="input-row" id="row_auto_amp_y">
-                    <label style="color:#ff0;">Y 轴范围:</label>
-                    <input type="number" id="p_auto_amp_y" value="1" step="0.01" min="0" max="3" onchange="updateAutoAmpY()" style="flex:1; color:#ff0; border-color:#996600;">
-                </div>
-                <div class="input-row" id="row_auto_seed_x">
-                    <label id="lbl_auto_seed_x" style="color:#6cf;">随机种子:</label>
-                    <input type="number" id="p_auto_seed_x" value="0.3187" step="0.0001" min="0.001" max="0.999" onchange="updateAutoSeedX()" style="flex:1; color:#6cf; border-color:#225577;">
-                </div>
-                <div class="input-row" id="row_auto_seed_y">
-                    <label style="color:#6cf;">Y 轴种子:</label>
-                    <input type="number" id="p_auto_seed_y" value="0.6123" step="0.0001" min="0.001" max="0.999" onchange="updateAutoSeedY()" style="flex:1; color:#6cf; border-color:#225577;">
-                </div>
-                <div class="input-row" id="row_auto_func_x" style="display:none;">
-                    <label id="lbl_auto_func_x" style="color:#6cf;">函数 f(t):</label>
-                    <input type="text" id="p_auto_func_x" value="sin01(t)" oninput="previewAutoFunc('x')" onchange="updateAutoFuncX()" style="flex:1; color:#6cf; border-color:#225577;" placeholder="sin01(t)">
-                </div>
-                <div class="input-row" id="row_auto_func_y" style="display:none;">
-                    <label style="color:#6cf;">函数 Y(t):</label>
-                    <input type="text" id="p_auto_func_y" value="cos(TAU * t)" oninput="previewAutoFunc('y')" onchange="updateAutoFuncY()" style="flex:1; color:#6cf; border-color:#225577;" placeholder="cos(TAU * t)">
-                </div>
-                <div class="input-row" id="row_auto_speed">
-                    <label style="color:#6cf;">动画速度:</label>
-                    <input type="number" id="p_auto_speed" value="0.015" step="0.002" min="0" max="0.2" onchange="updateAutoSpeed()" style="flex:1; color:#6cf; border-color:#225577;">
-                </div>
-                <div class="input-row">
-                    <label style="color:#6cf;">目标平滑:</label>
-                    <input type="number" id="p_auto_response" value="0.22" step="0.01" min="0.01" max="1" onchange="updateAutoResponse()" style="flex:1; color:#6cf; border-color:#225577;">
-                </div>
-                <div class="input-row">
-                    <label style="color:#6cf;">边界反弹:</label>
-                    <input type="number" id="p_auto_bounce" value="0.25" step="0.01" min="0" max="1" onchange="updateAutoBounce()" style="flex:1; color:#6cf; border-color:#225577;">
-                </div>
-                <div class="input-row">
-                    <label style="color:#f80;">伪重力:</label>
-                    <input type="number" id="p_gravity" value="0" step="0.005" min="0" max="1" onchange="updateGravity()" style="flex:1; color:#f80; border-color:#663300;">
-                </div>
-                <div class="input-row">
-                    <label id="lbl_auto_rate" style="color:#ff0;">轨迹刷新:</label>
-                    <input type="number" id="p_chaos_rate" value="96" step="1" min="1" max="240" onchange="updateChaosRate()" style="flex:1; color:#ff0; border-color:#996600;">
-                </div>
-                <details id="auto_func_hint" class="fold-block" style="display:none;">
-                    <summary>自定义函数语法</summary>
-                    <div class="fold-body">
-                        支持变量 <code>t</code>，范围为 0~1。<br>
-                        范围说明：摇杆函数通常返回 <code>-1 ~ 1</code>，普通滑条函数通常返回 <code>0 ~ 1</code>。<br>
-                        摇杆圆周示例：<code>X(t)=sin(TAU*t)</code>，<code>Y(t)=cos(TAU*t)</code>。<br>
-                        如果想让轨迹更大，可以直接写成 <code>1.6*sin(TAU*t)</code> / <code>1.6*cos(TAU*t)</code>，再配合范围、响应和回弹调整。<br>
-                        支持运算符 <code>+ - * / %</code> <code>&lt; &lt;= &gt; &gt;= == !=</code> <code>&amp;&amp; || !</code> <code>?:</code><br>
-                        支持常量：<code>PI</code> <code>TAU</code> <code>E</code><br>
-                        支持函数：<code>sin</code> <code>cos</code> <code>tan</code> <code>asin</code> <code>acos</code> <code>atan</code> <code>atan2</code> <code>abs</code> <code>min</code> <code>max</code> <code>pow</code> <code>sqrt</code> <code>cbrt</code> <code>log</code> <code>log2</code> <code>exp</code> <code>floor</code> <code>ceil</code> <code>round</code> <code>sign</code> <code>clamp</code> <code>fract</code> <code>mix</code> <code>lerp</code> <code>step</code> <code>smoothstep</code> <code>saw</code> <code>tri</code> <code>pingpong</code> <code>sin01</code> <code>cos01</code> <code>mod</code> <code>repeat</code> <code>saturate</code> <code>invlerp</code> <code>pulse</code> <code>select</code> <code>bezier3</code> <code>bezier4</code>。<br>
-                        表达式会在导出前校验，确保可以安全写入 3DM INI 自动计算段。
-                    </div>
-                </details>
-                <div id="auto_func_preview_wrap" style="display:none; margin-top:8px;">
-                    <div style="font-size:0.8em; color:#7fd7ff; margin-bottom:4px;">函数轨迹预览</div>
-                    <canvas id="auto_func_preview" width="300" height="140" style="width:100%; height:140px; background:rgba(0,0,0,0.35); border:1px solid rgba(127,215,255,0.25); border-radius:4px;"></canvas>
-                    <div id="auto_func_preview_caption" class="shader-status"></div>
-                </div>
-                    </div>
-                </details>
-            </div>
-            <div id="accum_panel" style="display:none; background:rgba(255,80,80,0.08); padding:8px; border:1px solid rgba(255,90,90,0.5); border-radius:4px; margin-bottom:8px;">
-                <h4 style="margin:0 0 6px 0; color:#ff6b6b; font-size:0.9em;">积蓄条配置</h4>
-                <div style="font-size:0.72em; color:#ffb3b3; line-height:1.5; margin-bottom:8px;">
-                    绑定滑条/摇杆/开关后，仅统计<b>手柄被鼠标拖拽</b>产生的位移（含模型区域拖拽）；自动动画、物理回弹不计入。<br>
-                    滑条按拖拽距离累计（来回一次记 2），摇杆记两轴位移之和，开关每次点击记 1。达到积蓄槽值时触发下方变量并自动归零重新统计。
-                </div>
-                <div class="input-row">
-                    <label style="color:#ff8a8a;">方向:</label>
-                    <select id="p_accum_direction" onchange="updateAccumProps()">
-                        <option value="h">水平</option>
-                        <option value="v">垂直</option>
-                    </select>
-                </div>
-                <div class="input-row">
-                    <label style="color:#ff8a8a;">积蓄槽值:</label>
-                    <input type="number" id="p_accum_threshold" step="0.1" min="0.1" value="5" onchange="updateAccumProps()">
-                </div>
-                <h4 style="margin:8px 0 4px 0; color:#ff8a8a; font-size:0.82em;">绑定组件（统计其拖拽位移/点击）</h4>
-                <div id="accum_bindings_list" style="display:flex; flex-direction:column; gap:5px; margin-bottom:6px;"></div>
-                <button onclick="addAccumBinding()" style="font-size:0.72em; padding:4px 10px; background:#5a2a2a; border:1px solid #8a3a3a; color:#ff9c9c; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加绑定</button>
-                <h4 style="margin:10px 0 4px 0; color:#ffd27a; font-size:0.82em;">达到阈值后触发变量</h4>
-                <div style="font-size:0.68em; color:#ffd08a; line-height:1.4; margin-bottom:5px;">达到积蓄槽值时将以下变量设为指定值，然后积蓄槽归零重新统计。</div>
-                <div id="accum_triggers_list" style="display:flex; flex-direction:column; gap:5px; margin-bottom:6px;"></div>
-                <button onclick="addAccumTrigger()" style="font-size:0.72em; padding:4px 10px; background:#4a3a2a; border:1px solid #8a6a3a; color:#ffcf7a; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加触发变量</button>
-            </div>
-            <div id="linked_slaves_panel" style="display:none; background:rgba(255, 165, 0, 0.08); padding:8px; border:1px solid rgba(255,165,0,0.45); border-radius:4px; margin-bottom:8px;">
-                <h4 style="margin:0 0 6px 0; color:#ffa500; font-size:0.9em;">嵌套联动（区间映射）</h4>
-                <div style="font-size:0.72em; color:#ffd08a; line-height:1.5; margin-bottom:8px;">
-                    将本组件的值通过区间映射到其他滑块/遥杆组件。例如本组件 0~0.5 映射到目标 0~1。
-                </div>
-                <div id="linked_slaves_list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
-                <button onclick="addLinkedSlave()" style="font-size:0.75em; padding:4px 10px; background:#2a4a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加联动目标</button>
-                
-                <h4 style="margin:12px 0 6px 0; color:#4fc1ff; font-size:0.85em; border-top:1px solid rgba(79,193,255,0.2); padding-top:8px;">独立区间触发</h4>
-                <div style="font-size:0.72em; color:#7fd7ff; line-height:1.5; margin-bottom:8px;">
-                    无需绑定目标组件，自由设置区间及其进入/离开动作。仅当本组件值进入或离开区间时触发动作。
-                </div>
-                <div id="range_triggers_list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
-                <button onclick="addRangeTrigger()" style="font-size:0.75em; padding:4px 10px; background:#2a3a4a; border:1px solid #3a7a7a; color:#4fc1ff; cursor:pointer; border-radius:3px; justify-content:center;">+ 添加独立区间触发</button>
-            </div>
-            <div class="input-group">
-                <div class="input-row" id="row_switch_group" style="display:none;">
-                    <label>切换分组 ID:</label>
-                    <input type="number" id="p_switch_group" step="1" min="0" value="0" onchange="updateSwitchGroup()" placeholder="0 为未分组">
-                </div>
-                <div class="input-row" id="row_mode"><label>模式:</label><select id="p_mode" onchange="changeMode()"></select></div>
-                <div class="input-row" id="row_toggle_steps" style="display:none;">
-                    <label>档位数量:</label>
-                    <input type="number" id="p_toggle_steps" step="1" min="1" value="5" onchange="updateToggleSteps()" placeholder="5">
-                </div>
-                <div class="input-row" id="row_grid_steps" style="display:none;">
-                    <label>档位数量:</label>
-                    <input type="number" id="p_grid_steps" step="1" min="1" value="3" oninput="updateGridSteps()" placeholder="3">
-                </div>
-                <div class="input-row" id="row_grid_value_start" style="display:none;">
-                    <label>起始值:</label>
-                    <input type="number" id="p_grid_value_start" step="any" value="0" oninput="updateGridValueRange()" placeholder="0">
-                </div>
-                <div class="input-row" id="row_grid_value_step" style="display:none;">
-                    <label>每档增量:</label>
-                    <input type="number" id="p_grid_value_step" step="any" value="1" oninput="updateGridValueRange()" placeholder="1（不可为 0）">
-                </div>
-                <div class="input-row" id="row_slider_subdiv" style="display:none;">
-                    <label id="slider_subdiv_label">行程细分:</label>
-                    <input type="number" id="p_slider_subdiv" step="1" min="1" max="8" value="1" onchange="updateSliderSubdivisions()" placeholder="1">
-                </div>
-                <div class="input-row" id="row_joy_dir_count" style="display:none;">
-                    <label>方向数量:</label>
-                    <input type="number" id="p_joy_dir_count" step="1" min="3" max="32" value="4" onchange="updateJoystickDirectionCount()" placeholder="4">
-                </div>
-                <div class="input-row" id="row_joy_subdiv" style="display:none;">
-                    <label>每向细分:</label>
-                    <input type="number" id="p_joy_subdiv" step="1" min="1" max="8" value="1" onchange="updateJoystickSubdivisions()" placeholder="1">
-                </div>
-                <div class="input-row" id="row_joy_angle_offset" style="display:none;">
-                    <label>起始角度:</label>
-                    <input type="number" id="p_joy_angle_offset" step="1" min="0" max="359" value="0" onchange="updateJoystickAngleOffset()" placeholder="0">
-                </div>
-                <div class="input-row" id="row_joy_default_x" style="display:none;">
-                    <label>默认 X:</label>
-                    <input type="number" id="p_joy_default_x" step="0.01" min="-1" max="1" value="0" onchange="updateJoystickDefaultX()" placeholder="0">
-                </div>
-                <div class="input-row" id="row_joy_default_y" style="display:none;">
-                    <label>默认 Y:</label>
-                    <input type="number" id="p_joy_default_y" step="0.01" min="-1" max="1" value="0" onchange="updateJoystickDefaultY()" placeholder="0">
-                </div>
-                <div id="joy_algo_hint" style="display:none; font-size:0.72em; color:var(--muted-color); padding:6px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px; margin-bottom:6px;">
-                    方向变量按相邻两个方向混合计算；第 0 个方向的角度 = 起始角度 + n × (360 / 方向数量)
-                </div>
-                <div id="slider_subdiv_hint" style="display:none; font-size:0.72em; color:var(--muted-color); padding:6px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px; margin-bottom:6px;">
-                    前一段到达 1 后保持不变，当前段继续从 0 增长到 1。
-                </div>
-                
-                <div class="input-row" id="row_zone_drag" style="display:none; background:rgba(93,242,193,0.10); border:1px solid rgba(93,242,193,0.45); padding:5px; border-radius:3px;">
-                    <div class="checkbox-wrapper">
-                        <label style="flex:1; text-align:left; color:#5df2c1;">模型区域拖拽:</label>
-                        <input type="checkbox" id="p_zone_drag_enabled" onchange="updateZoneDragEnabled()">
-                    </div>
-                </div>
-                <div class="input-row" id="row_zone_drag_var" style="display:none;">
-                    <label>区域变量名:</label>
-                    <input type="text" id="p_zone_drag_var" onchange="updateZoneDragVar()" placeholder="$ssmtdrag_ui_zone_命名空间">
-                </div>
-                <div class="input-row" id="row_zone_drag_id" style="display:none;">
-                    <label>命中区域编号:</label>
-                    <input type="number" id="p_zone_drag_id" step="1" min="0" value="0" onchange="updateZoneDragZoneId()">
-                </div>
-                <div class="anim-note" id="zone_drag_hint" style="display:none;">
-                    启用后，模型侧拖拽交互处于<b>仅命中模式（模式 1）</b>时：按住 Alt 并点击左键（或按 X 键）命中模型指定区域，即绑定本组件手柄——手柄从当前值出发、按鼠标位移相对移动（不会瞬间跳到光标位置）；绑定后移出区域也不会中断，松开左键 / X 键 / Alt 后绑定结束并照常回弹/吸附。面板关闭（Home 收起）时同样生效，模式 0 / 2 不会触发绑定；光标在组件上的原有拖拽不受影响。<br>
-                    “区域变量名”必须与模型侧（TheHerta4 拖拽交互节点）导出的命中区域变量一致——节点保留默认名 ssmtdrag_ui_zone 时会自动追加命名空间后缀，请填写节点上显示的最终变量名（如 $ssmtdrag_ui_zone_xxx），命名空间会自动从该变量名推导并用于匹配模型侧按键状态变量；“命中区域编号”与节点的区域 ID 完全一致，未命中时该变量为 -1。<br>
-                    浏览器内的布局预览无法模拟，导出后在游戏内生效。
-                </div>
-                <div id="generic_var_block">
-                <h4 style="margin: 5px 0; font-size:0.85em; color:var(--muted-color);">绑定变量列表</h4>
-                <div class="var-list" id="var_container"></div>
-                <button class="add-var-btn" id="btn_add_var" onclick="addVar()">+ 添加变量</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="input-group">
-            <div class="input-row"><label>X (Screen):</label><input type="number" id="p_x" step="0.01" onchange="updateGeom()"></div>
-            <div class="input-row"><label>Y (Screen):</label><input type="number" id="p_y" step="0.01" onchange="updateGeom()"></div>
-            <div class="input-row"><label>W (Screen):</label><input type="number" id="p_w" step="0.01" onchange="updateGeom()"></div>
-            <div class="input-row"><label>H (Screen):</label><input type="number" id="p_h" step="0.01" onchange="updateGeom()"></div>
-            <div class="input-row">
-                <label>圆角 (px):</label>
-                <input type="number" id="p_corner_radius" step="0.1" min="0" onchange="updateGeom()">
-            </div>
-            <div class="input-row" style="background:rgba(255,255,0,0.1); border:1px solid #aa0;">
-                <label style="color:#ff0; font-weight:bold;">旋转 (度):</label>
-                <input type="number" id="p_rot" step="1" onchange="updateGeom()" style="color:#ff0; font-weight:bold;">
-            </div>
-            <div class="input-row" style="background:#333; padding:2px; border-radius:3px;">
-                <label style="color:#fff">层级 (Z):</label>
-                <input type="number" id="p_z" step="1" onchange="updateGeom()" style="font-weight:bold; color:#ff0;">
-            </div>
-            <div class="input-row" id="row_follow_cursor" style="display:none; background:rgba(79,193,255,0.10); border:1px solid rgba(79,193,255,0.45); padding:5px; border-radius:3px;">
-                <div class="checkbox-wrapper">
-                    <label style="flex:1; text-align:left; color:#7fd7ff;">跟随鼠标指针:</label>
-                    <input type="checkbox" id="p_follow_cursor" onchange="updateFollowCursor()">
-                </div>
-            </div>
-            <div class="input-row" id="row_follow_offset" style="display:none; padding:5px;">
-                <label style="color:#7fd7ff;">跟随偏移 X/Y:</label>
-                <input type="number" id="p_follow_offset_x" step="0.05" onchange="updateFollowOffset()" title="水平偏移（组件宽度比例）：0.5=水平居中，1=组件在指针左侧，0=在右侧，可填小数或超出 0~1 的值">
-                <input type="number" id="p_follow_offset_y" step="0.05" onchange="updateFollowOffset()" title="垂直偏移（组件高度比例）：0.5=垂直居中，1=组件在指针上方，0=在下方，可填小数或超出 0~1 的值">
-            </div>
-            <div class="anim-note" id="follow_cursor_hint" style="display:none;">运行时组件始终跟随鼠标指针，并让出点击；编辑布局时不生效，可在“运行”模式预览。<br>跟随偏移以组件宽/高为单位：0.5=中心对准指针；X=1 靠左、X=0 靠右、Y=1 靠上、Y=0 靠下；可填小数实现斜对角，也可超出 0~1 与指针留出间距。</div>
-        </div>
-
-        <div class="input-group" id="vis_group">
-            <div class="input-row" id="row_handle_size"><label>把手大小:</label><input type="number" id="p_hs" step="0.001" onchange="updateVis()"></div>
-            <div class="input-row"><label>轨道/填充粗细:</label><input type="number" id="p_tt" step="0.001" onchange="updateVis()"></div>
-        </div>
-
-        <button class="danger" onclick="deleteItem()" style="margin-top:10px;">删除项目 (DEL)</button>
-        </div>
-    </div>
-    </div>
-</div>
-
-<div class="resource-window" id="resourceWindow" style="display:none;">
-    <div class="tool-window-bar" onmousedown="startToolWindowDrag(event, 'resourceWindow')">
-        <span id="resourceWindowTitle">资源窗口</span>
-        <button type="button" title="关闭资源窗口" onclick="closeToolWindow('resources')">×</button>
-    </div>
-    <div id="resourceScopeLabel" class="resource-window-scope"></div>
-    <div id="res_container"></div>
-</div>
-
-<div class="text-logic-window" id="textLogicWindow" style="display:none;">
-    <div class="tool-window-bar" onmousedown="startToolWindowDrag(event, 'textLogicWindow')">
-        <span>文本逻辑窗口</span>
-        <button type="button" title="关闭文本逻辑窗口" onclick="closeToolWindow('textLogic')">×</button>
-    </div>
-    <div class="panel">
-        <h4 id="textLogicSelectionTitle">文本运行参数</h4>
-        <div class="input-row"><label>触发冷却:</label><input type="number" id="tl_cooldown" min="0" step="0.1" onchange="updateSelectedTextRuntimeProps()"><span>秒</span></div>
-        <div class="input-row"><label>生命周期:</label><input type="number" id="tl_lifetime" min="0" step="0.1" onchange="updateSelectedTextRuntimeProps()"><span>秒</span></div>
-        <div class="input-row"><label>显示变量:</label><input type="text" id="tl_vis_var" readonly></div>
-        <div class="input-row"><label>所属步骤:</label><select id="tl_step_select" onchange="assignSelectedTextToStep(this.value)"></select></div>
-        <div class="bind-row">
-            <div><input type="checkbox" id="tl_random_enabled" onchange="toggleSelectedTextRandom()"><span class="lbl">加权随机点击</span></div>
-            <span class="var-tag">100%</span>
-        </div>
-        <div id="tl_random_editor"></div>
-        <button class="primary" onclick="openBlueprintForSelectedText()">编辑文本蓝图</button>
-        <details class="fold-block" style="margin-top:8px;">
-            <summary>蓝图变量表</summary>
-            <div class="fold-body controls-body" id="tl_variable_table"></div>
-        </details>
-    </div>
-</div>
-
-<div class="workspace-mode-bar" id="workspaceModeBar">
-    <button type="button" id="modeLayoutBtn" class="active" onclick="setWorkspaceMode('layout')">布局</button>
-    <button type="button" id="modeBlueprintBtn" onclick="setWorkspaceMode('blueprint')">蓝图</button>
-    <button type="button" id="modeRunBtn" onclick="setWorkspaceMode('run')">运行</button>
-</div>
-
-<div class="viewport">
-    <div id="workArea"></div>
-    <div id="blueprintWorkspace" class="blueprint-workspace">
-        <div class="blueprint-toolbar">
-            <span id="blueprintBreadcrumb" class="blueprint-breadcrumb">主逻辑</span>
-            <select id="blueprintNodeType">
-                <option value="trigger">条件触发</option><option value="text">独立文本</option><option value="dialogue">对话编组</option>
-                <option value="step">对话步骤</option><option value="condition">条件分支</option><option value="action">变量动作</option>
-                <option value="random">随机分支</option><option value="exit">结束/出口</option>
-            </select>
-            <button onclick="addBlueprintNode()">添加节点</button>
-            <button onclick="deleteSelectedBlueprintItems()">删除</button>
-            <button onclick="openMainBlueprint()">返回主逻辑</button>
-        </div>
-        <svg id="blueprintEdges" class="bp-edges"></svg>
-        <div id="blueprintStage" class="blueprint-stage"></div>
-    </div>
-    <div id="runtimeInspector" class="runtime-inspector"></div>
-</div>
-
-<div class="hierarchy-sidebar">
-    <div class="hierarchy-resizer" id="hierarchyResizer" title="拖拽调整宽度"></div>
-    <div class="panel">
-        <h4>层级面板</h4>
-        <div class="hierarchy-actions">
-            <button class="group-btn" onclick="groupSelected()">编组</button>
-            <button onclick="ungroupSelected()">解组</button>
-        </div>
-        <div id="hierarchy_panel" class="hierarchy-panel"></div>
-        <div class="hierarchy-help">
-            左侧负责属性和参数。
-            中间是工作区预览。
-            右侧单独管理编组和组件层级。
-        </div>
-    </div>
-</div>
-
-<div id="modal">
-    <div id="modal-content">
-        <button class="close-btn" onclick="document.getElementById('modal').style.display='none'">关闭</button>
-        <textarea id="output" class="code-out" spellcheck="false"></textarea>
-    </div>
-</div>
-
-<script>
     function updateUIScale(val) {
-        document.documentElement.style.setProperty('--ui-scale', val);
+        root.style.setProperty('--ui-scale', val);
         document.getElementById('ui_scale_val').innerText = Math.round(val * 100) + '%';
     }
 
@@ -2929,8 +1465,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     document.removeEventListener('mousemove', onMove);
                     document.removeEventListener('mouseup', onUp);
                 };
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
+                __onDocument('mousemove', onMove);
+                __onDocument('mouseup', onUp);
             });
         }
     }
@@ -3078,8 +1614,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         });
         const hierarchy = document.querySelector('.hierarchy-sidebar');
         return {
-            uiScale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1,
-            theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
+            uiScale: Number.parseFloat(getComputedStyle(root).getPropertyValue('--ui-scale')) || 1,
+            theme: root.classList.contains('light-mode') ? 'light' : 'dark',
             workspaceMode: workspaceMode === 'blueprint' ? 'blueprint' : 'layout',
             blueprintScopeId,
             selectedBlueprintNodeIds: cloneDeep(selectedBlueprintNodeIds),
@@ -3095,8 +1631,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const uiScale = Math.max(.8, Math.min(1.5, Number(layout.uiScale) || 1));
         updateUIScale(uiScale);
         const scaleInput = document.getElementById('ui_scale_input'); if(scaleInput) scaleInput.value = uiScale;
-        document.body.classList.toggle('light-mode', layout.theme === 'light');
-        document.body.classList.toggle('dark-mode', layout.theme !== 'light');
+        root.classList.toggle('light-mode', layout.theme === 'light');
+        root.classList.toggle('dark-mode', layout.theme !== 'light');
         const animationInput = document.getElementById('show_anim_panel'); if(animationInput) animationInput.checked = layout.animationEnabled === true;
         restoreSelectionSnapshot(layout.selection || {});
         const requestedScope = String(layout.blueprintScopeId || 'main');
@@ -3106,7 +1642,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         selectedBlueprintNodeIds = [...new Set(Array.isArray(layout.selectedBlueprintNodeIds) ? layout.selectedBlueprintNodeIds : [])]
             .filter(id => validBlueprintNodeIds.has(id));
         workspaceMode = layout.workspaceMode === 'blueprint' ? 'blueprint' : 'layout';
-        dialogueRuntime = null; document.body.classList.remove('preview-running');
+        dialogueRuntime = null; root.classList.remove('preview-running');
         document.getElementById('blueprintWorkspace').style.display = workspaceMode === 'blueprint' ? 'block' : 'none';
         workArea.style.display = workspaceMode === 'layout' ? 'block' : 'none';
         document.getElementById('runtimeInspector').style.display = 'none';
@@ -3116,12 +1652,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const hierarchy = document.querySelector('.hierarchy-sidebar');
         if(hierarchy) hierarchy.style.display = layout.hierarchyVisible === false ? 'none' : 'flex';
         let restoredMaxZIndex = toolWindowZIndex;
+        // 悬浮窗 fixed 定位原点在视口顶部(含标题栏),恢复布局时顶边不得低于标题栏高度
+        const presetAppUiScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--app-ui-scale')) || 1;
+        const minPresetWinTop = 32 / presetAppUiScale + 8;
         Object.entries(PRESET_TOOL_WINDOWS).forEach(([name, id]) => {
             const element = document.getElementById(id), saved = layout.windows && layout.windows[name]; if(!element || !saved) return;
             const maxLeft = Math.max(8, window.innerWidth - Math.max(120, element.offsetWidth));
-            const maxTop = Math.max(8, window.innerHeight - 80);
+            const maxTop = Math.max(minPresetWinTop, window.innerHeight - 80);
             if(Number.isFinite(Number(saved.left))) element.style.left = `${Math.max(8, Math.min(maxLeft, Number(saved.left)))}px`;
-            if(Number.isFinite(Number(saved.top))) element.style.top = `${Math.max(8, Math.min(maxTop, Number(saved.top)))}px`;
+            if(Number.isFinite(Number(saved.top))) element.style.top = `${Math.max(minPresetWinTop, Math.min(maxTop, Number(saved.top)))}px`;
             if(Number.isFinite(Number(saved.zIndex)) && Number(saved.zIndex) > 0) {
                 element.style.zIndex = String(saved.zIndex);
                 restoredMaxZIndex = Math.max(restoredMaxZIndex, Number(saved.zIndex));
@@ -4407,10 +2946,10 @@ void main(vs2ps input, out float4 result : SV_Target0)
     function ensurePreviewClock() {
         if(previewClockHandle != null) return;
         const tick = () => {
-            previewClockHandle = requestAnimationFrame(tick);
+            previewClockHandle = requestAnimationFrame((__ts) => { if (!root.isConnected) return; tick(__ts); });
             renderAll();
         };
-        previewClockHandle = requestAnimationFrame(tick);
+        previewClockHandle = requestAnimationFrame((__ts) => { if (!root.isConnected) return; tick(__ts); });
     }
 
     function syncPreviewClock() {
@@ -8490,7 +7029,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         if(isSliderGridMode(component)) normalizeSliderGridState(component);
     }
 
-    function toggleTheme() { document.body.classList.toggle('light-mode'); }
+    function toggleTheme() { root.classList.toggle('light-mode'); }
     
     function updateAspectRatio() {
         const aspect = parseFloat(document.getElementById('global_aspect').value) || 1.777;
@@ -8836,7 +7375,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         }
 
         if(errorText) {
-            ctx.strokeStyle = 'rgba(255,120,120,0.4)';
+            ctx.strokeStyle = 'rgba(255,95,116,0.4)';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(12, 12);
@@ -8844,7 +7383,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             ctx.moveTo(w - 12, 12);
             ctx.lineTo(12, h - 12);
             ctx.stroke();
-            caption.style.color = '#ff8a8a';
+            caption.style.color = '#ff8a96';
             caption.innerText = `预览错误：${errorText}`;
             wrap.style.display = 'block';
             return;
@@ -8867,8 +7406,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         };
 
         if(component.type === 'joystick') {
-            drawSeries(samplesX, '#4fc1ff', -1, 1);
-            drawSeries(samplesY, '#ff9d00', -1, 1);
+            drawSeries(samplesX, '#3fd9ff', -1, 1);
+            drawSeries(samplesY, '#ffb54d', -1, 1);
             ctx.strokeStyle = 'rgba(255,255,255,0.18)';
             ctx.beginPath();
             ctx.moveTo(0, h * 0.5);
@@ -8877,7 +7416,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             caption.style.color = '#888';
             caption.innerText = `X = X(t) | Y = Y(t) | t=0..1 | 采样帧 ${Math.max(1, Math.round(component.chaosRate || 96))}`;
         } else {
-            drawSeries(samplesX, '#4fc1ff', 0, 1);
+            drawSeries(samplesX, '#3fd9ff', 0, 1);
             caption.style.color = '#888';
             caption.innerText = `f = f(t) | t=0..1 | 采样帧 ${Math.max(1, Math.round(component.chaosRate || 96))}`;
         }
@@ -9571,20 +8110,23 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const startY = event.clientY;
         const originLeft = rect.left;
         const originTop = rect.top;
-        document.body.classList.add('tool-window-dragging');
+        root.classList.add('tool-window-dragging');
+        // 悬浮窗 fixed 定位原点在视口顶部(含标题栏),拖拽顶边不得低于标题栏高度
+        const appUiScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--app-ui-scale')) || 1;
+        const minToolWinTop = 32 / appUiScale + 8;
         const move = (moveEvent) => {
             element.style.left = `${Math.max(8, originLeft + moveEvent.clientX - startX)}px`;
-            element.style.top = `${Math.max(8, originTop + moveEvent.clientY - startY)}px`;
+            element.style.top = `${Math.max(minToolWinTop, originTop + moveEvent.clientY - startY)}px`;
             resize();
         };
         const stop = () => {
             document.removeEventListener('mousemove', move);
             document.removeEventListener('mouseup', stop);
-            document.body.classList.remove('tool-window-dragging');
+            root.classList.remove('tool-window-dragging');
             resize();
         };
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', stop);
+        __onDocument('mousemove', move);
+        __onDocument('mouseup', stop);
     };
 
     function refreshTextLogicWindow(component = selectedObj()) {
@@ -9706,8 +8248,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const targetOptions = components.filter(item => item.type === 'text' && item.id !== component.id)
             .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(getEntityLabel(makeEntityRef('component', item.id)))}</option>`).join('');
         wrap.innerHTML = `<div class="anim-note" style="margin:8px 0;color:${total === 10000 ? 'var(--group-color)' : '#ff8b7c'}">权重合计 ${(total / 100).toFixed(2)}%</div>` + branches.map((branch, index) => `
-            <div class="input-row"><select onchange="updateTextRandomBranch(${index},'targetTextId',this.value)"><option value="">选择目标文本</option>${targetOptions}</select><input type="number" min="0" max="100" step="0.01" value="${(Number(branch.weightBp || 0) / 100).toFixed(2)}" onchange="updateTextRandomBranch(${index},'weight',this.value)"><button style="width:30px;margin:0" onclick="removeTextRandomBranch(${index})">×</button></div>`).join('') +
-            `<button onclick="addTextRandomBranch()">+ 添加随机目标</button>`;
+            <div class="input-row"><select onchange="UIB.updateTextRandomBranch(${index},'targetTextId',this.value)"><option value="">选择目标文本</option>${targetOptions}</select><input type="number" min="0" max="100" step="0.01" value="${(Number(branch.weightBp || 0) / 100).toFixed(2)}" onchange="UIB.updateTextRandomBranch(${index},'weight',this.value)"><button style="width:30px;margin:0" onclick="UIB.removeTextRandomBranch(${index})">×</button></div>`).join('') +
+            `<button onclick="UIB.addTextRandomBranch()">+ 添加随机目标</button>`;
         wrap.querySelectorAll('select').forEach((select, index) => { select.value = branches[index] && branches[index].targetTextId || ''; });
     }
 
@@ -9730,7 +8272,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
     function renderDialogueVariableTable() {
         collectDialogueVariableNames();
         const wrap = document.getElementById('tl_variable_table'); if(!wrap) return;
-        wrap.innerHTML = dialogueLogic.variables.length ? dialogueLogic.variables.map((item, index) => `<div class="runtime-row"><span class="var-tag">${escapeHtml(item.name)}</span><input type="number" step="any" value="${Number(item.initialValue) || 0}" onchange="updateDialogueVariableInitial(${index},this.value)"></div>`).join('') : '<div class="anim-note">蓝图尚未引用普通变量。</div>';
+        wrap.innerHTML = dialogueLogic.variables.length ? dialogueLogic.variables.map((item, index) => `<div class="runtime-row"><span class="var-tag">${escapeHtml(item.name)}</span><input type="number" step="any" value="${Number(item.initialValue) || 0}" onchange="UIB.updateDialogueVariableInitial(${index},this.value)"></div>`).join('') : '<div class="anim-note">蓝图尚未引用普通变量。</div>';
     }
 
     window.updateDialogueVariableInitial = (index, value) => {
@@ -9826,17 +8368,17 @@ void main(vs2ps input, out float4 result : SV_Target0)
         renderBlueprint();
     };
 
-    window.connectSelectedBlueprintNodes = () => {
+    window.connectSelectedBlueprintNodes = async () => {
         if(selectedBlueprintNodeIds.length !== 2) { alert('请按顺序选择两个节点后连接。'); return; }
         const graph = getBlueprintGraph();
         const from = graph.nodes.find(node => node.id === selectedBlueprintNodeIds[0]);
         const to = graph.nodes.find(node => node.id === selectedBlueprintNodeIds[1]);
         if(!from || !to || from.id === to.id) return;
         let port = 'out';
-        if(from.type === 'condition') port = prompt('条件出口：true 或 false', 'true') === 'false' ? 'false' : 'true';
+        if(from.type === 'condition') port = (await prompt('条件出口：true 或 false', 'true')) === 'false' ? 'false' : 'true';
         if(from.type === 'step') {
             const firstText = from.config && from.config.textIds && from.config.textIds[0];
-            port = prompt('步骤出口，例如 click:文本ID 或 timeout:文本ID', firstText ? `click:${firstText}` : 'out') || 'out';
+            port = (await prompt('步骤出口，例如 click:文本ID 或 timeout:文本ID', firstText ? `click:${firstText}` : 'out')) || 'out';
         }
         markHistoryDirty();
         graph.edges.push({ id: `edge_${nextUniqueToken()}`, fromNodeId: from.id, fromPort: port, toNodeId: to.id, toPort: 'in', weightBp: from.type === 'random' ? 0 : undefined });
@@ -10013,7 +8555,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         if(event.button !== 0) return; event.preventDefault(); event.stopPropagation(); markHistoryDirty();
         const startX=event.clientX,startY=event.clientY,x=node.x,y=node.y;
         const move=e=>{node.x=x+(e.clientX-startX)/blueprintPan.scale;node.y=y+(e.clientY-startY)/blueprintPan.scale;element.style.left=`${node.x}px`;element.style.top=`${node.y}px`;renderBlueprintEdges();};
-        const stop=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',stop);}; document.addEventListener('mousemove',move);document.addEventListener('mouseup',stop);
+        const stop=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',stop);}; __onDocument('mousemove',move);__onDocument('mouseup',stop);
     }
 
     function clientToBlueprintPoint(clientX, clientY) {
@@ -10038,7 +8580,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         blueprintConnectionDraft={fromNodeId:node.id,fromPort:port.id,x:point.x,y:point.y};renderBlueprintEdges();
         const move=e=>{const p=clientToBlueprintPoint(e.clientX,e.clientY);blueprintConnectionDraft.x=p.x;blueprintConnectionDraft.y=p.y;renderBlueprintEdges();};
         const stop=e=>{const target=document.elementFromPoint(e.clientX,e.clientY);const input=target&&target.closest('.bp-port.in');const graph=getBlueprintGraph();if(input)connectBlueprintNodes(graph,node,port.id,input.dataset.nodeId,input.dataset.portId||'in');blueprintConnectionDraft=null;document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',stop);renderBlueprint();};
-        document.addEventListener('mousemove',move);document.addEventListener('mouseup',stop);
+        __onDocument('mousemove',move);__onDocument('mouseup',stop);
     }
 
     function startBlueprintQuickGesture(event, node) {
@@ -10063,7 +8605,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             blueprintConnectionDraft = null;
             document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', stop); renderBlueprint();
         };
-        document.addEventListener('mousemove', move); document.addEventListener('mouseup', stop);
+        __onDocument('mousemove', move); __onDocument('mouseup', stop);
     }
 
     function startBlueprintMarquee(event) {
@@ -10096,7 +8638,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             }
             marquee.style.display = 'none';
         };
-        document.addEventListener('mousemove', move); document.addEventListener('mouseup', stop);
+        __onDocument('mousemove', move); __onDocument('mouseup', stop);
     }
 
     const blueprintWorkspace = document.getElementById('blueprintWorkspace');
@@ -10104,7 +8646,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         blueprintWorkspace.addEventListener('mousedown', startBlueprintMarquee, true);
         blueprintWorkspace.onclick=event=>{if(!event.target.closest('.bp-node,.blueprint-toolbar')){selectedBlueprintNodeIds=[];document.querySelectorAll('.bp-node').forEach(item=>item.classList.remove('selected'));}};
         blueprintWorkspace.onwheel=event=>{if(workspaceMode!=='blueprint')return;event.preventDefault();markHistoryDirty();const graph=getBlueprintGraph(),rect=blueprintWorkspace.getBoundingClientRect(),oldScale=graph.view.scale||1,newScale=Math.max(.35,Math.min(2.5,oldScale*(event.deltaY<0?1.1:.9))),mx=event.clientX-rect.left,my=event.clientY-rect.top,worldX=(mx-(graph.view.x||0))/oldScale,worldY=(my-(graph.view.y||0))/oldScale;graph.view.x=mx-worldX*newScale;graph.view.y=my-worldY*newScale;graph.view.scale=newScale;applyBlueprintTransform(graph);};
-        blueprintWorkspace.onmousedown=event=>{if(event.target.closest('.bp-node,.blueprint-toolbar')||(event.button!==0&&event.button!==1))return;event.preventDefault();markHistoryDirty();const graph=getBlueprintGraph(),sx=event.clientX,sy=event.clientY,ox=graph.view.x||0,oy=graph.view.y||0;blueprintWorkspace.style.cursor='grabbing';const move=e=>{graph.view.x=ox+e.clientX-sx;graph.view.y=oy+e.clientY-sy;applyBlueprintTransform(graph);};const stop=()=>{blueprintWorkspace.style.cursor='';document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',stop);};document.addEventListener('mousemove',move);document.addEventListener('mouseup',stop);};
+        blueprintWorkspace.onmousedown=event=>{if(event.target.closest('.bp-node,.blueprint-toolbar')||(event.button!==0&&event.button!==1))return;event.preventDefault();markHistoryDirty();const graph=getBlueprintGraph(),sx=event.clientX,sy=event.clientY,ox=graph.view.x||0,oy=graph.view.y||0;blueprintWorkspace.style.cursor='grabbing';const move=e=>{graph.view.x=ox+e.clientX-sx;graph.view.y=oy+e.clientY-sy;applyBlueprintTransform(graph);};const stop=()=>{blueprintWorkspace.style.cursor='';document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',stop);};__onDocument('mousemove',move);__onDocument('mouseup',stop);};
         blueprintWorkspace.oncontextmenu=event=>{if(event.altKey||event.ctrlKey||blueprintSuppressContextMenu)event.preventDefault();};
     }
 
@@ -10335,7 +8877,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             });
         }
         renderRuntimeInspector(); renderAll();
-        dialogueRuntimeFrame = requestAnimationFrame(tickDialogueRuntime);
+        dialogueRuntimeFrame = requestAnimationFrame((__ts) => { if (!root.isConnected) return; tickDialogueRuntime(__ts); });
     }
 
     function startDialoguePreview() {
@@ -10343,14 +8885,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const errors = validateDialogueLogic(); if(errors.length) { alert(`无法运行文本蓝图：\n${errors.join('\n')}`); return; }
         workspaceMode = 'run'; dialogueRuntime = createDialogueRuntime(); previewTextVariableStates.clear();
         components.filter(component => component.type === 'text' && component.textVisibilityEnabled).forEach(component => previewTextVariableStates.set(getTextVisibilityVar(component), component.visDefault !== false));
-        document.body.classList.add('preview-running'); document.getElementById('blueprintWorkspace').style.display = 'none'; workArea.style.display = 'block';
+        root.classList.add('preview-running'); document.getElementById('blueprintWorkspace').style.display = 'none'; workArea.style.display = 'block';
         document.getElementById('runtimeInspector').style.display = 'block'; syncWorkspaceModeButtons(); renderAll();
-        if(dialogueRuntimeFrame) cancelAnimationFrame(dialogueRuntimeFrame); dialogueRuntimeFrame = requestAnimationFrame(tickDialogueRuntime);
+        if(dialogueRuntimeFrame) cancelAnimationFrame(dialogueRuntimeFrame); dialogueRuntimeFrame = requestAnimationFrame((__ts) => { if (!root.isConnected) return; tickDialogueRuntime(__ts); });
     }
 
     function stopDialoguePreview(returnToLayout = false) {
         if(dialogueRuntimeFrame) cancelAnimationFrame(dialogueRuntimeFrame); dialogueRuntimeFrame = null;
-        if(workspaceMode === 'run' || dialogueRuntime) { dialogueRuntime = null; previewTextVariableStates.clear(); document.body.classList.remove('preview-running'); }
+        if(workspaceMode === 'run' || dialogueRuntime) { dialogueRuntime = null; previewTextVariableStates.clear(); root.classList.remove('preview-running'); }
         if(returnToLayout) { workspaceMode = 'layout'; document.getElementById('runtimeInspector').style.display = 'none'; workArea.style.display = 'block'; syncWorkspaceModeButtons(); renderAll(); }
     }
 
@@ -10362,7 +8904,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const wrap = document.getElementById('runtimeInspector'); if(!wrap || !dialogueRuntime) return;
         const active = [...dialogueRuntime.dialogueStates.entries()].filter(([,state]) => state.active).map(([id,state]) => { const d = dialogueLogic.dialogues.find(item => item.id === id); const step = d && d.nodes.find(node => node.id === state.stepNodeId); return `${d ? d.name : id}: ${step ? getBlueprintNodeLabel(step) : '启动中'}`; });
         const textRows = [...dialogueRuntime.textStates.entries()].filter(([,state]) => state.visible).map(([id,state]) => { const comp = getComponentById(id); const remain = state.expiresAt > 0 ? Math.max(0, state.expiresAt - dialogueRuntime.clock).toFixed(1) + 's' : '持续'; return `<div class="anim-note">${escapeHtml(getEntityLabel(makeEntityRef('component', id)))} · ${remain}</div>`; }).join('');
-        wrap.innerHTML = `<div style="display:flex;gap:5px"><button onclick="toggleDialoguePreviewPause()">${dialogueRuntime.paused ? '继续' : '暂停'}</button><button onclick="restartDialoguePreview()">重新开始</button><button onclick="setWorkspaceMode('run')">停止</button></div><h4>运行状态 · ${dialogueRuntime.clock.toFixed(1)}s</h4><div class="anim-note">${escapeHtml(active.join('；') || '没有活动对话')}<br>${escapeHtml(dialogueRuntime.lastRandom || '尚未触发随机分支')}</div>${textRows}<h4 style="margin-top:10px">变量检查器</h4>` + [...dialogueRuntime.variables.entries()].map(([name,value]) => `<div class="runtime-row"><span class="var-tag">${escapeHtml(name)}</span><input type="number" step="any" value="${Number(value)}" onchange="setDialoguePreviewVariable('${escapeHtml(name)}',this.value)"></div>`).join('');
+        wrap.innerHTML = `<div style="display:flex;gap:5px"><button onclick="UIB.toggleDialoguePreviewPause()">${dialogueRuntime.paused ? '继续' : '暂停'}</button><button onclick="UIB.restartDialoguePreview()">重新开始</button><button onclick="UIB.setWorkspaceMode('run')">停止</button></div><h4>运行状态 · ${dialogueRuntime.clock.toFixed(1)}s</h4><div class="anim-note">${escapeHtml(active.join('；') || '没有活动对话')}<br>${escapeHtml(dialogueRuntime.lastRandom || '尚未触发随机分支')}</div>${textRows}<h4 style="margin-top:10px">变量检查器</h4>` + [...dialogueRuntime.variables.entries()].map(([name,value]) => `<div class="runtime-row"><span class="var-tag">${escapeHtml(name)}</span><input type="number" step="any" value="${Number(value)}" onchange="UIB.setDialoguePreviewVariable('${escapeHtml(name)}',this.value)"></div>`).join('');
     }
 
     function getComponentsAtClientPoint(clientX, clientY) {
@@ -10406,15 +8948,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
         return true;
     }
 
-    window.addEventListener('input', (e) => {
+    __onWindow('input', (e) => {
         if(shouldTrackHistoryEvent(e)) markHistoryDirty();
     }, true);
 
-    window.addEventListener('change', (e) => {
+    __onWindow('change', (e) => {
         if(shouldTrackHistoryEvent(e)) markHistoryDirty();
     }, true);
 
-    window.addEventListener('click', (e) => {
+    __onWindow('click', (e) => {
         if(e.target && e.target.closest && e.target.closest('button') && shouldTrackHistoryEvent(e)) {
             markHistoryDirty();
         }
@@ -10426,8 +8968,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         if(isEditableEventTarget(e.target)) markHistoryDirty();
     }
 
-    window.addEventListener('pointerdown', onHistoryTrackedPointerDown, true);
-    window.addEventListener('mousedown', onHistoryTrackedPointerDown, true);
+    __onWindow('pointerdown', onHistoryTrackedPointerDown, true);
+    __onWindow('mousedown', onHistoryTrackedPointerDown, true);
 
     workArea.addEventListener('mousedown', (e) => {
         if(e.target !== workArea) return;
@@ -10456,7 +8998,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         previewPointerState.inside = false;
         setDockGuide('');
     });
-    window.addEventListener('keydown', (e) => {
+    __onWindow('keydown', (e) => {
+      if (!root.isConnected) return;
         if(e.key === 'Alt') previewPointerState.alt = true;
         if(e.defaultPrevented || isEditableEventTarget(e.target)) return;
         const key = String(e.key || '').toLowerCase();
@@ -10484,13 +9027,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
             }
         }
     });
-    window.addEventListener('keyup', (e) => {
+    __onWindow('keyup', (e) => {
+      if (!root.isConnected) return;
         if(e.key === 'Alt') {
             previewPointerState.alt = false;
             setDockGuide('');
         }
     });
-    window.addEventListener('blur', () => {
+    __onWindow('blur', () => {
+      if (!root.isConnected) return;
         previewPointerState.alt = false;
         setDockGuide('');
     });
@@ -10796,7 +9341,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 pBox.disabled = false;
                 pVar.innerText = `$phys_mode_${objIndex}`;
                 pLbl.innerText = obj.physics ? '物理默认开启' : '物理默认关闭';
-                pLbl.style.color = obj.physics ? '#0f0' : '#aaa';
+                pLbl.style.color = obj.physics ? '#4dedb4' : '#aaa';
 
                 if(obj.physics) {
                     physConfigPanel.style.display = 'block';
@@ -10864,7 +9409,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     physConfigPanel.style.display = 'none';
                 } else {
                     pLbl.innerText = obj.physics ? "物理默认开启" : "物理默认关闭";
-                    pLbl.style.color = obj.physics ? "#0f0" : "#aaa";
+                    pLbl.style.color = obj.physics ? "#4dedb4" : "#aaa";
                     
                     if(obj.physics) {
                         physConfigPanel.style.display = 'block';
@@ -11000,11 +9545,11 @@ void main(vs2ps input, out float4 result : SV_Target0)
             div.innerHTML = `
                 <div class="${thumbClass}"${thumbStyle}>${f.preview ? '' : '无'}</div>
                 <span style="font-size:0.8em;color:var(--muted-color);">值:</span>
-                <input type="number" class="seq-val-input" value="${f.val}" onchange="updateFrameVal(${i}, this.value)">
+                <input type="number" class="seq-val-input" value="${f.val}" onchange="UIB.updateFrameVal(${i}, this.value)">
                 <input type="text" class="res-path" value="${escapeHtml(f.path || '')}" readonly>
-                <input type="file" id="u_seq_${i}" style="display:none" onchange="uploadSeqFrame(${i}, this)">
+                <input type="file" id="u_seq_${i}" style="display:none" onchange="UIB.uploadSeqFrame(${i}, this)">
                 <button class="res-upload" onclick="document.getElementById('u_seq_${i}').click()">上传</button>
-                <button class="seq-del-btn" onclick="delFrame(${i})">删</button>
+                <button class="seq-del-btn" onclick="UIB.delFrame(${i})">删</button>
             `;
             cont.appendChild(div);
         });
@@ -11027,9 +9572,9 @@ void main(vs2ps input, out float4 result : SV_Target0)
             renderAll();
         }
     };
-    window.clearFrames = () => {
+    window.clearFrames = async () => {
         let o = selectedObj();
-        if(o && confirm("确认要清空所有序列帧吗？")) {
+        if(o && await confirm("确认要清空所有序列帧吗？")) {
             o.frames = [];
             renderSeqList(o);
             refreshResourceWindow(o);
@@ -11415,13 +9960,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const kindLabel = targetComp && targetComp.type === 'toggle' ? '点击计数' : (targetComp && targetComp.type === 'joystick' ? '双轴位移' : '拖拽位移');
             container.innerHTML += `
                 <div style="display:flex; gap:4px; align-items:center; background:rgba(0,0,0,0.25); padding:4px 6px; border:1px solid rgba(255,90,90,0.3); border-radius:4px;">
-                    <span style="font-size:0.7em; color:#ff8a8a; white-space:nowrap;">绑定 ${idx + 1}:</span>
-                    <select onchange="updateAccumBinding(${idx},this.value)" style="flex:1; font-size:0.78em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                    <span style="font-size:0.7em; color:#ff8a96; white-space:nowrap;">绑定 ${idx + 1}:</span>
+                    <select onchange="UIB.updateAccumBinding(${idx},this.value)" style="flex:1; font-size:0.78em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                         <option value="">-- 选择组件 --</option>
                         ${linkable.map(c => `<option value="${c.id}" ${c.id === b.targetId ? 'selected' : ''}>${getComponentDisplayName(c)}</option>`).join('')}
                     </select>
-                    ${targetComp ? `<span style="font-size:0.65em; color:#9bcfff; white-space:nowrap;">${kindLabel}</span>` : ''}
-                    <button onclick="removeAccumBinding(${idx})" style="font-size:0.65em; padding:1px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                    ${targetComp ? `<span style="font-size:0.65em; color:#a8ecff; white-space:nowrap;">${kindLabel}</span>` : ''}
+                    <button onclick="UIB.removeAccumBinding(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
                 </div>
             `;
         });
@@ -11440,15 +9985,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
         triggers.forEach((t, idx) => {
             container.innerHTML += `
                 <div style="display:flex; gap:4px; align-items:center; background:rgba(0,0,0,0.25); padding:4px 6px; border:1px solid rgba(255,190,90,0.3); border-radius:4px;">
-                    <span style="font-size:0.7em; color:#ffd27a; white-space:nowrap;">变量 ${idx + 1}:</span>
+                    <span style="font-size:0.7em; color:var(--uib-warn-text); white-space:nowrap;">变量 ${idx + 1}:</span>
                     <input type="text" value="${escapeHtml(t.var || '')}" placeholder="$Var"
-                        onchange="updateAccumTriggerVar(${idx},this.value)"
-                        style="flex:1; font-size:0.75em; padding:2px; color:#ffb457; border:1px solid rgba(255,180,87,0.45); background:var(--input-bg); border-radius:4px;">
-                    <span style="font-size:0.7em; color:#ffd27a; white-space:nowrap;">=</span>
+                        onchange="UIB.updateAccumTriggerVar(${idx},this.value)"
+                        style="flex:1; font-size:0.75em; padding:2px; color:#ffcf7d; border:1px solid rgba(255,181,77,0.45); background:var(--input-bg); border-radius:4px;">
+                    <span style="font-size:0.7em; color:var(--uib-warn-text); white-space:nowrap;">=</span>
                     <input type="number" step="0.01" value="${Number.isFinite(Number(t.value)) ? Number(t.value) : 0}"
-                        onchange="updateAccumTriggerValue(${idx},this.value)"
+                        onchange="UIB.updateAccumTriggerValue(${idx},this.value)"
                         style="width:84px; font-size:0.75em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
-                    <button onclick="removeAccumTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                    <button onclick="UIB.removeAccumTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
                 </div>
             `;
         });
@@ -11461,24 +10006,24 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const rows = actions.map((action, actionIdx) => `
             <div style="display:flex; gap:4px; align-items:center; margin-top:4px;">
                 <input type="text" value="${action.var || ''}" placeholder="$TargetVar"
-                    onchange="updateLinkedSlaveActionVar(${linkIdx},'${safePhase}',${actionIdx},this.value)"
-                    style="flex:1; font-size:0.75em; padding:2px; color:#ffb457; border:1px solid rgba(255,180,87,0.45); background:var(--input-bg); border-radius:4px;">
+                    onchange="UIB.updateLinkedSlaveActionVar(${linkIdx},'${safePhase}',${actionIdx},this.value)"
+                    style="flex:1; font-size:0.75em; padding:2px; color:#ffcf7d; border:1px solid rgba(255,181,77,0.45); background:var(--input-bg); border-radius:4px;">
                 <input type="number" step="0.01" value="${Number.isFinite(Number(action.value)) ? Number(action.value) : 0}"
-                    onchange="updateLinkedSlaveActionValue(${linkIdx},'${safePhase}',${actionIdx},this.value)"
+                    onchange="UIB.updateLinkedSlaveActionValue(${linkIdx},'${safePhase}',${actionIdx},this.value)"
                     style="width:92px; font-size:0.75em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
-                <button onclick="removeLinkedSlaveAction(${linkIdx},'${safePhase}',${actionIdx})"
-                    style="font-size:0.7em; padding:2px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                <button onclick="UIB.removeLinkedSlaveAction(${linkIdx},'${safePhase}',${actionIdx})"
+                    style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
             </div>
         `).join('');
         return `
-            <div style="margin-top:6px; padding:5px; background:rgba(255,193,7,0.06); border:1px solid rgba(255,193,7,0.22); border-radius:4px;">
+            <div style="margin-top:6px; padding:5px; background:rgba(255,181,77,0.06); border:1px solid rgba(255,181,77,0.22); border-radius:4px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                     <div>
-                        <div style="font-size:0.76em; color:#ffd36a; font-weight:bold;">${title}</div>
+                        <div style="font-size:0.76em; color:#ffd98a; font-weight:bold;">${title}</div>
                         <div style="font-size:0.65em; color:var(--muted-color);">${hint}</div>
                     </div>
-                    <button onclick="addLinkedSlaveAction(${linkIdx},'${safePhase}')"
-                        style="font-size:0.68em; padding:2px 8px; background:#2f4c36; border:1px solid #4c8a61; color:#9cffb4; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
+                    <button onclick="UIB.addLinkedSlaveAction(${linkIdx},'${safePhase}')"
+                        style="font-size:0.68em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:#7df0c0; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
                 </div>
                 ${rows || '<div style="font-size:0.68em; color:var(--muted-color); margin-top:4px;">未配置动作</div>'}
             </div>
@@ -11518,14 +10063,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
             
             let html = `<div style="background:rgba(0,0,0,0.3); padding:6px; border:1px solid rgba(255,165,0,0.3); border-radius:4px; margin-bottom:4px;">`;
             html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-size:0.8em; color:#ffa500; font-weight:bold;">联动 ${idx + 1}</span>
-                <button onclick="removeLinkedSlave(${idx})" style="font-size:0.65em; padding:1px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:2px; width:auto;">删除</button>
+                <span style="font-size:0.8em; color:#ffab3d; font-weight:bold;">联动 ${idx + 1}</span>
+                <button onclick="UIB.removeLinkedSlave(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:2px; width:auto;">删除</button>
             </div>`;
             
             // 目标组件选择
             html += `<div class="input-row" style="margin-bottom:3px;">
-                <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">目标组件:</label>
-                <select onchange="updateLinkedSlave(${idx},'targetId',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">目标组件:</label>
+                <select onchange="UIB.updateLinkedSlave(${idx},'targetId',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                     <option value="">-- 选择组件 --</option>
                     ${linkable.map(c => `<option value="${c.id}" ${c.id === slave.targetId ? 'selected' : ''}>${getComponentDisplayName(c)}</option>`).join('')}
                 </select>
@@ -11538,14 +10083,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
             if(sourceToJoystick) {
                 const pts = getLinkedSlaveRegionPoints(slave);
-                html += `<div style="font-size:0.68em; color:#9bcfff; margin-bottom:5px; background:rgba(79,193,255,0.08); padding:4px 6px; border:1px solid rgba(79,193,255,0.2); border-radius:4px;">
+                html += `<div style="font-size:0.68em; color:#a8ecff; margin-bottom:5px; background:rgba(63,217,255,0.08); padding:4px 6px; border:1px solid rgba(63,217,255,0.2); border-radius:4px;">
                     摇杆联动摇杆固定使用 4 点区域映射。源摇杆进入该区域后，位置会直接映射到目标摇杆。
                 </div>`;
                 html += `<div style="background:rgba(0,0,0,0.2); padding:6px; border:1px solid rgba(255,165,0,0.2); border-radius:4px; margin-bottom:3px;">
-                    <div style="font-size:0.75em; color:#ffa500; font-weight:bold; margin-bottom:4px;">四边形区域 (4 点)</div>
+                    <div style="font-size:0.75em; color:#ffab3d; font-weight:bold; margin-bottom:4px;">四边形区域 (4 点)</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 6px;">`;
                 const ptLabels = ['点1 (左上)', '点2 (右上)', '点3 (右下)', '点4 (左下)'];
-                const ptColors = ['#ff9999', '#99ff99', '#9999ff', '#ffff99'];
+                const ptColors = ['#ff9daa', '#7df0c0', '#9d8fff', '#ffe08a'];
                 for(let pi = 0; pi < 4; pi++) {
                     const p = pts[pi] || { x: 0, y: 0 };
                     html += `<div style="border:1px solid ${ptColors[pi]}33; padding:3px; border-radius:3px;">
@@ -11553,12 +10098,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         <div style="display:flex; gap:3px; align-items:center;">
                             <span style="font-size:0.55em; color:var(--muted-color);">X</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.x.toFixed(2)}"
-                                onchange="updateLinkedSlaveRegionPoint(${idx},${pi},'x',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8888; border-radius:3px;">
+                                onchange="UIB.updateLinkedSlaveRegionPoint(${idx},${pi},'x',this.value)"
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8a96; border-radius:3px;">
                             <span style="font-size:0.55em; color:var(--muted-color);">Y</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.y.toFixed(2)}"
-                                onchange="updateLinkedSlaveRegionPoint(${idx},${pi},'y',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#8888ff; border-radius:3px;">
+                                onchange="UIB.updateLinkedSlaveRegionPoint(${idx},${pi},'y',this.value)"
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#a58bff; border-radius:3px;">
                         </div>
                     </div>`;
                 }
@@ -11569,8 +10114,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     </div>
                 </div>`;
                 html += `<div class="input-row" style="margin-bottom:3px;">
-                    <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">超出范围:</label>
-                    <select onchange="updateLinkedSlave(${idx},'overflow',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                    <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">超出范围:</label>
+                    <select onchange="UIB.updateLinkedSlave(${idx},'overflow',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                         <option value="reset" ${overflow === 'reset' ? 'selected' : ''}>归零（带回弹）</option>
                         <option value="keep_max" ${overflow === 'keep_max' ? 'selected' : ''}>保持最大值</option>
                     </select>
@@ -11585,8 +10130,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             dirOpts.push(`<option value="${d}" ${String(joyAxis) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                         }
                         html += `<div class="input-row" style="margin-bottom:3px;">
-                            <label style="font-size:0.75em; color:#4fc1ff; flex:0 0 5em;">源方向:</label>
-                            <select onchange="updateLinkedSlave(${idx},'joyAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                            <label style="font-size:0.75em; color:#3fd9ff; flex:0 0 5em;">源方向:</label>
+                            <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                                 ${dirOpts.join('')}
                             </select>
                         </div>`;
@@ -11599,16 +10144,16 @@ void main(vs2ps input, out float4 result : SV_Target0)
                                 dirOpts2.push(`<option value="${d}" ${String(joyAxis2) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                             }
                             html += `<div class="input-row" style="margin-bottom:3px;">
-                                <label style="font-size:0.75em; color:#ffd36a; flex:0 0 5em;">右半方向:</label>
-                                <select onchange="updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,211,106,0.45); color:#ffd36a; border-radius:6px;">
+                                <label style="font-size:0.75em; color:#ffd98a; flex:0 0 5em;">右半方向:</label>
+                                <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,207,125,0.45); color:#ffd98a; border-radius:6px;">
                                     ${dirOpts2.join('')}
                                 </select>
                             </div>`;
                         }
                     } else {
                         html += `<div class="input-row" style="margin-bottom:3px;">
-                            <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">源轴:</label>
-                            <select onchange="updateLinkedSlave(${idx},'joyAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                            <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">源轴:</label>
+                            <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                                 <option value="both" ${joyAxis === 'both' ? 'selected' : ''}>两轴(取最大值)</option>
                                 <option value="x" ${joyAxis === 'x' ? 'selected' : ''}>X 轴</option>
                                 <option value="y" ${joyAxis === 'y' ? 'selected' : ''}>Y 轴</option>
@@ -11617,8 +10162,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         if(targetComp && targetComp.paramMode === '2') {
                             const joyAxis2 = slave.joyAxis2;
                             html += `<div class="input-row" style="margin-bottom:3px;">
-                                <label style="font-size:0.75em; color:#ffd36a; flex:0 0 5em;">右半轴:</label>
-                                <select onchange="updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,211,106,0.45); color:#ffd36a; border-radius:6px;">
+                                <label style="font-size:0.75em; color:#ffd98a; flex:0 0 5em;">右半轴:</label>
+                                <select onchange="UIB.updateLinkedSlave(${idx},'joyAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,207,125,0.45); color:#ffd98a; border-radius:6px;">
                                     <option value="" ${!joyAxis2 ? 'selected' : ''}>未启用</option>
                                     <option value="x" ${joyAxis2 === 'x' ? 'selected' : ''}>X 轴</option>
                                     <option value="y" ${joyAxis2 === 'y' ? 'selected' : ''}>Y 轴</option>
@@ -11630,8 +10175,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                 if(!isJoystick && targetIsJoystick && targetComp.paramMode !== '4') {
                     html += `<div class="input-row" style="margin-bottom:3px;">
-                        <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">目标轴:</label>
-                        <select onchange="updateLinkedSlave(${idx},'joyTargetAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                        <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">目标轴:</label>
+                        <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                             <option value="x" ${joyTargetAxis === 'x' ? 'selected' : ''}>X 轴</option>
                             <option value="y" ${joyTargetAxis === 'y' ? 'selected' : ''}>Y 轴</option>
                             <option value="both" ${joyTargetAxis === 'both' ? 'selected' : ''}>双轴</option>
@@ -11646,8 +10191,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         dirOpts.push(`<option value="${d}" ${String(joyTargetAxis) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                     }
                     html += `<div class="input-row" style="margin-bottom:3px;">
-                        <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">目标方向:</label>
-                        <select onchange="updateLinkedSlave(${idx},'joyTargetAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                        <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">目标方向:</label>
+                        <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                             ${dirOpts.join('')}
                         </select>
                     </div>`;
@@ -11660,8 +10205,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             dirOpts2.push(`<option value="${d}" ${String(joyTargetAxis2) === String(d) ? 'selected' : ''}>方向 ${d+1} · ${label}</option>`);
                         }
                         html += `<div class="input-row" style="margin-bottom:3px;">
-                            <label style="font-size:0.75em; color:#ffd36a; flex:0 0 5em;">目标方向 2:</label>
-                            <select onchange="updateLinkedSlave(${idx},'joyTargetAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,211,106,0.45); color:#ffd36a; border-radius:6px;">
+                            <label style="font-size:0.75em; color:#ffd98a; flex:0 0 5em;">目标方向 2:</label>
+                            <select onchange="UIB.updateLinkedSlave(${idx},'joyTargetAxis2',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid rgba(255,207,125,0.45); color:#ffd98a; border-radius:6px;">
                                 ${dirOpts2.join('')}
                             </select>
                         </div>`;
@@ -11672,21 +10217,21 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     <div style="flex:1;">
                         <label style="font-size:0.7em; color:var(--muted-color);">源区间最小</label>
                         <input type="number" step="0.01" min="0" max="1" value="${srcMin}" 
-                            onchange="updateLinkedSlaveNum(${idx},'srcMin',this.value)" 
+                            onchange="UIB.updateLinkedSlaveNum(${idx},'srcMin',this.value)" 
                             style="width:100%; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                     </div>
                     <div style="flex:1;">
                         <label style="font-size:0.7em; color:var(--muted-color);">源区间最大</label>
                         <input type="number" step="0.01" min="0" max="1" value="${srcMax}"
-                            onchange="updateLinkedSlaveNum(${idx},'srcMax',this.value)"
+                            onchange="UIB.updateLinkedSlaveNum(${idx},'srcMax',this.value)"
                             style="width:100%; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                     </div>
                 </div>`;
 
                 if(targetComp && targetComp.paramMode === '2') {
                     html += `<div class="input-row" style="margin-bottom:3px;">
-                        <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">映射方向:</label>
-                        <select onchange="updateLinkedSlave(${idx},'splitSide',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                        <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">映射方向:</label>
+                        <select onchange="UIB.updateLinkedSlave(${idx},'splitSide',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                             <option value="both" ${splitSide === 'both' ? 'selected' : ''}>整体</option>
                             <option value="left" ${splitSide === 'left' ? 'selected' : ''}>左/下半 (0.5→0)</option>
                             <option value="right" ${splitSide === 'right' ? 'selected' : ''}>右/上半 (0.5→1)</option>
@@ -11695,8 +10240,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 }
 
                 html += `<div class="input-row" style="margin-bottom:3px;">
-                    <label style="font-size:0.75em; color:#ffa500; flex:0 0 5em;">超出范围:</label>
-                    <select onchange="updateLinkedSlave(${idx},'overflow',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
+                    <label style="font-size:0.75em; color:#ffab3d; flex:0 0 5em;">超出范围:</label>
+                    <select onchange="UIB.updateLinkedSlave(${idx},'overflow',this.value)" style="flex:1; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                         <option value="reset" ${overflow === 'reset' ? 'selected' : ''}>归零（带回弹）</option>
                         <option value="keep_max" ${overflow === 'keep_max' ? 'selected' : ''}>保持最大值</option>
                     </select>
@@ -11708,14 +10253,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const postRadius = getLinkedSlavePostRadius(slave);
             if(isJoystick && targetIsJoystick) {
                 html += `<div style="margin-top:6px; padding:4px; background:rgba(64,224,208,0.08); border:1px solid rgba(64,224,208,0.35); border-radius:3px;">
-                    <label style="font-size:0.8em; color:#40e0d0; font-weight:bold;">
-                        <input type="checkbox" ${postEnabled ? 'checked' : ''} onchange="updateLinkedSlave(${idx},'postEnabled',this.checked)" style="margin-right:4px;">碰撞桩（中心激活）
+                    <label style="font-size:0.8em; color:#4dedb4; font-weight:bold;">
+                        <input type="checkbox" ${postEnabled ? 'checked' : ''} onchange="UIB.updateLinkedSlave(${idx},'postEnabled',this.checked)" style="margin-right:4px;">碰撞桩（中心激活）
                     </label>
                     <div id="post_config_${idx}" style="display:${postEnabled ? 'flex' : 'none'}; gap:4px; margin-top:4px;">
                         <div style="flex:1;">
                             <label style="font-size:0.65em; color:var(--muted-color);">检测半径（区域占比）</label>
                             <input type="number" step="0.01" min="0" max="1" value="${postRadius}"
-                                onchange="updateLinkedSlaveNum(${idx},'postRadius',this.value)"
+                                onchange="UIB.updateLinkedSlaveNum(${idx},'postRadius',this.value)"
                                 style="width:100%; font-size:0.75em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
                         </div>
                     </div>
@@ -11744,7 +10289,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         displayVal = dirParts.length > 0 ? dirParts.join(' ') : 'N/A';
                     }
                 }
-                html += `<div style="font-size:0.7em; color:#7fd7ff; margin-top:3px; padding:2px 4px; background:rgba(0,0,0,0.2); border-radius:2px;">映射值: ${displayVal}</div>`;
+                html += `<div style="font-size:0.7em; color:#8fe8ff; margin-top:3px; padding:2px 4px; background:rgba(0,0,0,0.2); border-radius:2px;">映射值: ${displayVal}</div>`;
             }
 
             html += renderLinkedSlaveActionsEditor(idx, 'enter', enterActions);
@@ -11915,19 +10460,19 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const leaveActions = normalizeLinkedSlaveActionList(trigger.leaveActions);
             const isJoystick = obj.type === 'joystick';
 
-            let html = `<div style="background:rgba(0,0,0,0.3); padding:6px; border:1px solid rgba(79,193,255,0.3); border-radius:4px; margin-bottom:4px;">`;
+            let html = `<div style="background:rgba(0,0,0,0.3); padding:6px; border:1px solid rgba(63,217,255,0.3); border-radius:4px; margin-bottom:4px;">`;
             html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-size:0.8em; color:#4fc1ff; font-weight:bold;">区间触发 ${idx + 1}</span>
-                <button onclick="removeRangeTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:2px; width:auto;">删除</button>
+                <span style="font-size:0.8em; color:#3fd9ff; font-weight:bold;">区间触发 ${idx + 1}</span>
+                <button onclick="UIB.removeRangeTrigger(${idx})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:2px; width:auto;">删除</button>
             </div>`;
 
             if(isJoystick) {
                 const pts = getRangeTriggerRegionPoints(trigger);
-                html += `<div style="background:rgba(0,0,0,0.2); padding:6px; border:1px solid rgba(79,193,255,0.2); border-radius:4px; margin-bottom:3px;">
-                    <div style="font-size:0.75em; color:#4fc1ff; font-weight:bold; margin-bottom:4px;">触发区域 (4 点)</div>
+                html += `<div style="background:rgba(0,0,0,0.2); padding:6px; border:1px solid rgba(63,217,255,0.2); border-radius:4px; margin-bottom:3px;">
+                    <div style="font-size:0.75em; color:#3fd9ff; font-weight:bold; margin-bottom:4px;">触发区域 (4 点)</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 6px;">`;
                 const ptLabels = ['点1 (左上)', '点2 (右上)', '点3 (右下)', '点4 (左下)'];
-                const ptColors = ['#ff9999', '#99ff99', '#9999ff', '#ffff99'];
+                const ptColors = ['#ff9daa', '#7df0c0', '#9d8fff', '#ffe08a'];
                 for(let pi = 0; pi < 4; pi++) {
                     const p = pts[pi] || { x: 0, y: 0 };
                     html += `<div style="border:1px solid ${ptColors[pi]}33; padding:3px; border-radius:3px;">
@@ -11935,12 +10480,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         <div style="display:flex; gap:3px; align-items:center;">
                             <span style="font-size:0.55em; color:var(--muted-color);">X</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.x.toFixed(2)}"
-                                onchange="updateRangeTriggerRegionPoint(${idx},${pi},'x',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8888; border-radius:3px;">
+                                onchange="UIB.updateRangeTriggerRegionPoint(${idx},${pi},'x',this.value)"
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#ff8a96; border-radius:3px;">
                             <span style="font-size:0.55em; color:var(--muted-color);">Y</span>
                             <input type="number" step="0.01" min="-1" max="1" value="${p.y.toFixed(2)}"
-                                onchange="updateRangeTriggerRegionPoint(${idx},${pi},'y',this.value)"
-                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#8888ff; border-radius:3px;">
+                                onchange="UIB.updateRangeTriggerRegionPoint(${idx},${pi},'y',this.value)"
+                                style="flex:1; font-size:0.7em; padding:1px; background:var(--input-bg); border:1px solid var(--border-color); color:#a58bff; border-radius:3px;">
                         </div>
                     </div>`;
                 }
@@ -11959,13 +10504,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     <div style="flex:1;">
                         <label style="font-size:0.7em; color:var(--muted-color);">区间最小</label>
                         <input type="number" step="0.01" min="0" max="1" value="${srcMin}" 
-                            onchange="updateRangeTriggerNum(${idx},'srcMin',this.value)" 
+                            onchange="UIB.updateRangeTriggerNum(${idx},'srcMin',this.value)" 
                             style="width:100%; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                     </div>
                     <div style="flex:1;">
                         <label style="font-size:0.7em; color:var(--muted-color);">区间最大</label>
                         <input type="number" step="0.01" min="0" max="1" value="${srcMax}"
-                            onchange="updateRangeTriggerNum(${idx},'srcMax',this.value)"
+                            onchange="UIB.updateRangeTriggerNum(${idx},'srcMax',this.value)"
                             style="width:100%; font-size:0.8em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:6px;">
                     </div>
                 </div>`;
@@ -11987,24 +10532,24 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const rows = actions.map((action, actionIdx) => `
             <div style="display:flex; gap:4px; align-items:center; margin-top:4px;">
                 <input type="text" value="${action.var || ''}" placeholder="$TargetVar"
-                    onchange="updateRangeTriggerActionVar(${triggerIdx},'${safePhase}',${actionIdx},this.value)"
-                    style="flex:1; font-size:0.75em; padding:2px; color:#7fd7ff; border:1px solid rgba(127,215,255,0.45); background:var(--input-bg); border-radius:4px;">
+                    onchange="UIB.updateRangeTriggerActionVar(${triggerIdx},'${safePhase}',${actionIdx},this.value)"
+                    style="flex:1; font-size:0.75em; padding:2px; color:#8fe8ff; border:1px solid rgba(127,215,255,0.45); background:var(--input-bg); border-radius:4px;">
                 <input type="number" step="0.01" value="${Number.isFinite(Number(action.value)) ? Number(action.value) : 0}"
-                    onchange="updateRangeTriggerActionValue(${triggerIdx},'${safePhase}',${actionIdx},this.value)"
+                    onchange="UIB.updateRangeTriggerActionValue(${triggerIdx},'${safePhase}',${actionIdx},this.value)"
                     style="width:92px; font-size:0.75em; padding:2px; background:var(--input-bg); border:1px solid var(--border-color); color:var(--text-color); border-radius:4px;">
-                <button onclick="removeRangeTriggerAction(${triggerIdx},'${safePhase}',${actionIdx})"
-                    style="font-size:0.7em; padding:2px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px; width:auto;">删</button>
+                <button onclick="UIB.removeRangeTriggerAction(${triggerIdx},'${safePhase}',${actionIdx})"
+                    style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px; width:auto;">删</button>
             </div>
         `).join('');
         return `
-            <div style="margin-top:6px; padding:5px; background:rgba(79,193,255,0.06); border:1px solid rgba(79,193,255,0.22); border-radius:4px;">
+            <div style="margin-top:6px; padding:5px; background:rgba(63,217,255,0.06); border:1px solid rgba(63,217,255,0.22); border-radius:4px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                     <div>
-                        <div style="font-size:0.76em; color:#7fd7ff; font-weight:bold;">${title}</div>
+                        <div style="font-size:0.76em; color:#8fe8ff; font-weight:bold;">${title}</div>
                         <div style="font-size:0.65em; color:var(--muted-color);">${hint}</div>
                     </div>
-                    <button onclick="addRangeTriggerAction(${triggerIdx},'${safePhase}')"
-                        style="font-size:0.68em; padding:2px 8px; background:#2f4c4f; border:1px solid #4c8a8f; color:#9cffff; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
+                    <button onclick="UIB.addRangeTriggerAction(${triggerIdx},'${safePhase}')"
+                        style="font-size:0.68em; padding:2px 8px; background:var(--uib-btn-bg); border:1px solid #2a5a72; color:#a8ecff; cursor:pointer; border-radius:3px; width:auto;">+ 参数</button>
                 </div>
                 ${rows || '<div style="font-size:0.68em; color:var(--muted-color); margin-top:4px;">未配置动作</div>'}
             </div>
@@ -12201,21 +10746,21 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
         varContainer.innerHTML += `
             <div class="var-item" style="flex-wrap:wrap; padding:7px; background:rgba(0,0,0,0.2); border-radius:4px; margin-bottom:8px;">
-                <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">${isBidirectional ? '双向分段设置' : '单向分段设置'}</div>
-                <div style="width:100%; font-size:0.75em; color:#8ecdf7; line-height:1.5; margin:4px 0 7px;">每段输出固定为 0–1；进入下一段后，之前的段保持为 1。</div>
+                <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">${isBidirectional ? '双向分段设置' : '单向分段设置'}</div>
+                <div style="width:100%; font-size:0.75em; color:#8fe8ff; line-height:1.5; margin:4px 0 7px;">每段输出固定为 0–1；进入下一段后，之前的段保持为 1。</div>
                 <div style="display:flex; gap:5px; width:100%; flex-wrap:wrap;">
                     <div style="flex:1; min-width:90px;">
                         <label style="font-size:0.75em; color:var(--muted-color);">${isBidirectional ? '默认位置 (0–1)' : '默认值'}</label>
-                        <input type="number" step="0.01" ${isBidirectional ? 'min="0" max="1"' : ''} value="${defaultValue}" onchange="updateDefVal(0,this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                        <input type="number" step="0.01" ${isBidirectional ? 'min="0" max="1"' : ''} value="${defaultValue}" onchange="UIB.updateDefVal(0,this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                     </div>
                     ${!isBidirectional ? `
                     <div style="flex:1; min-width:90px;">
                         <label style="font-size:0.75em; color:var(--muted-color);">滑块最小值</label>
-                        <input type="number" step="0.01" value="${getSliderRangeMin(obj)}" onchange="updateMinVal(0,this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                        <input type="number" step="0.01" value="${getSliderRangeMin(obj)}" onchange="UIB.updateMinVal(0,this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                     </div>
                     <div style="flex:1; min-width:90px;">
                         <label style="font-size:0.75em; color:var(--muted-color);">滑块最大值</label>
-                        <input type="number" step="0.01" value="${getSliderRangeMax(obj)}" onchange="updateMaxVal(0,this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                        <input type="number" step="0.01" value="${getSliderRangeMax(obj)}" onchange="UIB.updateMaxVal(0,this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                     </div>` : ''}
                 </div>
             </div>`;
@@ -12223,8 +10768,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
         for(let sideIdx = 0; sideIdx < cfg.sideCount; sideIdx++) {
             const sideLabel = getSliderSubdivisionSideLabel(obj, sideIdx);
             varContainer.innerHTML += `
-                <div style="width:100%; margin-top:${sideIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px;">
-                    <div style="font-size:0.92em; color:#4fc1ff; font-weight:bold; margin-bottom:8px;">${sideLabel} · ${cfg.subdivisions} 段</div>
+                <div style="width:100%; margin-top:${sideIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(63,217,255,0.08); border:1px solid rgba(63,217,255,0.35); border-radius:4px;">
+                    <div style="font-size:0.92em; color:#3fd9ff; font-weight:bold; margin-bottom:8px;">${sideLabel} · ${cfg.subdivisions} 段</div>
                     <div id="slider_subdiv_group_${sideIdx}" style="display:flex; flex-direction:column; gap:6px;"></div>
                 </div>`;
 
@@ -12239,21 +10784,21 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                 sideContainer.innerHTML += `
                     <div class="var-item slider-subdivision-segment" data-side="${sideIdx}" data-segment="${segIdx}" style="flex-wrap:wrap; padding:6px; background:rgba(0,0,0,0.22); border-radius:3px; margin-bottom:0;">
-                        <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">累计 0→1</span></div>
+                        <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">累计 0→1</span></div>
                         <div style="width:100%; display:flex; flex-direction:column; gap:3px; margin-bottom:4px;">
                             ${segVars.map((v, rowIdx) => `
                                 <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
                                     <div class="var-label">${rowIdx + 1}:</div>
-                                    <input type="text" class="var-input" value="${v}" oninput="updateVarRow(${flatIdx},${rowIdx},this.value)" placeholder="$${sideIdx}_${segIdx}_${rowIdx + 1}">
-                                    <button onclick="removeVarRow(${flatIdx},${rowIdx})" ${segVars.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
+                                    <input type="text" class="var-input" value="${v}" oninput="UIB.updateVarRow(${flatIdx},${rowIdx},this.value)" placeholder="$${sideIdx}_${segIdx}_${rowIdx + 1}">
+                                    <button onclick="UIB.removeVarRow(${flatIdx},${rowIdx})" ${segVars.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
                                 </div>
                             `).join('')}
                         </div>
-                        <button onclick="addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
+                        <button onclick="UIB.addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
                         <div style="width:100%; margin-top:5px; padding-top:5px; border-top:1px dashed #444;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <span style="font-size:0.8em; color:#ff9d00;">本段触发目标</span>
-                                <button onclick="addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
+                                <span style="font-size:0.8em; color:#ffb54d;">本段触发目标</span>
+                                <button onclick="UIB.addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
                             </div>
                             <div id="dep_targets_${flatIdx}" style="display:flex; flex-direction:column; gap:5px;"></div>
                         </div>
@@ -12270,8 +10815,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 varContainer.innerHTML += `
                     <div class="var-item">
                         <div class="var-label">${i+1}:</div>
-                        <input type="text" class="var-input" value="${v}" oninput="updateVar(${i},this.value)" placeholder="$Var">
-                        <button onclick="removeVar(${i})">x</button>
+                        <input type="text" class="var-input" value="${v}" oninput="UIB.updateVar(${i},this.value)" placeholder="$Var">
+                        <button onclick="UIB.removeVar(${i})">x</button>
                     </div>`;
             });
         } else if (isSliderGridMode(obj)) {
@@ -12286,30 +10831,30 @@ void main(vs2ps input, out float4 result : SV_Target0)
             
             varContainer.innerHTML += `
                 <div class="var-item" style="flex-wrap:wrap; padding:5px; background:rgba(0,0,0,0.2); border-radius:3px; margin-bottom:3px;">
-                    <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">可绑定变量名（可为多个，共享同一滑条）:</div>
-                    <div style="width:100%; font-size:0.78em; color:#8ecdf7; line-height:1.45; margin-bottom:6px;">输出值：${gridValuePreview}。这些变量会同步写入同一个档位值。</div>
+                    <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">可绑定变量名（可为多个，共享同一滑条）:</div>
+                    <div style="width:100%; font-size:0.78em; color:#8fe8ff; line-height:1.45; margin-bottom:6px;">输出值：${gridValuePreview}。这些变量会同步写入同一个档位值。</div>
                     <div style="width:100%; display:flex; flex-direction:column; gap:4px; margin-bottom:6px;">
                         ${gridVarRows.map((val, idx) => `
                             <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
                                 <div class="var-label">${idx + 1}:</div>
-                                <input type="text" class="var-input" value="${val || ''}" oninput="updateVar(${idx},this.value)" placeholder="$GridVar_${idx + 1}">
-                                <button onclick="removeVar(${idx})" ${gridVarRows.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
+                                <input type="text" class="var-input" value="${val || ''}" oninput="UIB.updateVar(${idx},this.value)" placeholder="$GridVar_${idx + 1}">
+                                <button onclick="UIB.removeVar(${idx})" ${gridVarRows.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
                             </div>
                         `).join('')}
                     </div>
                     <div style="display:flex; gap:3px; width:100%;">
                         <div style="flex:1;">
                             <label style="font-size:0.75em; color:var(--muted-color);">默认输出值</label>
-                            <input type="number" step="any" value="${defaultOutputValue}" onchange="updateGridDefaultOutput(this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                            <input type="number" step="any" value="${defaultOutputValue}" onchange="UIB.updateGridDefaultOutput(this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                         </div>
                     </div>
                 </div>`;
             
             varContainer.innerHTML += `
-                <div style="width:100%; margin-top:10px; padding:8px; background:rgba(255,152,0,0.1); border:1px solid #ff9800; border-radius:4px;">
-                    <div style="font-size:0.9em; color:#ff9800; font-weight:bold; margin-bottom:4px;">可选格子触发目标</div>
+                <div style="width:100%; margin-top:10px; padding:8px; background:rgba(255,148,64,0.1); border:1px solid #ff9440; border-radius:4px;">
+                    <div style="font-size:0.9em; color:#ff9440; font-weight:bold; margin-bottom:4px;">可选格子触发目标</div>
                     <div style="font-size:0.75em; color:#ffd08a; line-height:1.45; margin-bottom:8px;">只有滑条落在某个格子时才会按顺序写入目标变量。这里的目标列表和绑定变量列表是分开的。</div>
-                    <button onclick="toggleGridTargetEditor()" style="font-size:0.72em; padding:3px 8px; background:#2b3948; border:1px solid #47627c; color:#cde8ff; cursor:pointer; border-radius:3px; margin-bottom:${isAdvancedOpen ? '8px' : '0'};">${isAdvancedOpen ? '收起格子触发目标' : '展开格子触发目标'}</button>
+                    <button onclick="UIB.toggleGridTargetEditor()" style="font-size:0.72em; padding:3px 8px; background:var(--uib-btn-bg); border:1px solid #2a5a72; color:#d8ecf7; cursor:pointer; border-radius:3px; margin-bottom:${isAdvancedOpen ? '8px' : '0'};">${isAdvancedOpen ? '收起格子触发目标' : '展开格子触发目标'}</button>
                     <div id="grid_targets_container" style="display:${isAdvancedOpen ? 'flex' : 'none'}; flex-direction:column; gap:5px;"></div>
                 </div>`;
             
@@ -12318,10 +10863,10 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 for(let g = 0; g < gridSteps; g++) {
                     let targets = gridDepTargets[g] || [];
                     gridContainer.innerHTML += `
-                        <div style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ff9800;">
+                        <div style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ff9440;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-                                <span style="font-size:0.85em; color:#ff9800; font-weight:bold;">档位 ${g + 1}（值 ${formatSliderGridNumber(getSliderGridOutputValue(obj, g))}）激活时:</span>
-                                <button onclick="addGridDepTarget(${g})" style="font-size:0.65em; padding:1px 6px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:2px;">+ 添加目标</button>
+                                <span style="font-size:0.85em; color:#ff9440; font-weight:bold;">档位 ${g + 1}（值 ${formatSliderGridNumber(getSliderGridOutputValue(obj, g))}）激活时:</span>
+                                <button onclick="UIB.addGridDepTarget(${g})" style="font-size:0.65em; padding:1px 6px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:2px;">+ 添加目标</button>
                             </div>
                             <div id="grid_dep_targets_${g}" style="display:flex; flex-direction:column; gap:3px;"></div>
                         </div>`;
@@ -12342,9 +10887,9 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 const directionLabel = formatAngleLabel(angle);
 
                 varContainer.innerHTML += `
-                    <div style="width:100%; margin-top:${dirIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(79,193,255,0.08); border:1px solid rgba(79,193,255,0.35); border-radius:4px;">
-                        <div style="font-size:0.92em; color:#4fc1ff; font-weight:bold; margin-bottom:8px;">方向 ${dirIdx + 1} · ${directionLabel}</div>
-                        <div style="font-size:0.72em; color:#8ecdf7; margin-bottom:8px;">当前方向变量会按方向值细分为 ${cfg.subdivisions} 段</div>
+                    <div style="width:100%; margin-top:${dirIdx === 0 ? 0 : 10}px; padding:8px; background:rgba(63,217,255,0.08); border:1px solid rgba(63,217,255,0.35); border-radius:4px;">
+                        <div style="font-size:0.92em; color:#3fd9ff; font-weight:bold; margin-bottom:8px;">方向 ${dirIdx + 1} · ${directionLabel}</div>
+                        <div style="font-size:0.72em; color:#8fe8ff; margin-bottom:8px;">当前方向变量会按方向值细分为 ${cfg.subdivisions} 段</div>
                         <div id="joy_dir_group_${dirIdx}" style="display:flex; flex-direction:column; gap:6px;"></div>
                     </div>`;
 
@@ -12361,27 +10906,27 @@ void main(vs2ps input, out float4 result : SV_Target0)
 
                     directionContainer.innerHTML += `
                         <div class="var-item" style="flex-wrap:wrap; padding:6px; background:rgba(0,0,0,0.22); border-radius:3px; margin-bottom:0;">
-                            <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span></div>
+                            <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">段 ${segIdx + 1} (${rangeStart.toFixed(3)} ~ ${rangeEnd.toFixed(3)}) <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span></div>
                             <div style="width:100%; display:flex; flex-direction:column; gap:3px; margin-bottom:4px;">
                                 ${segVars.map((v, ri) => `
                                     <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
                                         <div class="var-label">${ri + 1}:</div>
-                                        <input type="text" class="var-input" value="${v}" oninput="updateVarRow(${flatIdx},${ri},this.value)" placeholder="$${dirIdx}_${segIdx}_${ri + 1}">
-                                        <button onclick="removeVarRow(${flatIdx},${ri})" ${segVars.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
+                                        <input type="text" class="var-input" value="${v}" oninput="UIB.updateVarRow(${flatIdx},${ri},this.value)" placeholder="$${dirIdx}_${segIdx}_${ri + 1}">
+                                        <button onclick="UIB.removeVarRow(${flatIdx},${ri})" ${segVars.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
                                     </div>
                                 `).join('')}
                             </div>
-                            <button onclick="addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
+                            <button onclick="UIB.addVarRow(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
                             <div style="display:flex; gap:3px; width:100%;">
                                 <div style="flex:1;">
                                     <label style="font-size:0.75em; color:var(--muted-color);">最大值</label>
-                                    <input type="number" step="0.1" min="0.1" value="${maxVal}" onchange="updateMaxVal(${flatIdx},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                                    <input type="number" step="0.1" min="0.1" value="${maxVal}" onchange="UIB.updateMaxVal(${flatIdx},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                                 </div>
                             </div>
                             <div style="width:100%; margin-top:5px; padding-top:5px; border-top:1px dashed #444;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                    <span style="font-size:0.8em; color:#ff9d00;">触发目标</span>
-                                    <button onclick="addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
+                                    <span style="font-size:0.8em; color:#ffb54d;">触发目标</span>
+                                    <button onclick="UIB.addDepTarget(${flatIdx})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
                                 </div>
                                 <div id="dep_targets_${flatIdx}" style="display:flex; flex-direction:column; gap:5px;"></div>
                             </div>
@@ -12418,37 +10963,37 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 
                 varContainer.innerHTML += `
                     <div class="var-item" style="flex-wrap:wrap; padding:5px; background:rgba(0,0,0,0.2); border-radius:3px; margin-bottom:3px;">
-                        <div class="var-label" style="width:100%; text-align:left; color:#4fc1ff; font-weight:bold;">${l} <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span>:</div>
+                        <div class="var-label" style="width:100%; text-align:left; color:#3fd9ff; font-weight:bold;">${l} <span style="font-size:0.7em; color:var(--muted-color); font-weight:normal;">逐行添加</span>:</div>
                         <div style="width:100%; display:flex; flex-direction:column; gap:3px; margin-bottom:4px;">
                             ${slotVars.map((v, ri) => `
                                 <div class="var-item" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
                                     <div class="var-label">${ri + 1}:</div>
-                                    <input type="text" class="var-input" value="${v}" oninput="updateVarRow(${i},${ri},this.value)" placeholder="$${l.replace(/[^A-Za-z]/g,'')}_${ri + 1}">
-                                    <button onclick="removeVarRow(${i},${ri})" ${slotVars.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
+                                    <input type="text" class="var-input" value="${v}" oninput="UIB.updateVarRow(${i},${ri},this.value)" placeholder="$${l.replace(/[^A-Za-z]/g,'')}_${ri + 1}">
+                                    <button onclick="UIB.removeVarRow(${i},${ri})" ${slotVars.length <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''}>x</button>
                                 </div>
                             `).join('')}
                         </div>
-                        <button onclick="addVarRow(${i})" style="font-size:0.7em; padding:2px 8px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
+                        <button onclick="UIB.addVarRow(${i})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap; margin-bottom:4px;">+ 添加变量</button>
                         <div style="display:flex; gap:3px; width:100%; flex-wrap:${obj.type.includes('slider') && obj.paramMode === '1' && i === 0 ? 'wrap' : 'nowrap'};">
                             <div style="flex:1;">
                                 <label style="font-size:0.75em; color:var(--muted-color);">默认值</label>
-                                <input type="number" step="0.01" value="${defVal}" onchange="updateDefVal(${i},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                                <input type="number" step="0.01" value="${defVal}" onchange="UIB.updateDefVal(${i},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                             </div>
                             ${obj.type.includes('slider') && obj.paramMode === '1' && i === 0 ? `
                             <div style="flex:1;">
                                 <label style="font-size:0.75em; color:var(--muted-color);">最小值</label>
-                                <input type="number" step="0.01" value="${minVal}" onchange="updateMinVal(${i},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                                <input type="number" step="0.01" value="${minVal}" onchange="UIB.updateMinVal(${i},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                             </div>
                             ` : ''}
                             <div style="flex:1;">
                                 <label style="font-size:0.75em; color:var(--muted-color);">${obj.type.includes('slider') && obj.paramMode === '1' && i === 0 ? '最大值' : '最大值'}</label>
-                                <input type="number" step="0.1" ${obj.type.includes('slider') && obj.paramMode === '1' && i === 0 ? '' : 'min="0.1"'} value="${maxVal}" onchange="updateMaxVal(${i},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
+                                <input type="number" step="0.1" ${obj.type.includes('slider') && obj.paramMode === '1' && i === 0 ? '' : 'min="0.1"'} value="${maxVal}" onchange="UIB.updateMaxVal(${i},this.value)" style="width:100%; font-size:0.85em; padding:2px;">
                             </div>
                         </div>
                         <div style="width:100%; margin-top:5px; padding-top:5px; border-top:1px dashed #444;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <span style="font-size:0.8em; color:#ff9d00;">触发目标</span>
-                                <button onclick="addDepTarget(${i})" style="font-size:0.7em; padding:2px 8px; background:#2a5a3a; border:1px solid #3a7a4a; color:#0f0; cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
+                                <span style="font-size:0.8em; color:#ffb54d;">触发目标</span>
+                                <button onclick="UIB.addDepTarget(${i})" style="font-size:0.7em; padding:2px 8px; background:var(--uib-btn-ok); border:1px solid #2f8a62; color:var(--uib-ok-text); cursor:pointer; border-radius:3px; white-space:nowrap;">+ 添加目标</button>
                             </div>
                             <div id="dep_targets_${i}" style="display:flex; flex-direction:column; gap:5px;">
                             </div>
@@ -12557,19 +11102,19 @@ void main(vs2ps input, out float4 result : SV_Target0)
             }
             
             container.innerHTML += `
-                <div class="dep-target-item" style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ff9d00;">
+                <div class="dep-target-item" style="background:rgba(0,0,0,0.3); padding:5px; border-radius:3px; border-left:3px solid #ffb54d;">
                     <div style="display:flex; gap:5px; margin-bottom:3px;">
-                        <input type="text" value="${targetVar}" placeholder="$TargetVar" onchange="updateDepTargetVar(${paramIdx}, ${ti}, this.value)" style="flex:1; font-size:0.8em; padding:2px; color:#ff9d00; border-color:#d35400;">
-                        <button onclick="removeDepTarget(${paramIdx}, ${ti})" style="font-size:0.7em; padding:2px 6px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:3px;">删</button>
+                        <input type="text" value="${targetVar}" placeholder="$TargetVar" onchange="UIB.updateDepTargetVar(${paramIdx}, ${ti}, this.value)" style="flex:1; font-size:0.8em; padding:2px; color:#ffb54d; border-color:#ff9440;">
+                        <button onclick="UIB.removeDepTarget(${paramIdx}, ${ti})" style="font-size:0.7em; padding:2px 6px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:3px;">删</button>
                     </div>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
                         <label style="font-size:0.7em; color:var(--muted-color); display:flex; align-items:center; gap:3px;">
-                            <input type="checkbox" ${inverted ? 'checked' : ''} onchange="updateDepTargetInvert(${paramIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
-                            <span style="color:#e74c3c;">反转</span>
+                            <input type="checkbox" ${inverted ? 'checked' : ''} onchange="UIB.updateDepTargetInvert(${paramIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
+                            <span style="color:#ff5f74;">反转</span>
                         </label>
                         <label style="font-size:0.7em; color:var(--muted-color); display:flex; align-items:center; gap:3px;">
-                            <input type="checkbox" ${useElse ? 'checked' : ''} onchange="updateDepTargetElse(${paramIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
-                            <span style="color:#3498db;">双态模式</span>
+                            <input type="checkbox" ${useElse ? 'checked' : ''} onchange="UIB.updateDepTargetElse(${paramIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
+                            <span style="color:#3fd9ff;">双态模式</span>
                         </label>
                     </div>
                     <div style="font-size:0.65em; color:var(--muted-color); margin-top:2px;">
@@ -12630,16 +11175,16 @@ void main(vs2ps input, out float4 result : SV_Target0)
             
             container.innerHTML += `
                 <div style="display:flex; gap:3px; align-items:center; background:rgba(0,0,0,0.2); padding:3px; border-radius:2px;">
-                    <input type="text" value="${targetVar}" placeholder="$Target" onchange="updateGridDepTargetVar(${gridIdx}, ${ti}, this.value)" style="flex:1; font-size:0.75em; padding:2px; color:#ff9800; border-color:#d35400;">
+                    <input type="text" value="${targetVar}" placeholder="$Target" onchange="UIB.updateGridDepTargetVar(${gridIdx}, ${ti}, this.value)" style="flex:1; font-size:0.75em; padding:2px; color:#ff9440; border-color:#ff9440;">
                     <label style="font-size:0.6em; display:flex; align-items:center; gap:1px; color:var(--muted-color);" title="双态模式：离开当前格子时恢复为 0">
-                        <input type="checkbox" ${useElse ? 'checked' : ''} onchange="updateGridDepTargetElse(${gridIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
+                        <input type="checkbox" ${useElse ? 'checked' : ''} onchange="UIB.updateGridDepTargetElse(${gridIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
                         双态
                     </label>
                     <label style="font-size:0.6em; display:flex; align-items:center; gap:1px; color:var(--muted-color);" title="反转：激活时写入 0，未激活时写入 1">
-                        <input type="checkbox" ${inverted ? 'checked' : ''} onchange="updateGridDepTargetInvert(${gridIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
+                        <input type="checkbox" ${inverted ? 'checked' : ''} onchange="UIB.updateGridDepTargetInvert(${gridIdx}, ${ti}, this.checked)" style="width:1em; height:1em;">
                         反转
                     </label>
-                <button onclick="removeGridDepTarget(${gridIdx}, ${ti})" style="font-size:0.6em; padding:1px 4px; background:#5a2a2a; border:1px solid #7a3a3a; color:#f66; cursor:pointer; border-radius:2px;">删</button>
+                <button onclick="UIB.removeGridDepTarget(${gridIdx}, ${ti})" style="font-size:0.6em; padding:1px 4px; background:var(--uib-btn-danger); border:1px solid #7e3644; color:#ff5f74; cursor:pointer; border-radius:2px;">删</button>
                 </div>`;
         });
     };
@@ -12834,7 +11379,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                 <div class="${previewUrl ? 'res-preview' : 'res-preview empty'}"${previewUrl ? ` style="background-image:url(${previewUrl})"` : ''}>${previewUrl ? '' : '无预览'}</div>
                 <input type="text" class="res-path" value="${escapeHtml(frame.path || '')}" readonly>
                 <span class="res-alpha" title="序列帧索引">#${index + 1}</span>
-                <input type="file" id="resource_seq_upload_${index}" style="display:none" accept="image/*,.dds,.tga" onchange="uploadSeqFrame(${index}, this)">
+                <input type="file" id="resource_seq_upload_${index}" style="display:none" accept="image/*,.dds,.tga" onchange="UIB.uploadSeqFrame(${index}, this)">
                 <button class="res-upload" onclick="document.getElementById('resource_seq_upload_${index}').click()">上传</button>`;
             section.appendChild(row);
         });
@@ -12853,12 +11398,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
             const pathValue = escapeHtml(rawPathValue);
             const opacityValue = getComponentResourceOpacity(obj, k).toFixed(3);
             resContainer.innerHTML += `
-                <div class="res-row resource-drop-target" title="可将图片文件拖入此处" ondragover="handleResourceDragOver(event)" ondragleave="handleResourceDragLeave(event)" ondrop="dropTexture(event,'${k}')">
+                <div class="res-row resource-drop-target" title="可将图片文件拖入此处" ondragover="UIB.handleResourceDragOver(event)" ondragleave="UIB.handleResourceDragLeave(event)" ondrop="UIB.dropTexture(event,'${k}')">
                     <label class="res-label">${parts[k]}</label>
                     <div class="${previewClass}"${previewStyle}>${previewUrl ? '' : '无预览'}</div>
-                    <input type="text" class="res-path" value="${pathValue}" oninput="updatePath('${k}',this.value,this)" placeholder="可直接填写资源文件名">
-                    <input type="number" class="res-alpha" value="${opacityValue}" step="0.01" min="0" max="1" onchange="updateResourceOpacity('${k}',this.value)" title="透明度">
-                    <input type="file" id="u_${k}" style="display:none" accept="image/*,.dds,.tga" onchange="uploadTex('${k}',this)">
+                    <input type="text" class="res-path" value="${pathValue}" oninput="UIB.updatePath('${k}',this.value,this)" placeholder="可直接填写资源文件名">
+                    <input type="number" class="res-alpha" value="${opacityValue}" step="0.01" min="0" max="1" onchange="UIB.updateResourceOpacity('${k}',this.value)" title="透明度">
+                    <input type="file" id="u_${k}" style="display:none" accept="image/*,.dds,.tga" onchange="UIB.uploadTex('${k}',this)">
                     <button class="res-upload" onclick="document.getElementById('u_${k}').click()">上传</button>
                 </div>`;
         }
@@ -13148,13 +11693,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             compileAutoExpression(next);
             input.value = next;
             input.title = '';
-            input.style.borderColor = '#225577';
+            input.style.borderColor = '#2a5a72';
             o.autoFuncX = next;
             renderAutoFunctionPreview(o);
         } catch(err) {
             input.value = o.autoFuncX || fallback;
             input.title = err.message;
-            input.style.borderColor = '#aa4444';
+            input.style.borderColor = '#a84a56';
             alert('Invalid auto function X.');
         }
     };
@@ -13169,13 +11714,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
             compileAutoExpression(next);
             input.value = next;
             input.title = '';
-            input.style.borderColor = '#225577';
+            input.style.borderColor = '#2a5a72';
             o.autoFuncY = next;
             renderAutoFunctionPreview(o);
         } catch(err) {
             input.value = o.autoFuncY || fallback;
             input.title = err.message;
-            input.style.borderColor = '#aa4444';
+            input.style.borderColor = '#a84a56';
             alert('Invalid auto function Y.');
         }
     };
@@ -13191,13 +11736,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
         try {
             compileAutoExpression(next);
             input.title = '';
-            input.style.borderColor = '#225577';
+            input.style.borderColor = '#2a5a72';
             if(isY) o.autoFuncY = next;
             else o.autoFuncX = next;
             renderAutoFunctionPreview(o);
         } catch(err) {
             input.title = err.message;
-            input.style.borderColor = '#aa4444';
+            input.style.borderColor = '#a84a56';
             renderAutoFunctionPreview(o, `${isY ? 'Y(t)' : getAutoPrimaryFunctionLabel(o)}: ${err.message}`);
         }
     };
@@ -13562,15 +12107,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
             mDiv.style.transform = `translate(${nodeTx.toFixed(2)}px, ${nodeTy.toFixed(2)}px) rotate(${((mod.rot||0) + (previewNodeAnim.rotate || 0)).toFixed(3)}deg) scale(${(globalAnimState.scale * previewNodeAnim.scale).toFixed(4)}) scale(var(--text-hover-scale, 1))`;
             mDiv.style.opacity = (previewNodeAnim.opacity || 1).toFixed(3);
             mDiv.style.setProperty('--node-accent', ({
-                slider_h: 'rgba(114,210,255,0.30)',
-                slider_v: 'rgba(114,210,255,0.30)',
+                slider_h: 'rgba(143,232,255,0.30)',
+                slider_v: 'rgba(143,232,255,0.30)',
                 joystick: 'rgba(93,242,193,0.26)',
                 toggle: 'rgba(255,190,92,0.28)',
                 accum: 'rgba(255,90,90,0.28)',
                 static: 'rgba(255,255,255,0.16)',
                 sequence: 'rgba(142, 68, 173, 0.28)',
                 text: 'rgba(255,142,92,0.22)'
-            }[mod.type] || 'rgba(114,210,255,0.26)'));
+            }[mod.type] || 'rgba(143,232,255,0.26)'));
             if(mod.type === 'sequence' || mod.type === 'toggle') mDiv.setAttribute('data-animated', '1');
             if(selectedEntity && selectedEntity.type === 'component' && selectedEntity.id === mod.id) mDiv.classList.add('selected');
             else if(selectedEntities.some(ref => ref.type === 'component' && ref.id === mod.id)) mDiv.classList.add('selected-multi');
@@ -13685,8 +12230,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         for(let s = 0; s < gridSteps; s++) {
                             const pos = (s / (gridSteps - 1)) * 100;
                             html += !isV
-                                ? `<div style="position:absolute; left:${pos}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(255,152,0,0.7); z-index:3;"></div>`
-                                : `<div style="position:absolute; top:${100 - pos}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(255,152,0,0.7); z-index:3;"></div>`;
+                                ? `<div style="position:absolute; left:${pos}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(255,148,64,0.7); z-index:3;"></div>`
+                                : `<div style="position:absolute; top:${100 - pos}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(255,148,64,0.7); z-index:3;"></div>`;
                         }
                     }
 
@@ -13704,8 +12249,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         }
                         tickPositions.sort((a, b) => a - b).forEach(pos => {
                             html += !isV
-                                ? `<div class="slider-subdivision-tick" style="position:absolute; left:${pos.toFixed(3)}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(114,210,255,0.78); z-index:3; pointer-events:none;"></div>`
-                                : `<div class="slider-subdivision-tick" style="position:absolute; top:${(100 - pos).toFixed(3)}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(114,210,255,0.78); z-index:3; pointer-events:none;"></div>`;
+                                ? `<div class="slider-subdivision-tick" style="position:absolute; left:${pos.toFixed(3)}%; top:50%; transform:translate(-50%, -50%); width:1px; height:${Math.max(trackPx + 6, 10)}px; background:rgba(143,232,255,0.78); z-index:3; pointer-events:none;"></div>`
+                                : `<div class="slider-subdivision-tick" style="position:absolute; top:${(100 - pos).toFixed(3)}%; left:50%; transform:translate(-50%, -50%); height:1px; width:${Math.max(trackPx + 6, 10)}px; background:rgba(143,232,255,0.78); z-index:3; pointer-events:none;"></div>`;
                         });
                     }
 
@@ -13733,12 +12278,12 @@ void main(vs2ps input, out float4 result : SV_Target0)
                         ? `<div id="handle_${mod.id}" class="component-surface" style="${handleOffset} width:${handlePx.width}px; height:${handlePx.height}px; border-radius:${handlePx.radius}px; background-image:url(${tex.handle}); z-index:4; opacity:${(handleOpacity * getComponentResourceOpacity(mod, 'handle')).toFixed(3)};"></div>`
                         : `<div id="handle_${mod.id}" class="handle" style="${handleOffset} width:${handlePx.width}px; height:${handlePx.height}px; z-index:4; opacity:${handleOpacity.toFixed(3)};"></div>`;
                     // 手柄拦截层：内联 onmousedown 直接调用全局函数，绝不进入 mDiv 事件链
-                    html += `<div style="position:absolute; left:${localHandleLeft}px; top:${localHandleTop}px; width:${handlePx.width}px; height:${handlePx.height}px; border-radius:${handlePx.radius}px; z-index:20; cursor:grab; background:transparent;" onmousedown="_svCapture(event,'${mod.id}')"></div>`;
+                    html += `<div style="position:absolute; left:${localHandleLeft}px; top:${localHandleTop}px; width:${handlePx.width}px; height:${handlePx.height}px; border-radius:${handlePx.radius}px; z-index:20; cursor:grab; background:transparent;" onmousedown="UIB._svCapture(event,'${mod.id}')"></div>`;
                     if(sliderUsesExplicitRange(mod)) {
                         const valueLabel = Number.isInteger(actualValue)
                             ? String(actualValue)
                             : actualValue.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
-                        html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#dff8ff; background:rgba(5,16,28,0.72); border:1px solid rgba(123,211,255,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${valueLabel}</div>`;
+                        html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#eaf7ff; background:rgba(5,16,28,0.72); border:1px solid rgba(126,211,252,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${valueLabel}</div>`;
                     }
                     html += `</div>`;
                 } else if(mod.type === 'joystick') {
@@ -13773,7 +12318,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     if(joyCfg) {
                         for(let ring = 1; ring <= joyCfg.subdivisions; ring++) {
                             const size = (ring / joyCfg.subdivisions) * 100;
-                            html += `<div style="position:absolute; left:50%; top:50%; width:${size}%; height:${size}%; transform:translate(-50%, -50%); border:1px dashed rgba(123,211,255,${ring === joyCfg.subdivisions ? 0.46 : 0.24}); border-radius:50%; box-sizing:border-box; pointer-events:none;"></div>`;
+                            html += `<div style="position:absolute; left:50%; top:50%; width:${size}%; height:${size}%; transform:translate(-50%, -50%); border:1px dashed rgba(126,211,252,${ring === joyCfg.subdivisions ? 0.46 : 0.24}); border-radius:50%; box-sizing:border-box; pointer-events:none;"></div>`;
                         }
                         for(let dirIdx = 0; dirIdx < joyCfg.directionCount; dirIdx++) {
                             const angle = getJoystickDirectionAngle(mod, dirIdx);
@@ -13781,14 +12326,14 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             const labelRadius = 0.44;
                             const labelX = (50 + Math.sin(angleRad) * (labelRadius * 100)).toFixed(2);
                             const labelY = (50 - Math.cos(angleRad) * (labelRadius * 100)).toFixed(2);
-                            html += `<div style="position:absolute; left:50%; top:50%; width:1px; height:42%; background:linear-gradient(180deg, rgba(123,211,255,0.72), rgba(123,211,255,0.14)); transform-origin:center top; transform:translateX(-50%) rotate(${angle}deg); pointer-events:none;"></div>`;
-                            html += `<div style="position:absolute; left:${labelX}%; top:${labelY}%; transform:translate(-50%, -50%); font-size:10px; line-height:1; color:#d6f4ff; background:rgba(7,15,24,0.72); border:1px solid rgba(123,211,255,0.34); border-radius:999px; padding:2px 5px; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,0.28); pointer-events:none;">${formatAngleLabel(angle)}</div>`;
+                            html += `<div style="position:absolute; left:50%; top:50%; width:1px; height:42%; background:linear-gradient(180deg, rgba(126,211,252,0.72), rgba(126,211,252,0.14)); transform-origin:center top; transform:translateX(-50%) rotate(${angle}deg); pointer-events:none;"></div>`;
+                            html += `<div style="position:absolute; left:${labelX}%; top:${labelY}%; transform:translate(-50%, -50%); font-size:10px; line-height:1; color:#d8ecf7; background:rgba(7,15,24,0.72); border:1px solid rgba(126,211,252,0.34); border-radius:999px; padding:2px 5px; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,0.28); pointer-events:none;">${formatAngleLabel(angle)}</div>`;
                         }
                     }
                     html += tex.handle
                         ? `<div class="component-surface" style="left:${handleLeftPx}px; top:${handleTopPx}px; width:${handlePx.width}px; height:${handlePx.height}px; border-radius:${handlePx.radius}px; background-image:url(${tex.handle}); z-index:4; transform:scale(${handleScale.toFixed(4)}); opacity:${(handleOpacity * getComponentResourceOpacity(mod, 'handle')).toFixed(3)};"></div>`
                         : `<div class="handle" style="left:${handleLeftPx}px; top:${handleTopPx}px; width:${handlePx.width}px; height:${handlePx.height}px; z-index:4; transform:scale(${handleScale.toFixed(4)}); opacity:${handleOpacity.toFixed(3)};"></div>`;
-                    html += `<div style="position:absolute; left:${handleLeftPx}px; top:${handleTopPx}px; width:${handlePx.width}px; height:${handlePx.height}px; border-radius:${handlePx.radius}px; z-index:20; cursor:grab; background:transparent;" onmousedown="_svCapture(event,'${mod.id}')"></div>`;
+                    html += `<div style="position:absolute; left:${handleLeftPx}px; top:${handleTopPx}px; width:${handlePx.width}px; height:${handlePx.height}px; border-radius:${handlePx.radius}px; z-index:20; cursor:grab; background:transparent;" onmousedown="UIB._svCapture(event,'${mod.id}')"></div>`;
                     // 碰撞桩红点：显示在源组件上，每个联动目标一个碰撞桩
                     const collisionPosts = getJoystickCollisionPosts(mod);
                     if(collisionPosts.length > 0) {
@@ -13817,8 +12362,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
                     if(linkedRegions.length > 0 || triggerRegions.length > 0) {
                         const regionColors = ['rgba(255,100,50,', 'rgba(50,200,255,', 'rgba(255,200,50,', 'rgba(50,255,100,', 'rgba(255,50,200,', 'rgba(200,200,50,'];
                         const cornerColors = ['#ff6432', '#32c8ff', '#ffc832', '#32ff64', '#ff32c8', '#c8c832'];
-                        const triggerRegionColors = ['rgba(79,193,255,', 'rgba(86,225,193,', 'rgba(120,168,255,', 'rgba(100,220,255,'];
-                        const triggerCornerColors = ['#4fc1ff', '#56e1c1', '#78a8ff', '#64dcff'];
+                        const triggerRegionColors = ['rgba(63,217,255,', 'rgba(86,225,193,', 'rgba(120,168,255,', 'rgba(100,220,255,'];
+                        const triggerCornerColors = ['#3fd9ff', '#56e1c1', '#78a8ff', '#64dcff'];
                         const centerX = rect.width * 0.5;
                         const centerY = rect.height * 0.5;
                         const halfTravelX = joyTravelX * 0.5;
@@ -13890,7 +12435,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             const segStyle = `position:relative; flex:1; border-radius:${radius}px; transform:translateX(${(s < active ? segShift : 0).toFixed(2)}px) scale(${segScale.toFixed(4)});`;
                             html += segTex
                                 ? `<div class="component-surface" style="${segStyle} background-image:url(${segTex}); opacity:${((s < active ? (localAnimState.opacity || 1) : 1) * getComponentResourceOpacity(mod, s < active ? 'prog_on' : 'prog_off')).toFixed(3)};"></div>`
-                                : `<div style="${segStyle} background:${s < active ? '#ff8c6a' : '#296394'}; opacity:${(s < active ? (localAnimState.opacity || 1) : 1).toFixed(3)};"></div>`;
+                                : `<div style="${segStyle} background:${s < active ? '#ffb54d' : '#2a5a72'}; opacity:${(s < active ? (localAnimState.opacity || 1) : 1).toFixed(3)};"></div>`;
                         }
                         html += `</div></div>`;
                     } else {
@@ -13925,7 +12470,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
                             ? `<div class="component-surface" style="${fillStyle} border-radius:999px; background-image:url(${tex.bar_l}); z-index:2; opacity:${getComponentResourceOpacity(mod, 'bar_l').toFixed(3)};"></div>`
                             : `<div class="bar-fill" style="${fillStyle}; z-index:2;"></div>`;
                     }
-                    html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#ffd9d9; background:rgba(5,16,28,0.72); border:1px solid rgba(255,120,120,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${formatPreviewVariableValue(accumCount)} / ${formatPreviewVariableValue(accumThreshold)}</div>`;
+                    html += `<div style="position:absolute; right:6px; top:6px; z-index:22; font-size:10px; line-height:1; color:#ffc9d1; background:rgba(5,16,28,0.72); border:1px solid rgba(255,95,116,0.28); border-radius:999px; padding:3px 6px; pointer-events:none;">${formatPreviewVariableValue(accumCount)} / ${formatPreviewVariableValue(accumThreshold)}</div>`;
                     html += `</div>`;
                }
            }
@@ -13965,7 +12510,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
         renderHierarchyPanel();
     } catch(e) {
         console.error('renderAll error:', e);
-        if(workArea) workArea.innerHTML = `<div style="color:#ff6b6b;padding:20px;font-size:14px;text-align:center;">渲染错误: ${escapeHtml(String(e && e.message || e))}</div>`;
+        if(workArea) workArea.innerHTML = `<div style="color:#ff5f74;padding:20px;font-size:14px;text-align:center;">渲染错误: ${escapeHtml(String(e && e.message || e))}</div>`;
     }
     }
     function mkDiv(id, cls, obj) {
@@ -14084,7 +12629,7 @@ void main(vs2ps input, out float4 result : SV_Target0)
             if(dragSession && dragSession.moved) markHistoryDirty();
             renderAll(); 
         };
-        window.addEventListener('mousemove', move); window.addEventListener('mouseup', stop);
+        __onWindow('mousemove', move); __onWindow('mouseup', stop);
     }
 
     // ========== 积蓄条（累积统计）预览辅助 ==========
@@ -14258,8 +12803,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
             window.removeEventListener('mousemove', moveHandler);
             window.removeEventListener('mouseup', upHandler);
         };
-        window.addEventListener('mousemove', moveHandler);
-        window.addEventListener('mouseup', upHandler);
+        __onWindow('mousemove', moveHandler);
+        __onWindow('mouseup', upHandler);
     }
 
     function startJoystickAdjust(e, component) {
@@ -14311,8 +12856,8 @@ void main(vs2ps input, out float4 result : SV_Target0)
             window.removeEventListener('mousemove', moveHandler);
             window.removeEventListener('mouseup', upHandler);
         };
-        window.addEventListener('mousemove', moveHandler);
-        window.addEventListener('mouseup', upHandler);
+        __onWindow('mousemove', moveHandler);
+        __onWindow('mouseup', upHandler);
     }
 
     // 滑块/摇杆手柄拦截全局函数：从 HTML 内联 onmousedown 调用
@@ -14338,58 +12883,9 @@ void main(vs2ps input, out float4 result : SV_Target0)
     }
 
 
-    // ---- SSMT4 host bridge ----
-    const ssmtHostBridge = {
-        seq: 0,
-        pending: new Map(),
-        available() { return !!(window.parent && window.parent !== window); },
-        post(payload) {
-            if (!this.available()) return false;
-            try {
-                window.parent.postMessage(Object.assign({ __ssmt_uib: true }, payload), '*');
-                return true;
-            } catch (e) {
-                return false;
-            }
-        },
-        request(type, payload) {
-            const self = this;
-            return new Promise((resolve, reject) => {
-                if (!self.available()) { reject(new Error('NO_HOST')); return; }
-                const requestId = 'uib-' + Date.now() + '-' + (++self.seq);
-                const timer = setTimeout(() => {
-                    self.pending.delete(requestId);
-                    reject(new Error('HOST_TIMEOUT'));
-                }, 20000);
-                self.pending.set(requestId, { resolve: resolve, reject: reject, timer: timer });
-                window.parent.postMessage(Object.assign({ __ssmt_uib: true, type: type, requestId: requestId }, payload), '*');
-            });
-        }
-    };
-
-    window.addEventListener('message', (event) => {
-        const data = event.data;
-        if (!data || data.__ssmt_uib !== true) return;
-        if (data.type === 'context') {
-            if (data.workspaceName) {
-                const nameEl = document.getElementById('ui_builder_workspace_name');
-                if (nameEl) nameEl.textContent = data.workspaceName;
-            }
-            if (data.firstHash) {
-                const hashEl = document.getElementById('char_hash');
-                if (hashEl) hashEl.value = data.firstHash;
-            }
-        } else if (data.type === 'save-result') {
-            const pending = ssmtHostBridge.pending.get(data.requestId);
-            if (pending) {
-                clearTimeout(pending.timer);
-                ssmtHostBridge.pending.delete(data.requestId);
-                if (data.ok) pending.resolve(data);
-                else pending.reject(new Error(data.error || '保存失败'));
-            }
-        }
-    });
-    function buildDialogueIniRuntime() {
+        // ---- SSMT4 host bridge (Vue 直连,替代 postMessage) ----
+    const ssmtHostBridge = createDirectSsmHostBridge(root);
+function buildDialogueIniRuntime() {
         const errors = validateDialogueLogic();
         if(errors.length) throw new Error(`文本蓝图无效：\n${errors.join('\n')}`);
         const controlledIds = new Set();
@@ -17959,7 +16455,106 @@ void main(vs2ps input, out float4 result : SV_Target0)
     initializeHistorySnapshot();
     refreshResourceWindow(null);
     syncWindowDockButtons();
-    ssmtHostBridge.post({ type: 'ready' });
-</script>
-</body>
-</html>
+    void ssmtHostBridge.post({ type: 'ready' });
+
+  // ═══ UIB 公开命名空间(供内联事件处理器引用) ═══
+  const __uibExports: Record<string, unknown> = {
+  dropTexture,
+  handleResourceDragLeave,
+  handleResourceDragOver,
+  }
+  Object.assign((window as unknown as Record<string, unknown>).UIB = {}, __uibExports)
+  // 补齐遗漏导出:原 iframe 经典脚本中这些顶层函数天然挂在 window 上,
+  // 机械移植为闭包声明后从未导出,导致设置窗/停靠栏上一批按钮静默失效。
+  // 这里同时挂回 window(恢复原全局语义)与 window.UIB(前缀事件处理器)。
+  const __uibRestoredExports: Record<string, unknown> = {
+    addComponent,
+    copyPropsToSelection,
+    generateAndDownloadAssets,
+    generateINI,
+    groupSelected,
+    loadPreset,
+    normalizeShortcutInput,
+    redoHistory,
+    resetShortcutSettings,
+    savePreset,
+    toggleAnimationPanel,
+    toggleGridSnapAutoY,
+    toggleTheme,
+    undoHistory,
+    ungroupSelected,
+    updateAspectRatio,
+    updateGridSnapX,
+    updateGridSnapY,
+    updateUIScale,
+    validateShortcutSettings,
+  }
+  Object.assign(window as unknown as Record<string, unknown>, __uibRestoredExports)
+  Object.assign((window as unknown as Record<string, unknown>).UIB as Record<string, unknown>, __uibRestoredExports)
+  Object.defineProperty(window.UIB, '_svCapture', { get: () => window._svCapture, configurable: true });
+  Object.defineProperty(window.UIB, 'addDepTarget', { get: () => window.addDepTarget, configurable: true });
+  Object.defineProperty(window.UIB, 'addGridDepTarget', { get: () => window.addGridDepTarget, configurable: true });
+  Object.defineProperty(window.UIB, 'addLinkedSlaveAction', { get: () => window.addLinkedSlaveAction, configurable: true });
+  Object.defineProperty(window.UIB, 'addRangeTriggerAction', { get: () => window.addRangeTriggerAction, configurable: true });
+  Object.defineProperty(window.UIB, 'addTextRandomBranch', { get: () => window.addTextRandomBranch, configurable: true });
+  Object.defineProperty(window.UIB, 'addVarRow', { get: () => window.addVarRow, configurable: true });
+  Object.defineProperty(window.UIB, 'delFrame', { get: () => window.delFrame, configurable: true });
+  Object.defineProperty(window.UIB, 'removeAccumBinding', { get: () => window.removeAccumBinding, configurable: true });
+  Object.defineProperty(window.UIB, 'removeAccumTrigger', { get: () => window.removeAccumTrigger, configurable: true });
+  Object.defineProperty(window.UIB, 'removeDepTarget', { get: () => window.removeDepTarget, configurable: true });
+  Object.defineProperty(window.UIB, 'removeGridDepTarget', { get: () => window.removeGridDepTarget, configurable: true });
+  Object.defineProperty(window.UIB, 'removeLinkedSlave', { get: () => window.removeLinkedSlave, configurable: true });
+  Object.defineProperty(window.UIB, 'removeLinkedSlaveAction', { get: () => window.removeLinkedSlaveAction, configurable: true });
+  Object.defineProperty(window.UIB, 'removeRangeTrigger', { get: () => window.removeRangeTrigger, configurable: true });
+  Object.defineProperty(window.UIB, 'removeRangeTriggerAction', { get: () => window.removeRangeTriggerAction, configurable: true });
+  Object.defineProperty(window.UIB, 'removeTextRandomBranch', { get: () => window.removeTextRandomBranch, configurable: true });
+  Object.defineProperty(window.UIB, 'removeVar', { get: () => window.removeVar, configurable: true });
+  Object.defineProperty(window.UIB, 'removeVarRow', { get: () => window.removeVarRow, configurable: true });
+  Object.defineProperty(window.UIB, 'restartDialoguePreview', { get: () => window.restartDialoguePreview, configurable: true });
+  Object.defineProperty(window.UIB, 'setDialoguePreviewVariable', { get: () => window.setDialoguePreviewVariable, configurable: true });
+  Object.defineProperty(window.UIB, 'setWorkspaceMode', { get: () => window.setWorkspaceMode, configurable: true });
+  Object.defineProperty(window.UIB, 'toggleDialoguePreviewPause', { get: () => window.toggleDialoguePreviewPause, configurable: true });
+  Object.defineProperty(window.UIB, 'toggleGridTargetEditor', { get: () => window.toggleGridTargetEditor, configurable: true });
+  Object.defineProperty(window.UIB, 'updateAccumBinding', { get: () => window.updateAccumBinding, configurable: true });
+  Object.defineProperty(window.UIB, 'updateAccumTriggerValue', { get: () => window.updateAccumTriggerValue, configurable: true });
+  Object.defineProperty(window.UIB, 'updateAccumTriggerVar', { get: () => window.updateAccumTriggerVar, configurable: true });
+  Object.defineProperty(window.UIB, 'updateDefVal', { get: () => window.updateDefVal, configurable: true });
+  Object.defineProperty(window.UIB, 'updateDepTargetElse', { get: () => window.updateDepTargetElse, configurable: true });
+  Object.defineProperty(window.UIB, 'updateDepTargetInvert', { get: () => window.updateDepTargetInvert, configurable: true });
+  Object.defineProperty(window.UIB, 'updateDepTargetVar', { get: () => window.updateDepTargetVar, configurable: true });
+  Object.defineProperty(window.UIB, 'updateDialogueVariableInitial', { get: () => window.updateDialogueVariableInitial, configurable: true });
+  Object.defineProperty(window.UIB, 'updateFrameVal', { get: () => window.updateFrameVal, configurable: true });
+  Object.defineProperty(window.UIB, 'updateGridDefaultOutput', { get: () => window.updateGridDefaultOutput, configurable: true });
+  Object.defineProperty(window.UIB, 'updateGridDepTargetElse', { get: () => window.updateGridDepTargetElse, configurable: true });
+  Object.defineProperty(window.UIB, 'updateGridDepTargetInvert', { get: () => window.updateGridDepTargetInvert, configurable: true });
+  Object.defineProperty(window.UIB, 'updateGridDepTargetVar', { get: () => window.updateGridDepTargetVar, configurable: true });
+  Object.defineProperty(window.UIB, 'updateLinkedSlave', { get: () => window.updateLinkedSlave, configurable: true });
+  Object.defineProperty(window.UIB, 'updateLinkedSlaveActionValue', { get: () => window.updateLinkedSlaveActionValue, configurable: true });
+  Object.defineProperty(window.UIB, 'updateLinkedSlaveActionVar', { get: () => window.updateLinkedSlaveActionVar, configurable: true });
+  Object.defineProperty(window.UIB, 'updateLinkedSlaveNum', { get: () => window.updateLinkedSlaveNum, configurable: true });
+  Object.defineProperty(window.UIB, 'updateLinkedSlaveRegionPoint', { get: () => window.updateLinkedSlaveRegionPoint, configurable: true });
+  Object.defineProperty(window.UIB, 'updateMaxVal', { get: () => window.updateMaxVal, configurable: true });
+  Object.defineProperty(window.UIB, 'updateMinVal', { get: () => window.updateMinVal, configurable: true });
+  Object.defineProperty(window.UIB, 'updatePath', { get: () => window.updatePath, configurable: true });
+  Object.defineProperty(window.UIB, 'updateRangeTriggerActionValue', { get: () => window.updateRangeTriggerActionValue, configurable: true });
+  Object.defineProperty(window.UIB, 'updateRangeTriggerActionVar', { get: () => window.updateRangeTriggerActionVar, configurable: true });
+  Object.defineProperty(window.UIB, 'updateRangeTriggerNum', { get: () => window.updateRangeTriggerNum, configurable: true });
+  Object.defineProperty(window.UIB, 'updateRangeTriggerRegionPoint', { get: () => window.updateRangeTriggerRegionPoint, configurable: true });
+  Object.defineProperty(window.UIB, 'updateResourceOpacity', { get: () => window.updateResourceOpacity, configurable: true });
+  Object.defineProperty(window.UIB, 'updateTextRandomBranch', { get: () => window.updateTextRandomBranch, configurable: true });
+  Object.defineProperty(window.UIB, 'updateVar', { get: () => window.updateVar, configurable: true });
+  Object.defineProperty(window.UIB, 'updateVarRow', { get: () => window.updateVarRow, configurable: true });
+  Object.defineProperty(window.UIB, 'uploadSeqFrame', { get: () => window.uploadSeqFrame, configurable: true });
+  Object.defineProperty(window.UIB, 'uploadTex', { get: () => window.uploadTex, configurable: true });
+
+  return {
+    destroy() {
+      if (typeof previewClockHandle !== 'undefined' && previewClockHandle) cancelAnimationFrame(previewClockHandle)
+      if (typeof dialogueRuntimeFrame !== 'undefined' && dialogueRuntimeFrame) cancelAnimationFrame(dialogueRuntimeFrame)
+      for (const [type, fn, opts] of __windowListeners) window.removeEventListener(type, fn, opts)
+      for (const [type, fn, opts] of __documentListeners) document.removeEventListener(type, fn, opts)
+      __windowListeners.length = 0
+      __documentListeners.length = 0
+    },
+  }
+}

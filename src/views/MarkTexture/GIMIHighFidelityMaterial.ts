@@ -160,7 +160,7 @@ export class GIMIShaderController {
 	}
 }
 
-export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needsReview = false): THREE.ShaderMaterial => new THREE.ShaderMaterial({
+export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needsReview = false, flipNormalY = false): THREE.ShaderMaterial => new THREE.ShaderMaterial({
 	uniforms: {
 		uDiffuseMap0: { value: null },
 		uDiffuseMap1: { value: null },
@@ -185,6 +185,9 @@ export const createGIMIHighFidelityMaterial = (fallbackColor: THREE.Color, needs
 		uElementColor: { value: new THREE.Color('#a8a8a8') },
 		uEmissionStrength: { value: 1 },
 		uNormalStrength: { value: 1 },
+	// DirectX-convention normal maps (WWMI / YYSLS / IdentityV) store an
+	// inverted green channel; flip the decoded tangent-space Y for them.
+	uNormalMapFlipY: { value: flipNormalY ? 1 : 0 },
 		// _MetalMaterial is a material constant in the reference shader. A
 		// MetalMap alone is only its sphere map and must not enable this branch.
 		uMetalMaterial: { value: 0 },

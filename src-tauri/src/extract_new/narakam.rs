@@ -392,76 +392,6 @@ impl NarakaMNewExtractor {
         })
     }
 
-    fn get_first_pointlist_index_by_hash(&self, draw_ib: &str) -> String {
-        let drawcall_index_list = self.fa.data.get_trianglelist_index_list(draw_ib);
-        if drawcall_index_list.is_empty() {
-            return String::new();
-        }
-
-        let first_trianglelist_index = &drawcall_index_list[0];
-        let trianglelist_index_line_list =
-            self.fa.log.get_line_list_by_index(first_trianglelist_index);
-
-        let mut vb0_hash = String::new();
-        let mut find_ia_set_vb = false;
-
-        for call_line in trianglelist_index_line_list {
-            if call_line.contains("IASetVertexBuffers") && !find_ia_set_vb {
-                find_ia_set_vb = true;
-                continue;
-            }
-
-            if find_ia_set_vb {
-                if !call_line.starts_with("00") {
-                    let ia_resource =
-                        crate::common::shader_resource::ShaderResource::new(&call_line);
-                    if ia_resource.index == "0" {
-                        vb0_hash = ia_resource.hash.clone();
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        if vb0_hash.is_empty() {
-            return String::new();
-        }
-
-        let find_str = format!("hash={}", vb0_hash);
-        let mut current_index = String::new();
-        let trianglelist_index_number = match first_trianglelist_index.parse::<i32>() {
-            Ok(n) => n,
-            Err(_) => return String::new(),
-        };
-
-        let mut possible_index_list: Vec<String> = Vec::new();
-        for log_line in self.fa.log.lines.iter() {
-            if log_line.starts_with("00") {
-                current_index = log_line.get(0..6).unwrap_or("").to_string();
-            }
-
-            if log_line.contains(&find_str) {
-                let pointlist_index_number = match current_index.parse::<i32>() {
-                    Ok(n) => n,
-                    Err(_) => continue,
-                };
-
-                if pointlist_index_number < trianglelist_index_number
-                    && !possible_index_list.contains(&current_index)
-                {
-                    possible_index_list.push(current_index.clone());
-                }
-            }
-        }
-
-        if !possible_index_list.is_empty() {
-            return possible_index_list.first().cloned().unwrap_or_default();
-        }
-
-        String::new()
-    }
-
     pub fn get_possible_gametype_list_unity_vs(
         &self,
         draw_ib: &str,
@@ -750,7 +680,7 @@ impl NarakaMNewExtractor {
         for draw_ib in draw_ib_list.iter() {
             crate::extract_log!("当前DrawIB: {}", draw_ib);
 
-            let pointlist_index = self.get_first_pointlist_index_by_hash(&draw_ib);
+            let pointlist_index = self.fa.get_first_pointlist_index_by_hash(&draw_ib);
             crate::extract_log!("当前识别到的PointlistIndex: {}", pointlist_index);
             if pointlist_index.is_empty() {
                 crate::extract_log!(

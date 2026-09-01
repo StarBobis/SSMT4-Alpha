@@ -4724,6 +4724,7 @@ dependencies = [
  "base64 0.22.1",
  "cc",
  "chrono",
+ "clipboard-win",
  "encoding_rs",
  "futures-util",
  "image 0.24.9",
