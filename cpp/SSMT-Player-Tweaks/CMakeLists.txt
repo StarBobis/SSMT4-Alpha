@@ -27,8 +27,23 @@ add_library(SSMT-Player-Tweaks SHARED
     Games/Genshin/GenshinPatterns.cpp
     Games/Genshin/GenshinPatterns.h
 
-    Games/Genshin/Features/AntiCharacterFade.cpp
-    Games/Genshin/Features/AntiCharacterFade.h
+    Games/Genshin/Features/AntiCharacterFade/AntiCharacterFade.cpp
+    Games/Genshin/Features/AntiCharacterFade/AntiCharacterFade.h
+    Games/Genshin/Features/AntiCharacterFade/AntiCharacterFadeConfig.h
+
+    Games/Genshin/Features/FpsUnlock/FpsUnlock.h
+    Games/Genshin/Features/FpsUnlock/FpsUnlock.cpp
+    Games/Genshin/Features/FpsUnlock/FpsUnlockConfig.h
+
+    Games/GameRuntime.h
+    Games/GameRuntime.cpp
+
+    Games/Genshin/GenshinRunTime.h
+    Games/Genshin/GenshinRunTime.cpp
+    Games/Genshin/GenshinConfig.h
+    Games/Genshin/Features/FastTeamPage/FastTeamPage.h
+    Games/Genshin/Features/FastTeamPage/FastTeamPage.cpp
+    Games/Genshin/Features/FastTeamPage/FastTeamPageConfig.h
 )
 
 target_include_directories(SSMT-Player-Tweaks PRIVATE

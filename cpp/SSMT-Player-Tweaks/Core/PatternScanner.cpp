@@ -1,9 +1,21 @@
 #include "PatternScanner.h"
 
 #include <stdexcept>
+#include <fstream>
+#include <filesystem>
 
 namespace SSMT::Tweaks
 {
+    std::ofstream get_log()
+    {
+        wchar_t localAppData[MAX_PATH]{};
+        const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
+        if (length == 0 || length >= MAX_PATH)
+            throw std::runtime_error("[get log: boom]");
+        const std::filesystem::path logPath = std::filesystem::path(localAppData) / L"SSMT4CachedFolder" / L"Logs" / L"SSMT-Player-Tweaks.log";
+        return std::ofstream(logPath, std::ios::app);
+    }
+
     PatternScanner::PatternScanner(HMODULE module)
         : module_(module),
           base_address_(reinterpret_cast<std::uintptr_t>(module)),
@@ -57,6 +69,10 @@ namespace SSMT::Tweaks
         if (executable_sections_.empty())
             throw std::runtime_error(
                 "PatternScanner: no executable code sections found.");
+
+        auto log = get_log();
+
+        DumpSections(log);
     }
 
     std::uintptr_t PatternScanner::BaseAddress() const
@@ -95,6 +111,7 @@ namespace SSMT::Tweaks
                 << " VA=0x"
                 << std::hex
                 << section.VirtualAddress
+                << '\n'
 
                 << " VirtualSize=0x"
                 << section.SizeOfRawData
@@ -102,13 +119,15 @@ namespace SSMT::Tweaks
                 << " Characteristics=0x"
                 << section.Characteristics
 
+                << '\n'
                 << '\n';
 
             output
                 << " RawOffset=0x"
                 << section.PointerToRawData
                 << " RawSize=0x"
-                << section.SizeOfRawData;
+                << section.SizeOfRawData
+                << '\n';
         }
     }
 

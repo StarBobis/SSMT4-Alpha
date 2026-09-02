@@ -1,7 +1,8 @@
 #include "Bootstrap.h"
 #include "PatternScanner.h"
 #include "HookManager.h"
-#include "Games/Genshin/Features/AntiCharacterFade.h"
+#include "Games/Genshin/GenshinRunTime.h"
+#include "Games/GameRuntime.h"
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -11,7 +12,6 @@ namespace SSMT::Tweaks
 {
     DWORD WINAPI BootstrapThread(LPVOID parameter)
     {
-        const auto selfModule = static_cast<HMODULE>(parameter);
 
         wchar_t localAppData[MAX_PATH]{};
 
@@ -37,6 +37,15 @@ namespace SSMT::Tweaks
 
         if (!log.is_open())
             return 1;
+        else
+        {
+            const ULONGLONG now =
+                GetTickCount64();
+
+            log << "Start Time: "
+                << now
+                << '\n';
+        }
 
         try
         {
@@ -48,6 +57,16 @@ namespace SSMT::Tweaks
                     "Bootstrap: game module is null.");
             }
 
+            const GameType gameType = DetectGame();
+
+            if (gameType == GameType::Unsupported)
+            {
+                log << "Unsupported game. "
+                       "No player tweaks initialized.\n";
+
+                return 0;
+            }
+
             HookManager::Initialize();
 
             log << "MinHook initialized.\n";
@@ -55,35 +74,27 @@ namespace SSMT::Tweaks
             PatternScanner patternScanner(
                 gameModule);
 
-            const auto addresses = patternScanner.FindAll(
-                "E8 ?? ?? ?? ?? 48 8B BE ?? ?? ?? ?? "
-                "80 3D ?? ?? ?? ?? ?? "
-                "0F 85 ?? ?? ?? ?? "
-                "80 BE ?? ?? ?? ?? ?? 74 11");
-
-            if (addresses.size() != 1)
+            switch (gameType)
             {
-                throw std::runtime_error(
-                    "AntiCharacterFade: "
-                    "PlayerPerspective pattern match count is not 1.");
+            case GameType::Genshin:
+                log << "Game detected: Genshin Impact.\n";
+
+                Genshin::Initialize(
+                    patternScanner,
+                    log);
+
+                break;
+
+            // case GameType::StarRail:
+            //     log << "Game detected: Honkai Star Rail.\n";
+
+            //     StarRail::Initialize(
+            //         patternScanner,
+            //         log);
+
+            default:
+                break;
             }
-
-            const std::uintptr_t targetAddress = PatternScanner::ResolveRelativeCall(
-                addresses.front());
-
-            wchar_t modulePath[MAX_PATH]{};
-
-            GetModuleFileNameW(
-                selfModule,
-                modulePath,
-                static_cast<DWORD>(std::size(modulePath)));
-
-            const std::filesystem::path dllPath{modulePath};
-
-            HookManager::Create(
-                targetAddress,
-                reinterpret_cast<void *>(&HookedPlayerPerspective),
-                reinterpret_cast<void **>(&g_originalPlayerPerspective));
         }
         catch (const std::exception &exception)
         {
@@ -95,92 +106,5 @@ namespace SSMT::Tweaks
         }
 
         return 0;
-
-        // const HMODULE gameModule = GetModuleHandleW(nullptr);
-
-        // if (gameModule == nullptr)
-        //     return 1;
-
-        // HookManager::Initialize();
-
-        // PatternScanner patternScanner(gameModule);
-
-        // const auto addresses = patternScanner.FindAll(
-        //     "E8 ?? ?? ?? ?? 48 8B BE ?? ?? ?? ?? "
-        //     "80 3D ?? ?? ?? ?? ?? "
-        //     "0F 85 ?? ?? ?? ?? "
-        //     "80 BE ?? ?? ?? ?? ?? 74 11");
-
-        // const std::uintptr_t targetAddress =
-        //     PatternScanner::ResolveRelativeCall(
-        //         addresses.front());
-
-        // wchar_t modulePath[MAX_PATH]{};
-
-        // GetModuleFileNameW(
-        //     selfModule,
-        //     modulePath,
-        //     static_cast<DWORD>(std::size(modulePath)));
-
-        // const std::filesystem::path dllPath{modulePath};
-
-        // const auto logPath =
-        //     dllPath.parent_path() / L"SSMT-Player-Tweaks.log";
-
-        // std::ofstream log(logPath, std::ios::trunc);
-
-        // if (log.is_open())
-        // {
-
-        //     log << "SSMT Player Tweaks loaded.\n";
-
-        //     log << "Base address: 0x"
-        //         << std::hex
-        //         << patternScanner.BaseAddress()
-        //         << '\n';
-
-        //     log << "Image size: 0x"
-        //         << patternScanner.ImageSize()
-        //         << '\n';
-
-        //     log << "\nSections:\n";
-
-        //     patternScanner.DumpSections(log);
-
-        //     log << '\n';
-
-        //     log << "Pattern matches: "
-        //         << addresses.size()
-        //         << '\n';
-
-        //     for (std::size_t i = 0;
-        //          i < std::min<std::size_t>(addresses.size(), 10);
-        //          ++i)
-        //     {
-        //         log << "Match[" << i << "] RVA: 0x"
-        //             << std::hex
-        //             << addresses[i] - patternScanner.BaseAddress()
-        //             << '\n';
-        //     }
-
-        //     if (addresses.size() == 1)
-        //     {
-
-        //         log << "Target address: 0x"
-        //             << std::hex
-        //             << targetAddress
-        //             << '\n';
-
-        //         log << "Target RVA: 0x"
-        //             << targetAddress - patternScanner.BaseAddress()
-        //             << '\n';
-        //     }
-        // }
-        // else
-        // {
-        //     return 1;
-        // }
-
-        // return 0;
     }
 }
