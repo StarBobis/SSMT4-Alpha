@@ -8,11 +8,30 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SourceDir = Join-Path $RepoRoot "cpp"
-$BuildDir = Join-Path $RepoRoot "build\cpp-debug"
-$OutputDir = Join-Path $RepoRoot "x64\debug"
-$TauriResourcesDir = Join-Path $RepoRoot "src-tauri\resources"
-$TauriRunExe = Join-Path $TauriResourcesDir "Run.exe"
+$SourceDir = Join-Path $RepoRoot "native"
+$BuildDir = Join-Path $RepoRoot "build\native-debug"
+$DistDir = Join-Path $SourceDir "dist\Debug"
+$NativeArtifacts = @(
+    (Join-Path $DistDir "Run.exe"),
+    (Join-Path $DistDir "SSMT-Player-Tweaks.dll")
+)
+
+if (-not (Test-Path -LiteralPath (Join-Path $SourceDir "CMakeLists.txt"))) {
+    throw "Native submodule 未初始化。请运行：git submodule update --init --recursive"
+}
+
+if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+    throw "未找到 cmake，请先安装 CMake。"
+}
+
+function Invoke-CMake {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+    & cmake @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "cmake 失败（退出码 $LASTEXITCODE）：cmake $($Arguments -join ' ')"
+    }
+}
 
 if ($Clean -and (Test-Path $BuildDir)) {
     Remove-Item -LiteralPath $BuildDir -Recurse -Force
@@ -37,26 +56,19 @@ if (($configureArgs -contains "Visual Studio 18 2026") -or ($configureArgs -cont
     $configureArgs += "-DCMAKE_BUILD_TYPE=Debug"
 }
 
-cmake @configureArgs
-cmake --build $BuildDir --config Debug --parallel
+Remove-Item -LiteralPath $NativeArtifacts -Force -ErrorAction SilentlyContinue
 
-if (Test-Path $OutputDir) {
-    Remove-Item -LiteralPath $OutputDir -Recurse -Force
+try {
+    Invoke-CMake @configureArgs
+    Invoke-CMake --build $BuildDir --config Debug --parallel
+
+    foreach ($artifact in $NativeArtifacts) {
+        if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
+            throw "Native Debug 构建未生成 dist 产物：$artifact"
+        }
+    }
 }
-New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-
-$artifactPatterns = @(
-    "3Dmigoto-Injector-V2\Debug\Run.*",
-    "MessageBoxTestDll\Debug\MessageBoxTestDll.*"
-)
-
-foreach ($pattern in $artifactPatterns) {
-    Get-ChildItem -Path (Join-Path $BuildDir $pattern) -File -ErrorAction SilentlyContinue |
-        Copy-Item -Destination $OutputDir -Force
+catch {
+    Remove-Item -LiteralPath $NativeArtifacts -Force -ErrorAction SilentlyContinue
+    throw
 }
-
-New-Item -ItemType Directory -Force -Path $TauriResourcesDir | Out-Null
-if (Test-Path $TauriRunExe) {
-    Remove-Item -LiteralPath $TauriRunExe -Force
-}
-Copy-Item -LiteralPath (Join-Path $OutputDir "Run.exe") -Destination $TauriRunExe -Force

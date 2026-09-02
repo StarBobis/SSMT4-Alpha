@@ -4,9 +4,10 @@
 .DESCRIPTION
   自动完成：
     1. 自动从 ~/.ssmt（项目外）读取更新签名私钥与密码，无需手动设置环境变量
-    2. bun run tauri build 构建并签名安装包
-    3. 调用 generate-latest-json.ps1 生成更新元数据
-    4. 将安装包 + .sig + latest.json 收集到项目根目录 publish/ 并自动打开
+    2. 构建 native/ submodule，并部署、验证必需的 Native 二进制
+    3. bun run tauri build 构建并签名安装包
+    4. 调用 generate-latest-json.ps1 生成更新元数据
+    5. 将安装包 + .sig + latest.json 收集到项目根目录 publish/ 并自动打开
 .EXAMPLE
   .\build-release.ps1                    # 使用当前版本号打包
   .\build-release.ps1 -Version 4.2.0     # 先升级版本号再打包
@@ -69,17 +70,57 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
     throw "未找到 bun，请先安装：https://bun.sh"
 }
 
-# ---------- 4. 构建（scripts/tauri-with-signing.mjs 会自动完成签名） ----------
-Write-Host "`n[1/3] 开始构建（含更新签名）..." -ForegroundColor Yellow
+# ---------- 4. 构建并验证 Native Release 产物 ----------
+Write-Host "`n[1/4] 构建 Native Release ..." -ForegroundColor Yellow
+$nativeDistDir = Join-Path $projectRoot "native/dist/Release"
+$resourcesDir = Join-Path $projectRoot "src-tauri/resources"
+$nativeArtifacts = @(
+    @{
+        Source = Join-Path $nativeDistDir "Run.exe"
+        Target = Join-Path $resourcesDir "Run.exe"
+    },
+    @{
+        Source = Join-Path $nativeDistDir "SSMT-Player-Tweaks.dll"
+        Target = Join-Path $resourcesDir "SSMT-Player-Tweaks.dll"
+    }
+)
+
+$nativeStagingFiles = @($nativeArtifacts | ForEach-Object { $_.Target })
+Remove-Item -LiteralPath $nativeStagingFiles -Force -ErrorAction SilentlyContinue
+
+try {
+    & (Join-Path $projectRoot "build_release_cpp.ps1")
+
+    foreach ($artifact in $nativeArtifacts) {
+        if (-not (Test-Path -LiteralPath $artifact.Source -PathType Leaf)) {
+            throw "Native Release 构建后缺少 dist 产物：$($artifact.Source)"
+        }
+
+        Copy-Item -LiteralPath $artifact.Source -Destination $artifact.Target -Force
+    }
+
+    foreach ($stagedFile in $nativeStagingFiles) {
+        if (-not (Test-Path -LiteralPath $stagedFile -PathType Leaf)) {
+            throw "Native Release 产物暂存失败：$stagedFile"
+        }
+    }
+}
+catch {
+    Remove-Item -LiteralPath $nativeStagingFiles -Force -ErrorAction SilentlyContinue
+    throw
+}
+
+# ---------- 5. 构建 Tauri（scripts/tauri-with-signing.mjs 会自动完成签名） ----------
+Write-Host "`n[2/4] 开始 Tauri 构建（含更新签名）..." -ForegroundColor Yellow
 bun run tauri build
 if ($LASTEXITCODE -ne 0) { throw "tauri build 失败（退出码 $LASTEXITCODE）" }
 
-# ---------- 5. 生成 latest.json ----------
-Write-Host "`n[2/3] 生成 latest.json ..." -ForegroundColor Yellow
+# ---------- 6. 生成 latest.json ----------
+Write-Host "`n[3/4] 生成 latest.json ..." -ForegroundColor Yellow
 & (Join-Path $projectRoot "generate-latest-json.ps1") -Repo $Repo -Version $Version -Notes $Notes
 
-# ---------- 6. 收集产物到 publish/ ----------
-Write-Host "`n[3/3] 收集产物到 publish/ ..." -ForegroundColor Yellow
+# ---------- 7. 收集产物到 publish/ ----------
+Write-Host "`n[4/4] 收集产物到 publish/ ..." -ForegroundColor Yellow
 $bundleDir = Join-Path $projectRoot "src-tauri/target/release/bundle/nsis"
 $publishDir = Join-Path $projectRoot "publish"
 New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
