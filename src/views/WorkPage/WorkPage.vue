@@ -3980,10 +3980,6 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   --el-button-hover-text-color: var(--work-crystal);
 }
 
-.workspace-tabs-shell :deep(.controls-row .el-button .el-icon),
-.workspace-tabs-shell :deep(.inner-panel .el-button .el-icon) {
-  margin-right: 6px;
-}
 
 .workspace-tabs-shell :deep(.el-button .circular path) {
   stroke: var(--theme-accent) !important;

@@ -23,12 +23,12 @@ import {
   Coffee,
   Delete,
   Document,
+  Edit,
   FolderOpened,
   Key,
   Link,
   Lock,
   Monitor,
-  Open,
   Picture,
   Plus,
   Refresh,
@@ -315,20 +315,20 @@ const confirmCreateGame = async () => {
                     :placeholder="t('settings.general.cacheFolderPlaceholder')"
                     readonly
                   />
-                  <el-tooltip :content="t('settings.general.openFolder')" placement="top" :show-after="250">
-                    <el-button
-                      class="path-icon-btn"
-                      :aria-label="t('settings.general.openFolder')"
-                      @click="openCacheDir"
-                    >
-                      <el-icon><Open /></el-icon>
-                    </el-button>
-                  </el-tooltip>
                   <el-tooltip :content="t('settings.general.changeFolder')" placement="top" :show-after="250">
                     <el-button
                       class="path-icon-btn"
                       :aria-label="t('settings.general.changeFolder')"
                       @click="selectCacheDir"
+                    >
+                      <el-icon><Edit /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('settings.general.openFolder')" placement="top" :show-after="250">
+                    <el-button
+                      class="path-icon-btn"
+                      :aria-label="t('settings.general.openFolder')"
+                      @click="openCacheDir"
                     >
                       <el-icon><FolderOpened /></el-icon>
                     </el-button>
@@ -936,11 +936,22 @@ const confirmCreateGame = async () => {
   flex: 0 0 auto;
 }
 
-/* Icon-only buttons in the cache folder row — square, same height as the input */
-.path-control :deep(.path-icon-btn) {
+/* The flex gap already spaces the controls, so drop Element Plus' default
+   sibling margin; otherwise the second button sits 12px further away. */
+.path-control :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+/* Icon-only buttons in the cache folder row: square, same height as the input.
+   The .settings-page prefix outranks the generic .settings-page .el-button
+   padding rule below (equal specificity previously let that rule win and
+   crushed the button content box to 6px, clipping the icon). */
+.settings-page .path-control :deep(.path-icon-btn) {
   width: 34px;
+  height: 34px;
   min-width: 34px;
-  padding: 7px;
+  padding: 0;
+  font-size: 15px;
 }
 
 .action-control {

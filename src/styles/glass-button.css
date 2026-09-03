@@ -54,8 +54,25 @@
   border-color: rgba(255, 255, 255, 0.10);
 }
 
-.el-button:not(.is-text) .el-icon {
-  margin-right: 6px;
+/* -- Icon spacing --
+   Use flex gap instead of icon margins: spacing only appears between
+   multiple items, so icon-only buttons stay perfectly centered.
+   (The old margin-right hack pushed lone icons off-center and forced
+   per-component `margin: 0 !important` workarounds.) */
+.el-button:not(.is-text) {
+  column-gap: 6px;
+}
+
+/* Neutralize Element Plus' own icon->span margin so the two never add up;
+   the flex column-gap above now owns all icon/text spacing. */
+.el-button:not(.is-text) [class*='el-icon'] + span {
+  margin-left: 0;
+}
+
+/* Slot content (icon + text written inside the default slot) is already
+   an inline-flex box in Element Plus -- give it the same gap treatment. */
+.el-button:not(.is-text) > span {
+  column-gap: 6px;
 }
 
 /* ── Primary crystal ── */

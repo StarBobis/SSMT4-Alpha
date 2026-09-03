@@ -370,7 +370,6 @@ onBeforeUnmount(() => {
 .row-move-btn :deep(.el-icon) {
   width: 14px;
   height: 14px;
-  margin: 0 !important;
   display: grid;
   place-items: center;
 }
