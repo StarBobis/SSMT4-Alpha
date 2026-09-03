@@ -7,7 +7,7 @@ import { MigotoManager } from "../store/MigotoManager";
 import { GlobalConfig } from "../store/GlobalConfig";
 import { PathHelper } from "../helper/PathHelper";
 import { i18n } from "../i18n";
-import type { GameConfig, LaunchProgramConfig } from "../store/GameConfig";
+import { getEffectiveUseUpx, type GameConfig, type LaunchProgramConfig } from "../store/GameConfig";
 import type { AppSettings } from "../store/AppSettings";
 import { debugLog, debugWarn } from "../utils/debugLog";
 
@@ -382,8 +382,8 @@ export class LaunchGame {
         }
 
         // Initialize Migoto environment and apply the selected d3d11 mode before launch.
-        // UPX: respect per-game config.
-        const useUpx = migotoCfg.useUpx ?? false;
+        // UPX: respect per-game config, but default GIMI to UPX until the user chooses otherwise.
+        const useUpx = getEffectiveUseUpx(migotoCfg);
         await this.prepareGameEnvironment(
             gameName,
             migotoDir,
