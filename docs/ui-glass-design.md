@@ -226,3 +226,25 @@ WorkPage / ModsManagement 均实际出现过，已修复）。
 通常已经是被外层面板模糊过的内容，再叠一层模糊视觉上几乎无差别，但每层都在
 烧合成器预算。
 
+## ⚠️ 动画性能：只动画合成器属性
+
+无限循环的装饰动画**只能**动画 `transform` / `opacity`（合成器属性，GPU 混合，
+零重绘）。禁止动画以下属性，尤其是在列表项上：
+
+- `box-shadow` / `border-color` / `background` —— 每帧主线程重绘
+- `left` / `top` / `width` / `height` / `margin` —— 每帧触发布局 + 重绘
+
+等效改造手法：
+
+- 阴影/边框"呼吸"：把峰值状态放到伪元素上，动画其 `opacity`（见
+  `ModCard.vue` 的 `.mod-card:not(.is-disabled)::before`）
+- 扫光位移：`left` 位移换算为等价的 `translateX`（注意 translate 百分比相对
+  自身宽度，left 百分比相对父级宽度，需按比例换算，见 `subgroupSheen`）
+
+`will-change` 只声明确实会动画的属性；`will-change: box-shadow/filter` 会让
+每个元素常驻多余提升层，浪费显存。
+
+**回归门禁**：提交前运行 `npm run check:render-perf`
+（`scripts/check-render-perf.mjs`），它会自动拦截以上三类违规。
+确有界场景需要豁免时，在脚本的 `ACCEPTED` 白名单中登记并注明理由。
+

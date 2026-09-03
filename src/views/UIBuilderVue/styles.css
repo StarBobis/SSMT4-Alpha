@@ -1359,7 +1359,8 @@
   transform-origin: center;
   border-radius: 10px;
   overflow: hidden;
-  will-change: transform, box-shadow, filter;
+  /* 只保留 transform 提示：box-shadow/filter 的 will-change 会让每个节点常驻多个提升层，浪费显存 */
+  will-change: transform;
 }
 
 .ui-builder-app .node:active {

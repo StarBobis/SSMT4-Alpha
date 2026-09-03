@@ -335,9 +335,11 @@ onUnmounted(() => {
     animation: subtleSheen 5s ease-in-out infinite;
 }
 
+/* 位移改用 translateX（合成器属性）：left 动画每帧触发布局+重绘。
+   换算：left -150%→150% = 300% 父宽；元素宽 200% 父宽 → 300/200 = 150% 自身宽 */
 @keyframes subtleSheen {
     0% {
-        left: -150%;
+        transform: translateX(0) skewX(-20deg);
         opacity: 0.3;
     }
 
@@ -346,15 +348,15 @@ onUnmounted(() => {
     }
 
     100% {
-        left: 150%;
+        transform: translateX(150%) skewX(-20deg);
         opacity: 0.3;
     }
 }
 
 .game-card:hover .game-icon-wrapper::after {
-    left: 150%;
-    /* Swipe the reflection across */
-    transition: left 0.6s ease-in-out;
+    /* Swipe the reflection across（与 keyframes 统一使用 transform，避免布局属性过渡） */
+    transform: translateX(150%) skewX(-20deg);
+    transition: transform 0.6s ease-in-out;
 }
 
 .game-card:hover .game-icon-wrapper {

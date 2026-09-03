@@ -251,8 +251,9 @@ const onModCardMouseLeave = (e: MouseEvent) => {
 .mod-card:not(.is-disabled)::before {
   content: "";
   position: absolute;
-  inset: -1px;
-  border-radius: 13px;
+  /* 不能用 inset:-1px：卡片 overflow:hidden 会把伪元素裁到 padding-box，边框环会被裁没 */
+  inset: 0;
+  border-radius: 12px;
   border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.48);
   box-shadow:
     0 0 18px rgba(var(--theme-surface-tint-rgb), 0.20) inset,
