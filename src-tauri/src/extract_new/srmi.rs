@@ -49,6 +49,8 @@ pub struct SRMINewExtractor {
     d3d11_gametype_lv2: D3D11GameTypeLv2,
 }
 
+type PrecollectedIbCandidateMap = BTreeMap<(u64, u64), Vec<String>>;
+
 fn push_unique_string(target: &mut Vec<String>, value: &str) {
     if value.is_empty() || target.iter().any(|item| item == value) {
         return;
@@ -58,6 +60,18 @@ fn push_unique_string(target: &mut Vec<String>, value: &str) {
 }
 
 impl SRMINewExtractor {
+    fn add_precollected_ib_candidate(
+        candidates: &mut PrecollectedIbCandidateMap,
+        first_index: u64,
+        index_count: u64,
+        ib_txt_file_name: String,
+    ) {
+        let group = candidates.entry((first_index, index_count)).or_default();
+        if !group.contains(&ib_txt_file_name) {
+            group.push(ib_txt_file_name);
+        }
+    }
+
     fn build_index_blocks<'a>(lines: &'a [String]) -> Vec<(String, Vec<&'a str>)> {
         let mut blocks: Vec<(String, Vec<&str>)> = Vec::new();
         let mut current_index = String::new();
@@ -695,6 +709,150 @@ impl SRMINewExtractor {
         Ok(())
     }
 
+    fn validate_precollected_candidate(
+        &self,
+        ib_txt_file_name: &str,
+        pointlist_index: &str,
+        d3d11_game_type: &D3D11GameType,
+        d3d11_gametype_wrapper: &D3D11GameTypeWrapper,
+    ) -> Result<(HashMap<String, String>, Vec<String>), String> {
+        let trianglelist_index: String = ib_txt_file_name.chars().take(6).collect();
+        let mut category_buf_filename_map: HashMap<String, String> = HashMap::new();
+        let mut failures: Vec<String> = Vec::new();
+
+        let ib_buf_file_name =
+            SSMTFileUtils::get_filename_with_new_extension(ib_txt_file_name, "buf")?;
+        for (kind, file_name) in [
+            ("txt", ib_txt_file_name),
+            ("buf", ib_buf_file_name.as_str()),
+        ] {
+            let file_path = self.fa_log.get_deduped_filepath(file_name);
+            if file_path.is_empty() || !Path::new(&file_path).exists() {
+                failures.push(format!("IndexBuffer/ib ({} dump missing)", kind));
+            }
+        }
+
+        for category_name in &d3d11_game_type.ordered_category_name_list {
+            let topology = d3d11_game_type
+                .category_topology_dict
+                .get(category_name)
+                .cloned()
+                .unwrap_or_default();
+
+            let mut extract_index = trianglelist_index.clone();
+            if topology == "pointlist" {
+                if pointlist_index.is_empty() {
+                    failures.push(format!(
+                        "Category={} (pointlist index missing)",
+                        category_name
+                    ));
+                    continue;
+                }
+
+                extract_index = pointlist_index.to_string();
+                if category_name == "Position" {
+                    extract_index = d3d11_gametype_wrapper.position_extract_index.clone();
+                } else if category_name == "Blend" {
+                    extract_index = d3d11_gametype_wrapper.blend_extract_index.clone();
+                }
+            }
+
+            let mut category_slot = d3d11_game_type
+                .category_slot_dict
+                .get(category_name)
+                .cloned()
+                .unwrap_or_default();
+            if category_name == "Position" {
+                category_slot = d3d11_gametype_wrapper.position_extract_slot.clone();
+            } else if category_name == "Blend" {
+                category_slot = d3d11_gametype_wrapper.blend_extract_slot.clone();
+            }
+
+            if extract_index.is_empty() || category_slot.is_empty() {
+                failures.push(format!(
+                    "Category={} VB={} (extract index or slot missing)",
+                    category_name, category_slot
+                ));
+                continue;
+            }
+
+            let search_key = format!("{}-{}=", extract_index, category_slot);
+            let category_buf_file_name = self.fa_data.filter_first_file(&search_key, ".buf")?;
+            let category_buf_file_path = self.fa_log.get_deduped_filepath(&category_buf_file_name);
+            if category_buf_file_name.is_empty()
+                || category_buf_file_path.is_empty()
+                || !Path::new(&category_buf_file_path).exists()
+            {
+                failures.push(format!(
+                    "Category={} VB={} (buffer dump missing)",
+                    category_name, category_slot
+                ));
+                continue;
+            }
+
+            // InputLayout matching belongs to GameType discovery. Do not apply it again
+            // here: specialized extraction intentionally exports every stride-compatible
+            // GameType interpretation, even when the active shader uses another format.
+            // Candidate selection only needs to guarantee that every required Category/VB
+            // dump for the already selected GameType actually exists.
+            category_buf_filename_map.insert(category_name.clone(), category_buf_file_name);
+        }
+
+        Ok((category_buf_filename_map, failures))
+    }
+
+    fn select_precollected_candidate(
+        &self,
+        first_index: u64,
+        index_count: u64,
+        ib_txt_file_names: &[String],
+        pointlist_index: &str,
+        d3d11_game_type: &D3D11GameType,
+        d3d11_gametype_wrapper: &D3D11GameTypeWrapper,
+    ) -> Result<(String, HashMap<String, String>), String> {
+        let mut attempt_details: Vec<String> = Vec::new();
+
+        for ib_txt_file_name in ib_txt_file_names {
+            let draw_call: String = ib_txt_file_name.chars().take(6).collect();
+            let (category_buf_filename_map, failures) = self.validate_precollected_candidate(
+                ib_txt_file_name,
+                pointlist_index,
+                d3d11_game_type,
+                d3d11_gametype_wrapper,
+            )?;
+
+            if failures.is_empty() {
+                crate::extract_log!(
+                    "Selected DrawCall candidate: FirstIndex={}, IndexCount={}, DrawCall={}",
+                    first_index,
+                    index_count,
+                    draw_call
+                );
+                return Ok((ib_txt_file_name.clone(), category_buf_filename_map));
+            }
+
+            let failure_detail = failures.join(", ");
+            crate::extract_log!(
+                "Rejected DrawCall candidate: FirstIndex={}, IndexCount={}, DrawCall={}, Missing={}",
+                first_index,
+                index_count,
+                draw_call,
+                failure_detail
+            );
+            attempt_details.push(format!("DrawCall {}: {}", draw_call, failure_detail));
+        }
+
+        let error = format!(
+            "No DrawCall candidate satisfies GameType {} for (FirstIndex={}, IndexCount={}). Attempts: {}",
+            d3d11_game_type.game_type_name,
+            first_index,
+            index_count,
+            attempt_details.join("; ")
+        );
+        crate::extract_log!("{}", error);
+        Err(error)
+    }
+
     fn export_precollected_submeshes(
         &self,
         game_preset: &str,
@@ -704,60 +862,32 @@ impl SRMINewExtractor {
         pointlist_index: &str,
         d3d11_game_type: &D3D11GameType,
         d3d11_gametype_wrapper: &D3D11GameTypeWrapper,
-        match_first_index_ib_txt_file_name_dict: &BTreeMap<u64, String>,
+        precollected_ib_candidates: &PrecollectedIbCandidateMap,
     ) -> Result<bool, String> {
-        if match_first_index_ib_txt_file_name_dict.is_empty() {
+        if precollected_ib_candidates.is_empty() {
             return Ok(false);
         }
-        for ib_txt_file_name in match_first_index_ib_txt_file_name_dict.values() {
-            let per_ib_trianglelist_index: String = ib_txt_file_name.chars().take(6).collect();
+        for ((first_index, index_count), ib_txt_file_names) in precollected_ib_candidates {
+            let (ib_txt_file_name, category_buf_filename_map) = self
+                .select_precollected_candidate(
+                    *first_index,
+                    *index_count,
+                    ib_txt_file_names,
+                    pointlist_index,
+                    d3d11_game_type,
+                    d3d11_gametype_wrapper,
+                )?;
             let ib_buf_file_name =
-                SSMTFileUtils::get_filename_with_new_extension(ib_txt_file_name, "buf")?;
-            let ib_txt_file_path = self.fa_log.get_deduped_filepath(ib_txt_file_name);
+                SSMTFileUtils::get_filename_with_new_extension(&ib_txt_file_name, "buf")?;
+            let ib_txt_file_path = self.fa_log.get_deduped_filepath(&ib_txt_file_name);
             let ib_buf_file_path = self.fa_log.get_deduped_filepath(&ib_buf_file_name);
             if ib_txt_file_path.is_empty() || ib_buf_file_path.is_empty() {
-                continue;
+                return Err(format!(
+                    "Selected DrawCall {} lost its deduped index buffer files",
+                    ib_txt_file_name.chars().take(6).collect::<String>()
+                ));
             }
             let ib_txt_file = IndexBufferTxtFile::new(&ib_txt_file_path, true)?;
-            let mut category_buf_filename_map: HashMap<String, String> = HashMap::new();
-            for category_name in d3d11_game_type.ordered_category_name_list.iter() {
-                let topology = d3d11_game_type
-                    .category_topology_dict
-                    .get(category_name)
-                    .cloned()
-                    .unwrap_or_default();
-
-                let mut extract_index = per_ib_trianglelist_index.clone();
-                if topology == "pointlist" && !pointlist_index.is_empty() {
-                    extract_index = pointlist_index.to_string();
-
-                    if category_name == "Position" {
-                        extract_index = d3d11_gametype_wrapper.position_extract_index.clone();
-                    } else if category_name == "Blend" {
-                        extract_index = d3d11_gametype_wrapper.blend_extract_index.clone();
-                    }
-                }
-                crate::extract_log!("Final ExtractIndex: {}", extract_index);
-
-                let mut category_slot = d3d11_game_type
-                    .category_slot_dict
-                    .get(category_name)
-                    .cloned()
-                    .unwrap_or_default();
-                if category_name == "Position" {
-                    category_slot = d3d11_gametype_wrapper.position_extract_slot.clone();
-                } else if category_name == "Blend" {
-                    category_slot = d3d11_gametype_wrapper.blend_extract_slot.clone();
-                }
-                crate::extract_log!("Final CategorySlot: {}", category_slot);
-
-                let search_key = format!("{}-{}=", extract_index, category_slot);
-                let category_buf_filename = self.fa_data.filter_first_file(&search_key, ".buf")?;
-                crate::extract_log!("CategoryBufFileName: {}", category_buf_filename);
-
-                category_buf_filename_map
-                    .insert(category_name.clone(), category_buf_filename.clone());
-            }
 
             // GPU-pre-skinning vertex streams are a shared global vertex domain.
             // A draw-time vb0 "vertex count" is only the highest addressed vertex
@@ -1971,7 +2101,7 @@ impl SRMINewExtractor {
             return Ok(());
         }
 
-        let mut match_first_index_ib_txt_filename_map: BTreeMap<u64, String> = BTreeMap::new();
+        let mut precollected_ib_candidates: PrecollectedIbCandidateMap = BTreeMap::new();
 
         for trianglelist_index in trianglelist_index_list.iter() {
             let search_key = format!("{}-ib", trianglelist_index);
@@ -1991,6 +2121,7 @@ impl SRMINewExtractor {
 
             let ib_txt_file = IndexBufferTxtFile::new(ib_txt_filepath, false)?;
             let first_index_u64: u64 = ib_txt_file.first_index.parse::<u64>().unwrap_or(0);
+            let index_count_u64: u64 = ib_txt_file.index_count.parse::<u64>().unwrap_or(0);
 
             crate::extract_log!(
                 "FirstIndex: {}, IndexCount: {}",
@@ -1998,14 +2129,24 @@ impl SRMINewExtractor {
                 ib_txt_file.index_count
             );
 
-            match_first_index_ib_txt_filename_map.insert(first_index_u64, ib_txt_filename.clone());
+            Self::add_precollected_ib_candidate(
+                &mut precollected_ib_candidates,
+                first_index_u64,
+                index_count_u64,
+                ib_txt_filename.clone(),
+            );
         }
 
         crate::extract_log!("------------------------------------------------");
 
         //输出查看一下
-        for entry in match_first_index_ib_txt_filename_map.iter() {
-            crate::extract_log!("MatchFirstIndex: {}, IB txt filename: {}", entry.0, entry.1);
+        for ((first_index, index_count), candidates) in &precollected_ib_candidates {
+            crate::extract_log!(
+                "DrawCall candidates: FirstIndex={}, IndexCount={}, IB txt filenames={:?}",
+                first_index,
+                index_count,
+                candidates
+            );
         }
 
         for d3d11_gametype_wrapper in d3d11_gametype_wrapper_list.iter() {
@@ -2120,7 +2261,7 @@ impl SRMINewExtractor {
                 &pointlist_index,
                 &d3d11_gametype,
                 &d3d11_gametype_wrapper,
-                &match_first_index_ib_txt_filename_map,
+                &precollected_ib_candidates,
             )?;
         }
 
@@ -2319,7 +2460,226 @@ impl SRMINewExtractor {
 
 #[cfg(test)]
 mod tests {
-    use super::SRMINewExtractor;
+    use super::{PrecollectedIbCandidateMap, SRMINewExtractor};
+    use crate::common::d3d11_element::D3D11Element;
+    use crate::common::d3d11_gametype::D3D11GameType;
+    use crate::common::d3d11_gametype_lv2::D3D11GameTypeLv2;
+    use crate::common::d3d11_gametype_wrapper::D3D11GameTypeWrapper;
+    use crate::common::frame_analysis::frameanalysis_data::FrameAnalysisData;
+    use crate::common::frame_analysis::frameanalysis_log::FrameAnalysisSingleLog;
+    use crate::config::drawib_config::DrawIBConfig;
+    use std::collections::HashMap;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_candidate_test_extractor(files: &[&str]) -> (SRMINewExtractor, std::path::PathBuf) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "ssmt-srmi-drawcall-candidates-{}-{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir_all(&dir).expect("failed to create candidate test directory");
+        let deduped_dir = dir.join("deduped");
+        fs::create_dir_all(&deduped_dir).expect("failed to create deduped test directory");
+
+        let mut deduped_file_map = HashMap::new();
+        for file_name in files {
+            fs::write(dir.join(file_name), b"test").expect("failed to create candidate test file");
+            fs::write(deduped_dir.join(file_name), b"test")
+                .expect("failed to create deduped candidate test file");
+            deduped_file_map.insert(file_name.to_string(), file_name.to_string());
+        }
+
+        let fa_data = FrameAnalysisData {
+            dir: dir.clone(),
+            files: files
+                .iter()
+                .map(|file_name| file_name.to_string())
+                .collect(),
+        };
+        let extractor = SRMINewExtractor {
+            fa_data,
+            fa_log: FrameAnalysisSingleLog {
+                dir: dir.to_string_lossy().to_string(),
+                log_filename: String::new(),
+                lines: Vec::new(),
+                filename_deduped_filename_map: deduped_file_map,
+            },
+            workspace_path: String::new(),
+            drawib_config: DrawIBConfig {
+                path: String::new(),
+                entries: Vec::new(),
+            },
+            specify_drawib_extract: false,
+            d3d11_gametype_lv2: D3D11GameTypeLv2::default(),
+        };
+
+        (extractor, dir)
+    }
+
+    fn two_slot_trianglelist_game_type() -> D3D11GameType {
+        let mut game_type = D3D11GameType::default();
+        game_type.game_type_name = "TestTwoSlot".to_string();
+        game_type.ordered_category_name_list = vec!["Normal".to_string(), "Texcoord".to_string()];
+        game_type
+            .category_slot_dict
+            .insert("Normal".to_string(), "vb0".to_string());
+        game_type
+            .category_slot_dict
+            .insert("Texcoord".to_string(), "vb1".to_string());
+        game_type
+            .category_topology_dict
+            .insert("Normal".to_string(), "trianglelist".to_string());
+        game_type
+            .category_topology_dict
+            .insert("Texcoord".to_string(), "trianglelist".to_string());
+        game_type
+    }
+
+    #[test]
+    fn precollected_candidates_preserve_same_first_index_and_index_count() {
+        let mut candidates = PrecollectedIbCandidateMap::new();
+        SRMINewExtractor::add_precollected_ib_candidate(
+            &mut candidates,
+            65430,
+            441,
+            "000119-ib=3b4647d4.txt".to_string(),
+        );
+        SRMINewExtractor::add_precollected_ib_candidate(
+            &mut candidates,
+            65430,
+            441,
+            "000148-ib=3b4647d4.txt".to_string(),
+        );
+
+        assert_eq!(candidates.get(&(65430, 441)).map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn candidate_selection_skips_drawcall_missing_required_vb() {
+        let files = [
+            "000148-ib=3b4647d4.txt",
+            "000148-ib=3b4647d4.buf",
+            "000148-vb0=aaaaaaaa.buf",
+            "000119-ib=3b4647d4.txt",
+            "000119-ib=3b4647d4.buf",
+            "000119-vb0=bbbbbbbb.buf",
+            "000119-vb1=dce61e19.buf",
+        ];
+        let (extractor, dir) = create_candidate_test_extractor(&files);
+        let game_type = two_slot_trianglelist_game_type();
+        let mut wrapper = D3D11GameTypeWrapper::new(game_type.clone());
+        wrapper.position_extract_slot = "vb0".to_string();
+
+        let invalid_error = extractor
+            .select_precollected_candidate(
+                65430,
+                441,
+                &["000148-ib=3b4647d4.txt".to_string()],
+                "",
+                &game_type,
+                &wrapper,
+            )
+            .expect_err("candidate without vb1 must be rejected");
+        assert!(invalid_error.contains("FirstIndex=65430, IndexCount=441"));
+        assert!(invalid_error.contains("DrawCall 000148"));
+        assert!(invalid_error.contains("Category=Texcoord VB=vb1"));
+
+        let (selected, category_files) = extractor
+            .select_precollected_candidate(
+                65430,
+                441,
+                &[
+                    "000148-ib=3b4647d4.txt".to_string(),
+                    "000119-ib=3b4647d4.txt".to_string(),
+                ],
+                "",
+                &game_type,
+                &wrapper,
+            )
+            .expect("second candidate contains every required VB");
+
+        assert!(selected.starts_with("000119-"));
+        assert_eq!(
+            category_files.get("Texcoord").map(String::as_str),
+            Some("000119-vb1=dce61e19.buf")
+        );
+
+        fs::remove_dir_all(dir).expect("failed to remove candidate test directory");
+    }
+
+    #[test]
+    fn candidate_selection_preserves_stride_compatible_gametype_interpretations() {
+        let files = [
+            "000009-ib=c5794477.txt",
+            "000009-ib=c5794477.buf",
+            "000009-vb0=e6d1f87b.buf",
+            "000009-vb1=5e51291b.buf",
+            "000009-vb1=5e51291b.txt",
+        ];
+        let (extractor, dir) = create_candidate_test_extractor(&files);
+        let incompatible_active_layout = "element[0]:\n  SemanticName: COLOR\n  SemanticIndex: 0\n  Format: R8G8B8A8_UNORM\n  InputSlot: 1\n  AlignedByteOffset: 0\n";
+        fs::write(
+            dir.join("000009-vb1=5e51291b.txt"),
+            incompatible_active_layout,
+        )
+        .expect("failed to write active InputLayout fixture");
+        fs::write(
+            dir.join("deduped").join("000009-vb1=5e51291b.txt"),
+            incompatible_active_layout,
+        )
+        .expect("failed to write deduped InputLayout fixture");
+
+        let mut game_type = D3D11GameType::from_parts(
+            "GPU_AlternateT8Interpretation",
+            vec![
+                D3D11Element::new(
+                    "POSITION",
+                    "R32G32B32_FLOAT",
+                    "vb0",
+                    "trianglelist",
+                    "Position",
+                    "Position",
+                    "12",
+                ),
+                D3D11Element::new(
+                    "TEXCOORD",
+                    "R32G32_FLOAT",
+                    "vb1",
+                    "trianglelist",
+                    "Texcoord",
+                    "Texcoord",
+                    "8",
+                ),
+            ],
+        );
+        game_type.gpu_pre_skinning = true;
+        let mut wrapper = D3D11GameTypeWrapper::new(game_type.clone());
+        wrapper.position_extract_slot = "vb0".to_string();
+
+        let (selected, category_files) = extractor
+            .select_precollected_candidate(
+                0,
+                23205,
+                &["000009-ib=c5794477.txt".to_string()],
+                "",
+                &game_type,
+                &wrapper,
+            )
+            .expect("alternate GameType interpretation must remain exportable");
+
+        assert_eq!(selected, "000009-ib=c5794477.txt");
+        assert_eq!(
+            category_files.get("Texcoord").map(String::as_str),
+            Some("000009-vb1=5e51291b.buf")
+        );
+
+        fs::remove_dir_all(dir).expect("failed to remove alternate GameType test directory");
+    }
 
     #[test]
     fn copyresource_pointlist_lookup_tracks_source_hash_chain() {
