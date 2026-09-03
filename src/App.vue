@@ -4,7 +4,6 @@ import { useRoute, useRouter } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
 import { normalizeAppUiScale, SSMT_LOCALE_OPTIONS, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
-import NavSidebar from "./components/NavSidebar.vue";
 import { useI18n } from 'vue-i18n';
 import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
@@ -173,8 +172,7 @@ const retreatFirstRun = () => {
   }
 };
 const shouldShowGlobalDimLayer = computed(() => (
-  route.path === '/games'
-  || route.path === '/settings'
+  route.path === '/settings'
   || route.path === '/mods'
   || route.path === '/work'
   || route.path === '/mark-texture-full'
@@ -447,8 +445,6 @@ onUnmounted(() => {
         <div class="caption-bar-spacer" aria-hidden="true"></div>
 
         <div class="app-shell-body">
-          <NavSidebar />
-
           <main class="app-main">
             <div class="content-scroll-wrapper glass-scrollbar" :class="{ 'no-scroll': route.path === '/' }">
               <router-view v-slot="{ Component }">
@@ -1122,14 +1118,13 @@ textarea {
   transform-origin: top left;
 }
 
-/* Main Content Styles — reserves only the collapsed pane width; the expanded
-   navigation pane floats above the content instead of pushing it.
+/* Main Content Styles — fills the whole shell width now that navigation
+   lives in the caption bar tabs instead of a floating left pane.
    No dark veil here: the game background stays bright behind sub-pages. */
 .app-main {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  margin-left: var(--shell-pane-width-collapsed, 56px);
   position: relative;
   padding: 0;
   box-sizing: border-box;

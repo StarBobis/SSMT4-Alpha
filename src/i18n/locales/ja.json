@@ -258,6 +258,9 @@
       "close": "閉じる"
     },
     "switchToGameLibrary": "ゲームライブラリに切り替え",
+    "selectGame": "ゲームを切り替え",
+    "favoriteGames": "お気に入り",
+    "otherGames": "その他のゲーム",
     "settings": "設定",
     "enableCompactView": "コンパクト表示を有効にする",
     "disableCompactView": "コンパクト表示を解除する",
@@ -499,6 +502,8 @@
       "appearanceDesc": "言語、マーキング方式、視認性",
       "pageVisibility": "ページ表示",
       "pageVisibilityDesc": "左側のナビゲーションサイドバーに表示する機能ページを選択します",
+      "games": "ゲーム",
+      "gamesDesc": "ゲーム設定・お気に入り・アイコンを管理",
       "about": "SSMT4 について",
       "resources": "リソース",
       "community": "コミュニティとサポート"
@@ -508,6 +513,14 @@
       "modManagement": "Mod 管理",
       "modAcquisition": "Mod 取得",
       "aiAssistant": "チーズ猫 AI アシスタント"
+    },
+    "games": {
+      "addGame": "ゲームを追加",
+      "favorite": "お気に入りに追加",
+      "unfavorite": "お気に入りから削除",
+      "changeIcon": "アイコンを変更",
+      "deleteConfig": "このゲーム設定を削除",
+      "current": "現在のゲーム"
     },
     "hints": {
       "cacheFolder": "ワークスペース、生成ファイル、ローカルキャッシュデータの保存に使用します。",

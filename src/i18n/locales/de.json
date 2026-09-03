@@ -256,6 +256,9 @@
       "close": "Schließen"
     },
     "switchToGameLibrary": "Zur Spielebibliothek wechseln",
+    "selectGame": "Spiel wechseln",
+    "favoriteGames": "Favoriten",
+    "otherGames": "Weitere Spiele",
     "settings": "Einstellungen",
     "enableCompactView": "Kompaktansicht aktivieren",
     "disableCompactView": "Kompaktansicht deaktivieren",
@@ -497,6 +500,8 @@
       "appearanceDesc": "Sprache, Markierung und visueller Komfort",
       "pageVisibility": "Seitensichtbarkeit",
       "pageVisibilityDesc": "Funktionsseiten auswählen, die in der linken Navigationsleiste erscheinen",
+      "games": "Spiele",
+      "gamesDesc": "Spielkonfigurationen, Favoriten und Symbole verwalten",
       "about": "Über SSMT4",
       "resources": "Ressourcen",
       "community": "Community und Support"
@@ -506,6 +511,14 @@
       "modManagement": "Mod-Verwaltung",
       "modAcquisition": "Mod-Bezug",
       "aiAssistant": "Cheese Cat KI-Assistent"
+    },
+    "games": {
+      "addGame": "Spiel hinzufügen",
+      "favorite": "Zu Favoriten hinzufügen",
+      "unfavorite": "Aus Favoriten entfernen",
+      "changeIcon": "Symbol ändern",
+      "deleteConfig": "Diese Spielkonfiguration löschen",
+      "current": "Aktuell"
     },
     "hints": {
       "cacheFolder": "Wird für Arbeitsbereiche, erzeugte Dateien und lokale Cache-Daten verwendet.",

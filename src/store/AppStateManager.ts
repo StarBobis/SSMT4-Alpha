@@ -285,7 +285,15 @@ export const useAppStateStore = defineStore('appState', () => {
     // Keep the legacy/global mirror aligned with the selected game. Consumers
     // that still read CurrentWorkSpace must never observe the previous game's
     // workspace during a game switch.
-    appSettings.CurrentWorkSpace = appSettings.CurrentWorkSpaceByGame?.[game.name] || ''
+    // The lookup key must be normalized exactly like the writers do
+    // (trimmed, 'Default' -> 'DefaultGame'), otherwise the mirror is cleared
+    // for the Default game or for names with stray whitespace and downstream
+    // pages resolve the wrong workspace.
+    const workspaceMemoryKey = (() => {
+      const trimmedName = (game.name || '').trim()
+      return trimmedName && trimmedName !== 'Default' ? trimmedName : 'DefaultGame'
+    })()
+    appSettings.CurrentWorkSpace = appSettings.CurrentWorkSpaceByGame?.[workspaceMemoryKey] || ''
     const useVideo = game.bgType === BGType.Video
 
     if (useVideo && game.bgVideoPath) {
@@ -318,6 +326,8 @@ export const useAppStateStore = defineStore('appState', () => {
 
   function switchToDefaultGame() {
     appSettings.CurrentGameName = 'Default'
+    // The Default pseudo-game shares the 'DefaultGame' workspace bucket.
+    appSettings.CurrentWorkSpace = appSettings.CurrentWorkSpaceByGame?.['DefaultGame'] || ''
     appSettings.bgType = BGType.Image
     appSettings.bgImage = DEFAULT_BG_IMAGE
     appSettings.bgVideo = ''

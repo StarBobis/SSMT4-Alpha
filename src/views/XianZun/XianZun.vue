@@ -692,7 +692,6 @@ const resolveInstalledGamebananaModPath = async (
 
 const PAGE_MAP: Record<string, string> = {
   home: '/',
-  games: '/games',
   mods: '/mods',
   gamebanana: '/gamebanana',
   nexusmods: '/nexusmods',

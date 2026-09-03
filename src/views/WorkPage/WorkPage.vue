@@ -7,7 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openPath as openExternal } from '@tauri-apps/plugin-opener';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { readDir, readTextFile, writeTextFile, mkdir, stat } from '@tauri-apps/plugin-fs';
+import { exists, readDir, readTextFile, writeTextFile, mkdir, stat } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { debugError, debugLog, debugWarn } from '../../utils/debugLog';
 import { AppStateManager } from '../../store/AppStateManager';
@@ -292,14 +292,15 @@ const waitForInitialAppState = async (): Promise<void> => {
   });
 };
 
-const getCurrentWorkspaceMemoryGameKey = (): string => {
-  const currentGameName = (appSettings.CurrentGameName || '').trim();
-  if (currentGameName && currentGameName !== 'Default') {
-    return currentGameName;
-  }
-
-  return 'DefaultGame';
+// Single place that maps a game name to the workspace memory/folder key.
+// 'Default' (and an empty selection) share the 'DefaultGame' bucket; names are
+// trimmed so lookups never miss because of stray whitespace.
+const normalizeWorkspaceGameKey = (gameName?: string): string => {
+  const trimmedName = (gameName || '').trim();
+  return trimmedName && trimmedName !== 'Default' ? trimmedName : 'DefaultGame';
 };
+
+const getCurrentWorkspaceMemoryGameKey = (): string => normalizeWorkspaceGameKey(appSettings.CurrentGameName);
 
 const getRememberedWorkspaceForCurrentGame = (): string => {
   const gameKey = getCurrentWorkspaceMemoryGameKey();
@@ -447,11 +448,8 @@ const removeVSCheckRow = (index: number) => {
 };
 
 const getWorkspaceBaseDir = async (gameKey?: string) => {
-  let gameName = gameKey ?? appSettings.CurrentGameName;
   // If no valid game selected, fallback to a global placeholder so workspaces still work
-  if (!gameName || gameName === 'Default') {
-    gameName = 'DefaultGame';
-  }
+  const gameName = normalizeWorkspaceGameKey(gameKey ?? appSettings.CurrentGameName);
   if (!appSettings.DBMTWorkFolder) {
     debugWarn('WorkPage', 'getWorkspaceBaseDir - cacheDir not configured');
     return undefined;
@@ -494,7 +492,30 @@ const workspaceUploadPercent = computed(() => {
 const workspaceEntryHasFullPackage = (entry: LibraryIndexEntry): boolean =>
   entry.fullDataAvailable && !unavailableWorkspaceFullPackages.value.includes(entry.entryId);
 let lastInvalidFrameAnalysisWarnPath = '';
-let workspaceSaveQueue: Promise<void> = Promise.resolve();
+
+// Serial save queue with per-key coalescing. Bursts of debounced auto-saves
+// (one per keystroke pause) collapse into the latest pending save per target,
+// so switching workspaces never waits on a backlog of stale writes.
+type WorkspaceSaveTask = {
+  key: string;
+  run: () => Promise<void>;
+  done: () => void;
+};
+const pendingWorkspaceSaveTasks: WorkspaceSaveTask[] = [];
+let workspaceSaveQueueDraining = false;
+let unsettledWorkspaceSaveCount = 0;
+const workspaceSaveIdleResolvers: Array<() => void> = [];
+
+// Per-target save epochs. Clearing/deleting a workspace (or deleting a tab)
+// bumps the epoch for that target; save tasks enqueued before the bump are
+// skipped so they cannot resurrect deleted folders or stale tab configs.
+const workspaceSaveEpochs = new Map<string, number>();
+const workspaceSaveEpochKey = (gameKey: string, wsName: string): string => `${gameKey}\u0000${wsName}`;
+const workspaceTabSaveEpochKey = (gameKey: string, wsName: string, tabId: string): string => `${gameKey}\u0000${wsName}\u0000${tabId}`;
+const bumpWorkspaceSaveEpoch = (key: string): void => {
+  workspaceSaveEpochs.set(key, (workspaceSaveEpochs.get(key) ?? 0) + 1);
+};
+const currentWorkspaceSaveEpoch = (key: string): number => workspaceSaveEpochs.get(key) ?? 0;
 
 const WINDOWS_RESERVED_NAMES = new Set([
   'CON', 'PRN', 'AUX', 'NUL',
@@ -683,6 +704,7 @@ const createWorkspaceTabSaveSnapshot = (options?: {
   activeTabId?: string;
   tabs?: WorkspaceTabMeta[];
   tabConfig?: WorkPageTabConfig;
+  gameKey?: string;
 }): WorkspaceTabSaveSnapshot | undefined => {
   const workspaceNameSnapshot = (options?.workspaceName ?? workspaceName.value).trim();
   const activeTabIdSnapshot = (options?.activeTabId ?? activeWorkspaceTabId.value).trim();
@@ -697,7 +719,7 @@ const createWorkspaceTabSaveSnapshot = (options?: {
   }));
 
   return {
-    gameKey: getCurrentWorkspaceMemoryGameKey(),
+    gameKey: options?.gameKey ?? getCurrentWorkspaceMemoryGameKey(),
     workspaceName: workspaceNameSnapshot,
     activeTabId: activeTabIdSnapshot,
     tabs: tabsSnapshot,
@@ -705,14 +727,60 @@ const createWorkspaceTabSaveSnapshot = (options?: {
   };
 };
 
-const enqueueWorkspaceSave = async (task: () => Promise<void>): Promise<void> => {
-  workspaceSaveQueue = workspaceSaveQueue
-    .catch((error) => {
-      console.error('Previous workspace save failed', error);
-    })
-    .then(task);
+const settleWorkspaceSaveTask = (task: WorkspaceSaveTask): void => {
+  unsettledWorkspaceSaveCount = Math.max(0, unsettledWorkspaceSaveCount - 1);
+  task.done();
+  if (unsettledWorkspaceSaveCount === 0) {
+    const resolvers = workspaceSaveIdleResolvers.splice(0, workspaceSaveIdleResolvers.length);
+    for (const resolve of resolvers) {
+      resolve();
+    }
+  }
+};
 
-  await workspaceSaveQueue;
+const drainWorkspaceSaveQueue = async (): Promise<void> => {
+  if (workspaceSaveQueueDraining) return;
+  workspaceSaveQueueDraining = true;
+  try {
+    while (pendingWorkspaceSaveTasks.length > 0) {
+      const nextTask = pendingWorkspaceSaveTasks.shift();
+      if (!nextTask) break;
+      try {
+        await nextTask.run();
+      } catch (error) {
+        console.error('Workspace save failed', error);
+      } finally {
+        settleWorkspaceSaveTask(nextTask);
+      }
+    }
+  } finally {
+    workspaceSaveQueueDraining = false;
+  }
+};
+
+const enqueueWorkspaceSave = (key: string, task: () => Promise<void>): Promise<void> => {
+  // A still-pending task with the same key writes the same files with strictly
+  // older content, so the newer task supersedes it.
+  const supersededIndex = pendingWorkspaceSaveTasks.findIndex((pending) => pending.key === key);
+  if (supersededIndex >= 0) {
+    const [superseded] = pendingWorkspaceSaveTasks.splice(supersededIndex, 1);
+    settleWorkspaceSaveTask(superseded);
+  }
+
+  unsettledWorkspaceSaveCount += 1;
+  return new Promise<void>((resolve) => {
+    pendingWorkspaceSaveTasks.push({ key, run: task, done: resolve });
+    void drainWorkspaceSaveQueue();
+  });
+};
+
+// Resolves once every save enqueued so far (including coalesced replacements)
+// has finished. Used by publish/export flows that must read final files.
+const waitForWorkspaceSaves = async (): Promise<void> => {
+  if (unsettledWorkspaceSaveCount === 0) return;
+  await new Promise<void>((resolve) => {
+    workspaceSaveIdleResolvers.push(resolve);
+  });
 };
 
 const normalizeWorkspaceTabConfig = (
@@ -914,11 +982,12 @@ const writeWorkspaceAggregatedDrawIBConfig = async (
 const writeWorkspaceActiveTabDrawIBConfig = async (
   wsName: string,
   lodName: string,
-  tabConfig: WorkPageTabConfig
+  tabConfig: WorkPageTabConfig,
+  gameKey?: string
 ): Promise<void> => {
   if (!wsName) return;
 
-  const workspaceDir = await getWorkspaceLodDirPath(wsName, lodName);
+  const workspaceDir = await getWorkspaceLodDirPath(wsName, lodName, gameKey);
   if (!workspaceDir) return;
 
   await writeDrawIBConfigToWorkspace(workspaceDir, editableRowsToDrawIBConfigEntries(tabConfig.modelRows));
@@ -980,7 +1049,13 @@ const saveWorkspaceTabsIndexBySnapshot = async (
 ): Promise<void> => {
   if (!wsName) return;
 
-  await enqueueWorkspaceSave(async () => {
+  const epochKey = workspaceSaveEpochKey(gameKey, wsName);
+  const expectedEpoch = currentWorkspaceSaveEpoch(epochKey);
+
+  await enqueueWorkspaceSave(`tabs-index|${epochKey}`, async () => {
+    // Skip saves enqueued before the workspace was cleared/deleted: running
+    // them now would resurrect the folder or stale tab configs.
+    if (currentWorkspaceSaveEpoch(epochKey) !== expectedEpoch) return;
     try {
       const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
       const indexPath = await getWorkspaceTabsConfigPath(wsName, gameKey);
@@ -1021,8 +1096,16 @@ const saveWorkspaceTabConfigBySnapshot = async (
 
   const configSnapshot = cloneWorkspaceTabConfig(tabConfig);
   const tabsSnapshot = tabs?.map((tab) => ({ id: tab.id, name: normalizeWorkspaceTabName(tab.name) }));
+  const epochKey = workspaceSaveEpochKey(gameKey, wsName);
+  const tabEpochKey = workspaceTabSaveEpochKey(gameKey, wsName, tabId);
+  const expectedEpoch = currentWorkspaceSaveEpoch(epochKey);
+  const expectedTabEpoch = currentWorkspaceSaveEpoch(tabEpochKey);
 
-  await enqueueWorkspaceSave(async () => {
+  await enqueueWorkspaceSave(`tab-config|${tabEpochKey}`, async () => {
+    // Skip saves enqueued before the owning workspace was cleared/deleted or
+    // before this tab was deleted, so they cannot recreate stale files.
+    if (currentWorkspaceSaveEpoch(epochKey) !== expectedEpoch) return;
+    if (currentWorkspaceSaveEpoch(tabEpochKey) !== expectedTabEpoch) return;
     try {
       const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
       const tabConfigPath = await getWorkspaceTabConfigPath(wsName, tabId, gameKey);
@@ -1054,7 +1137,9 @@ const saveWorkspaceTabConfigBySnapshot = async (
         const indexSnapshot = await readWorkspaceTabsIndexBySnapshot(wsName, gameKey);
         resolvedTabs = indexSnapshot?.tabs?.map((t) => ({ id: t.id, name: t.name }));
       }
-      await writeLegacyWorkspaceRuntimeFiles(wsName, configSnapshot, { tabId, tabs: resolvedTabs, gameKey });
+      // The tab config and frame-analysis files were already written above in
+      // this same save pass; skipRewrittenConfigFiles avoids writing them twice.
+      await writeLegacyWorkspaceRuntimeFiles(wsName, configSnapshot, { tabId, tabs: resolvedTabs, gameKey, skipRewrittenConfigFiles: true });
     } catch (err) {
       console.error('Failed to save workspace tab config', err);
     }
@@ -1179,7 +1264,11 @@ const validateFrameAnalysisPath = async (showWarning: boolean): Promise<void> =>
   }
 
   try {
-    await readDir(path);
+    // exists() is far cheaper than readDir() here: frame analysis folders can
+    // contain thousands of dumped files, and this runs on every workspace switch.
+    if (!(await exists(path))) {
+      throw new Error('Frame analysis path does not exist');
+    }
     isFrameAnalysisPathInvalid.value = false;
     lastInvalidFrameAnalysisWarnPath = '';
   } catch {
@@ -1238,6 +1327,10 @@ const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
       return;
     }
 
+    // Cancel any in-flight switch: without this bump a pending switchWorkspace
+    // would pass its context checks after we cleared the state and resurrect
+    // the workspace the user just deselected.
+    workspaceSwitchRevision += 1;
     clearPendingSaveTimers();
     setAllConfigLoading(true);
     isWorkspaceTransitioning.value = true;
@@ -1269,6 +1362,7 @@ const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
         activeTabId: activeWorkspaceTabId.value,
         tabs: buildWorkspaceTabsSnapshot(),
         tabConfig: buildCurrentWorkspaceTabConfig(),
+        gameKey: expectedGameKey,
       })
     : undefined;
 
@@ -1292,7 +1386,7 @@ const switchWorkspace = async (targetWorkspaceName: string): Promise<void> => {
 
     workspaceName.value = resolvedWorkspaceName;
     rememberWorkspaceForCurrentGame(resolvedWorkspaceName);
-    await loadWorkspaceProvenance(resolvedWorkspaceName);
+    await loadWorkspaceProvenance(resolvedWorkspaceName, expectedGameKey);
     if (!contextIsCurrent()) return;
     await ensureWorkspaceTabsInitialized(resolvedWorkspaceName, expectedGameKey);
     if (!contextIsCurrent()) return;
@@ -1389,12 +1483,19 @@ watch(activeWorkspaceTabId, async (newTabId, oldTabId) => {
 
   const workspaceNameSnapshot = workspaceName.value;
   const tabsSnapshot = buildWorkspaceTabsSnapshot();
+  // This watcher is async: the user may switch games (or workspaces) while the
+  // saves below are in flight. Capture the game key up-front and bail out the
+  // moment it changes, otherwise stale writes land in another game's
+  // same-named workspace and stale loads overwrite the freshly loaded config.
+  const expectedGameKey = getCurrentWorkspaceMemoryGameKey();
+  const contextIsCurrent = () => expectedGameKey === getCurrentWorkspaceMemoryGameKey();
   const previousSnapshot = oldTabId
     ? createWorkspaceTabSaveSnapshot({
         workspaceName: workspaceNameSnapshot,
         activeTabId: oldTabId,
         tabs: tabsSnapshot,
         tabConfig: buildCurrentWorkspaceTabConfig(),
+        gameKey: expectedGameKey,
       })
     : undefined;
 
@@ -1408,15 +1509,18 @@ watch(activeWorkspaceTabId, async (newTabId, oldTabId) => {
     if (previousSnapshot) {
       await saveWorkspaceTabConfigSnapshot(previousSnapshot);
     }
+    if (!contextIsCurrent()) return;
 
-    await saveWorkspaceTabsIndexBySnapshot(workspaceNameSnapshot, newTabId, tabsSnapshot);
-    await loadWorkspaceTabConfig(workspaceNameSnapshot, newTabId);
+    await saveWorkspaceTabsIndexBySnapshot(workspaceNameSnapshot, newTabId, tabsSnapshot, expectedGameKey);
+    if (!contextIsCurrent()) return;
+    await loadWorkspaceTabConfig(workspaceNameSnapshot, newTabId, expectedGameKey);
+    if (!contextIsCurrent()) return;
     shouldReleaseLoadingState = false;
   } finally {
-    if (shouldReleaseLoadingState) {
+    if (shouldReleaseLoadingState && contextIsCurrent()) {
       setAllConfigLoading(false);
     }
-    isWorkspaceTransitioning.value = false;
+    if (contextIsCurrent()) isWorkspaceTransitioning.value = false;
   }
 });
 
@@ -1464,12 +1568,25 @@ watch(selectedFrameAnalysis, () => {
   void syncFrameAnalysisFolderPathFromSelection();
 });
 
-watch(() => appSettings.CurrentGameName, () => {
+watch(() => appSettings.CurrentGameName, (_newGameName, previousGameName) => {
+  // The current rows still hold the previous game's workspace state here.
+  // Snapshot and flush them to the PREVIOUS game's folder before clearing —
+  // otherwise edits made in the last debounce window are silently dropped.
+  // The game key must be taken from previousGameName: the game has already
+  // changed by the time this watcher runs.
+  const previousGameKey = normalizeWorkspaceGameKey(previousGameName);
+  const pendingSnapshot = createWorkspaceTabSaveSnapshot({ gameKey: previousGameKey });
+
+  clearPendingSaveTimers();
   workspaceContextRevision += 1;
+  workspaceSwitchRevision += 1; // cancel any in-flight workspace switch
   workspaceOptions.value = [];
   workspaceModifiedTimes.value = {};
   workspaceName.value = '';
   workspaceDraftName.value = '';
+  if (pendingSnapshot) {
+    void saveWorkspaceTabConfigSnapshot(pendingSnapshot);
+  }
   void loadSpecificIbDumpState();
   void refreshWorkspaces();
 });
@@ -1793,9 +1910,9 @@ const handleTextureMenu = async (cmd: unknown) => {
   });
 };
 
-const loadWorkspaceProvenance = async (wsName: string): Promise<void> => {
+const loadWorkspaceProvenance = async (wsName: string, gameKey?: string): Promise<void> => {
   workspaceProvenance.value = null;
-  const configDir = await getWorkspaceConfigDirPath(wsName);
+  const configDir = await getWorkspaceConfigDirPath(wsName, gameKey);
   if (!configDir) return;
   try {
     const value = JSON.parse(await readTextFile(await join(configDir, 'WorkspaceAccess.json'))) as Partial<WorkspaceProvenance>;
@@ -1835,7 +1952,7 @@ const handlePublishWorkspaceFromDialog = async (): Promise<void> => {
     workspacePublishing.value = true;
     workspaceUploadProgress.value = null;
     await saveCurrentWorkspaceTabConfig();
-    await workspaceSaveQueue;
+    await waitForWorkspaceSaves();
     const workspacePath = await getWorkspaceDirPath(workspaceName.value);
     if (!workspacePath) throw new Error('WORKSPACE_NOT_ACCESSIBLE');
     const publishName = workspaceAccessPublishName.value.trim();
@@ -2016,7 +2133,7 @@ const _legacyWorkspaceAccessActions = async (): Promise<void> => {
 
   try {
     await saveCurrentWorkspaceTabConfig();
-    await workspaceSaveQueue;
+    await waitForWorkspaceSaves();
     const workspacePath = await getWorkspaceDirPath(workspaceName.value);
     if (!workspacePath) {
       ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
@@ -2144,7 +2261,7 @@ const _legacyPublishWorkspace = async (withArchive: boolean): Promise<void> => {
   }
   try {
     await saveCurrentWorkspaceTabConfig();
-    await workspaceSaveQueue;
+    await waitForWorkspaceSaves();
     const workspacePath = await getWorkspaceDirPath(workspaceName.value);
     if (!workspacePath) {
       ElMessage.warning(t('workPage.messages.selectGameAndCacheFirst'));
@@ -2634,6 +2751,9 @@ const writeLegacyWorkspaceRuntimeFiles = async (
     tabs?: WorkspaceTabMeta[];
     drawIBScope?: 'aggregated' | 'active-tab';
     gameKey?: string;
+    // Set when the caller already wrote the tab config and frame-analysis
+    // files with identical content in the same save pass.
+    skipRewrittenConfigFiles?: boolean;
   }
 ): Promise<void> => {
   if (!wsName) return;
@@ -2684,12 +2804,12 @@ const writeLegacyWorkspaceRuntimeFiles = async (
     );
   }
 
-  if (activeTabConfigPath) {
+  if (activeTabConfigPath && !options?.skipRewrittenConfigFiles) {
     await writeTextFile(activeTabConfigPath, JSON.stringify(tabConfig, null, 2));
   }
 
   if (options?.drawIBScope === 'active-tab') {
-    await writeWorkspaceActiveTabDrawIBConfig(wsName, lodName, tabConfig);
+    await writeWorkspaceActiveTabDrawIBConfig(wsName, lodName, tabConfig, options?.gameKey);
   } else {
     await writeWorkspaceAggregatedDrawIBConfig(wsName, tabConfig, {
       tabId: options?.tabId,
@@ -2716,8 +2836,12 @@ const writeLegacyWorkspaceRuntimeFiles = async (
     .filter((row) => row.Hash !== '');
   await writeTextFile(vsConfigPath, JSON.stringify(vsPayload, null, 2));
 
-  const frameAnalysisConfigPath = await getWorkspaceFrameAnalysisConfigPath(wsName);
-  if (frameAnalysisConfigPath) {
+  // NOTE: gameKey must be forwarded here. Saves run through a serial queue and
+  // may execute after the user switched games; resolving this path against the
+  // *current* game would write this workspace's frame-analysis config into the
+  // same-named workspace of a different game.
+  const frameAnalysisConfigPath = await getWorkspaceFrameAnalysisConfigPath(wsName, options?.gameKey);
+  if (frameAnalysisConfigPath && !options?.skipRewrittenConfigFiles) {
     await writeTextFile(
       frameAnalysisConfigPath,
       JSON.stringify(
@@ -2763,6 +2887,14 @@ const handleDeleteWorkspaceTab = async (tabId: string) => {
     return;
   }
 
+  // Invalidate queued/in-flight saves for the tab being deleted. The
+  // activeWorkspaceTabId watcher below enqueues a final save for the old tab;
+  // without this bump that save would run after the recycle-bin move and
+  // recreate the deleted tab's config file.
+  if (workspaceName.value) {
+    bumpWorkspaceSaveEpoch(workspaceTabSaveEpochKey(getCurrentWorkspaceMemoryGameKey(), workspaceName.value, tabId));
+  }
+
   if (activeWorkspaceTabId.value === tabId) {
     await saveCurrentWorkspaceTabConfig();
   }
@@ -2793,13 +2925,14 @@ const handleDeleteWorkspaceTab = async (tabId: string) => {
 
 const loadWorkspaceMergeConfig = async (
   sourceWorkspaceName: string,
-  lodName: string | null
+  lodName: string | null,
+  gameKey?: string
 ): Promise<WorkPageTabConfig> => {
   if (!lodName) return normalizeWorkspaceTabConfig();
-  const index = await readWorkspaceTabsIndexBySnapshot(sourceWorkspaceName);
+  const index = await readWorkspaceTabsIndexBySnapshot(sourceWorkspaceName, gameKey);
   const tab = index?.tabs.find((item) => item.name.localeCompare(lodName, undefined, { sensitivity: 'accent' }) === 0);
   return tab
-    ? readWorkspaceTabConfigBySnapshot(sourceWorkspaceName, tab.id)
+    ? readWorkspaceTabConfigBySnapshot(sourceWorkspaceName, tab.id, gameKey)
     : normalizeWorkspaceTabConfig();
 };
 
@@ -2852,13 +2985,13 @@ const mergeWorkspaceTabConfigs = (
   };
 };
 
-const writeMergedWorkspaceConfiguration = async (result: WorkspaceMergeResult): Promise<void> => {
+const writeMergedWorkspaceConfiguration = async (result: WorkspaceMergeResult, gameKey?: string): Promise<void> => {
   const tabs = result.lods.map((lod) => ({ id: createWorkspaceTabId(), name: lod.name }));
   for (let index = 0; index < result.lods.length; index += 1) {
     const lod = result.lods[index];
     const [firstConfig, secondConfig] = await Promise.all([
-      loadWorkspaceMergeConfig(workspaceMergeFirst.value, lod.firstLodName),
-      loadWorkspaceMergeConfig(workspaceMergeSecond.value, lod.secondLodName),
+      loadWorkspaceMergeConfig(workspaceMergeFirst.value, lod.firstLodName, gameKey),
+      loadWorkspaceMergeConfig(workspaceMergeSecond.value, lod.secondLodName, gameKey),
     ]);
     const tabConfig = lod.firstLodName && lod.secondLodName
       ? mergeWorkspaceTabConfigs(firstConfig, secondConfig)
@@ -2869,6 +3002,7 @@ const writeMergedWorkspaceConfiguration = async (result: WorkspaceMergeResult): 
       tabId: tabs[index].id,
       tabs,
       drawIBScope: 'active-tab',
+      gameKey,
     });
   }
 };
@@ -2957,6 +3091,10 @@ const handleWorkspaceMerge = async (): Promise<void> => {
   const base = await getWorkspaceBaseDir();
   if (!base) return;
   const sourceSnapshot = createWorkspaceTabSaveSnapshot();
+  // A merge can take a while; pin every read/write to the game that was
+  // selected when it started so a mid-merge game switch cannot leak files
+  // into another game's workspace folder.
+  const mergeGameKey = getCurrentWorkspaceMemoryGameKey();
   workspaceMergeBusy.value = true;
   try {
     if (sourceSnapshot) await flushCurrentWorkspaceTabConfig(sourceSnapshot);
@@ -2968,7 +3106,8 @@ const handleWorkspaceMerge = async (): Promise<void> => {
       mode: workspaceMergeMode.value,
       hashPreferences: workspaceMergeHashPreferences.value,
     });
-    await writeMergedWorkspaceConfiguration(result);
+    if (mergeGameKey !== getCurrentWorkspaceMemoryGameKey()) return;
+    await writeMergedWorkspaceConfiguration(result, mergeGameKey);
     await refreshWorkspaces();
     await switchWorkspace(result.workspaceName);
     workspaceMergeDialog.value = false;
@@ -3301,6 +3440,11 @@ const handleClearWorkspace = async () => {
     await mkdir(workspaceDir, { recursive: true });
 
   clearPendingSaveTimers();
+  // Cancel any in-flight switch and invalidate queued saves for this workspace:
+  // a stale save running after the cleanup would recreate the files we are
+  // about to remove.
+  workspaceSwitchRevision += 1;
+  bumpWorkspaceSaveEpoch(workspaceSaveEpochKey(getCurrentWorkspaceMemoryGameKey(), currentWorkspaceName));
   setAllConfigLoading(true);
 
     // Remove all contents in workspace directory, keep the directory itself.
@@ -3360,6 +3504,11 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
     const path = await join(baseDir, currentWorkspaceName);
 
     clearPendingSaveTimers();
+    // Cancel any in-flight switch and invalidate queued saves for the deleted
+    // workspace: a stale save running after the recycle-bin move would
+    // recreate the deleted folder (mkdir recursive) as a ghost workspace.
+    workspaceSwitchRevision += 1;
+    bumpWorkspaceSaveEpoch(workspaceSaveEpochKey(getCurrentWorkspaceMemoryGameKey(), currentWorkspaceName));
     setAllConfigLoading(true);
 
     await movePathToRecycleBin(path);

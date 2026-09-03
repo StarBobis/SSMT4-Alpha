@@ -27,8 +27,13 @@ const currentGameKey = (): string => {
 
 export const getCurrentWorkspaceName = (): string => {
   const byGame = AppStateManager.appSettings.CurrentWorkSpaceByGame || {}
+  // Do NOT fall back to the global CurrentWorkSpace mirror here: for a game
+  // with no remembered workspace it still holds the previously selected game's
+  // workspace name, and callers (resolveWorkspaceDir) would mkdir that folder
+  // under the current game — making another game's workspace appear in this
+  // game's workspace list.
   const remembered = byGame[currentGameKey()] || ''
-  return normalizeWorkspaceName(remembered || AppStateManager.appSettings.CurrentWorkSpace)
+  return normalizeWorkspaceName(remembered)
 }
 
 const getWorkspaceBaseDir = async (): Promise<string | undefined> => {

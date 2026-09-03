@@ -3,11 +3,9 @@ import { defineAsyncComponent, type AsyncComponentLoader } from 'vue'
 import { ElMessage } from 'element-plus'
 import { exists } from '@tauri-apps/plugin-fs'
 import Home from '../views/Home/Home.vue'
-import GameLibrary from '../views/GameLibrary/GameLibrary.vue'
 import PageLoading from '../components/PageLoading.vue'
 import { PathHelper } from '../helper/PathHelper'
 import { i18n } from '../i18n'
-import { AppStateManager } from '../store/AppStateManager'
 
 const t = i18n.global.t
 
@@ -74,7 +72,6 @@ export const prefetchRouteComponents = () => {
 
 const routes = [
   { path: '/', name: 'Home', component: Home, meta: { title: 'Home', requiresGame: false } },
-  { path: '/games', name: 'GameLibrary', component: GameLibrary, meta: { title: 'Game Library', requiresGame: false } },
   { path: '/mods', name: 'ModsManagement', component: ModsManagement, meta: { title: 'Mods Management', requiresGame: true } },
   { path: '/gamebanana', name: 'GameBanana', component: GameBanana, meta: { title: 'GameBanana', requiresGame: false } },
   { path: '/gamebanana/author/:authorId', name: 'GameBananaAuthor', component: GameBananaAuthor, meta: { title: 'GameBanana Author', requiresGame: false } },
@@ -93,10 +90,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.name === 'Home' && AppStateManager.hasLoadedInitialState() && !AppStateManager.hasSelectedGame()) {
-    return { name: 'GameLibrary' }
-  }
-
   const needMigotoPath = new Set(['WorkPage', 'MarkTextureFull', 'TextureModMaker'])
   if (!needMigotoPath.has(String(to.name ?? ''))) {
     return true

@@ -55,10 +55,6 @@ app.mount("#app");
 
 
 AppStateManager.initAppState().then(() => {
-  if (router.currentRoute.value.name === 'Home' && !AppStateManager.hasSelectedGame() && !AppStateManager.isFirstRunOnboardingOpen.value) {
-    void router.replace({ name: 'GameLibrary' })
-  }
-
   // Warm sub-page chunks in the background so first-time page switches are fast
   prefetchRouteComponents();
 
