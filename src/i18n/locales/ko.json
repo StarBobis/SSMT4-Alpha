@@ -252,6 +252,11 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "최소화",
+      "maximize": "최대화",
+      "close": "닫기"
+    },
     "switchToGameLibrary": "게임 라이브러리로 전환",
     "settings": "설정",
     "enableCompactView": "컴팩트 보기 사용",
@@ -493,7 +498,7 @@
       "appearance": "외관 및 워크플로",
       "appearanceDesc": "언어, 마킹 방식 및 시각적 편의성",
       "pageVisibility": "페이지 표시",
-      "pageVisibilityDesc": "상단 탐색 표시줄에 표시할 기능 페이지를 선택합니다",
+      "pageVisibilityDesc": "왼쪽 탐색 사이드바에 표시할 기능 페이지를 선택합니다",
       "about": "SSMT4 정보",
       "resources": "리소스",
       "community": "커뮤니티 및 지원"
@@ -505,6 +510,7 @@
       "aiAssistant": "치즈 캣 AI 도우미"
     },
     "hints": {
+      "theme": "탐색 셸의 미니멀한 화이트 또는 블랙 스타일을 선택합니다.",
       "cacheFolder": "작업 공간, 생성 파일 및 로컬 캐시 데이터를 저장하는 데 사용됩니다.",
       "githubToken": "선택 사항. 개인 토큰을 사용하면 업데이트 확인 시 GitHub API 요청 제한이 늘어납니다.",
       "workspaceAccessProxyPort": "작업 공간 공개 라이브러리에서만 사용됩니다. 로컬 HTTP 프록시 포트(예: 7890)를 입력하세요. 0이면 시스템 또는 환경 프록시를 사용합니다.",
@@ -537,6 +543,9 @@
       "selectCacheFolderTitle": "SSMT 캐시 폴더 선택"
     },
     "personalization": {
+      "theme": "테마",
+      "themeLight": "화이트",
+      "themeDark": "블랙",
       "textureMarkStyle": "텍스처 마킹 스타일",
       "uiScale": "전역 UI 크기",
       "uiScaleHint": "저해상도 또는 높은 DPI 배율 환경에서 더 많은 내용을 표시하도록 UI 구성 요소 크기를 줄입니다.",

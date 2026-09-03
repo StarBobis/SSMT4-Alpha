@@ -3,6 +3,7 @@ import {
 	normalizeXianZunProvider,
 	type XianZunProvider,
 } from './XianZunProviders'
+import { normalizeAppThemeMode, type AppThemeMode } from './AppTheme'
 
 export enum BGType {
 	Image = 'Image',
@@ -259,6 +260,7 @@ export class AppSettings {
 	bgType: BGType = BGType.Image
 	bgImage: string = ''
 	bgVideo: string = ''
+	appTheme: AppThemeMode = 'dark'
 	contentOpacity: number = 0.5
 	globalDimMaskStrength: number = 2.5
 	uiScale: number = 1
@@ -351,6 +353,7 @@ export class AppSettings {
 		this.bgType = init?.bgType ?? this.bgType
 		this.bgImage = init?.bgImage ?? this.bgImage
 		this.bgVideo = init?.bgVideo ?? this.bgVideo
+		this.appTheme = normalizeAppThemeMode(init?.appTheme)
 		this.contentOpacity = init?.contentOpacity ?? this.contentOpacity
 
 		this.globalDimMaskStrength = init?.globalDimMaskStrength ?? this.globalDimMaskStrength
@@ -482,6 +485,7 @@ export class AppSettings {
 			bgType: this.bgType,
 			bgImage: this.bgImage,
 			bgVideo: this.bgVideo,
+			appTheme: this.appTheme,
 			contentOpacity: this.contentOpacity,
 			globalDimMaskStrength: this.globalDimMaskStrength,
 			uiScale: this.uiScale,

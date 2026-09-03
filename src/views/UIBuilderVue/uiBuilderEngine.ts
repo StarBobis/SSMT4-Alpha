@@ -1604,11 +1604,13 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const windows = {};
         Object.entries(PRESET_TOOL_WINDOWS).forEach(([name, id]) => {
             const element = document.getElementById(id); if(!element) return;
+            // 记录相对页面根(.ui-builder-app)的坐标,与 absolute 定位一致
             const rect = element.getBoundingClientRect(), computed = window.getComputedStyle(element);
+            const hostRect = (element.offsetParent || root).getBoundingClientRect();
             windows[name] = {
                 visible: computed.display !== 'none',
-                left: Math.round(rect.left),
-                top: Math.round(rect.top),
+                left: Math.round(rect.left - hostRect.left),
+                top: Math.round(rect.top - hostRect.top),
                 zIndex: Number(computed.zIndex) || 0
             };
         });
@@ -1652,15 +1654,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
         const hierarchy = document.querySelector('.hierarchy-sidebar');
         if(hierarchy) hierarchy.style.display = layout.hierarchyVisible === false ? 'none' : 'flex';
         let restoredMaxZIndex = toolWindowZIndex;
-        // 悬浮窗 fixed 定位原点在视口顶部(含标题栏),恢复布局时顶边不得低于标题栏高度
-        const presetAppUiScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--app-ui-scale')) || 1;
-        const minPresetWinTop = 32 / presetAppUiScale + 8;
+        // 悬浮窗 absolute 定位,包含块为页面根:按页面尺寸钳制恢复位置
+        const presetHostWidth = root.clientWidth || window.innerWidth;
+        const presetHostHeight = root.clientHeight || window.innerHeight;
         Object.entries(PRESET_TOOL_WINDOWS).forEach(([name, id]) => {
             const element = document.getElementById(id), saved = layout.windows && layout.windows[name]; if(!element || !saved) return;
-            const maxLeft = Math.max(8, window.innerWidth - Math.max(120, element.offsetWidth));
-            const maxTop = Math.max(minPresetWinTop, window.innerHeight - 80);
+            const maxLeft = Math.max(8, presetHostWidth - Math.max(120, element.offsetWidth));
+            const maxTop = Math.max(8, presetHostHeight - 80);
             if(Number.isFinite(Number(saved.left))) element.style.left = `${Math.max(8, Math.min(maxLeft, Number(saved.left)))}px`;
-            if(Number.isFinite(Number(saved.top))) element.style.top = `${Math.max(minPresetWinTop, Math.min(maxTop, Number(saved.top)))}px`;
+            if(Number.isFinite(Number(saved.top))) element.style.top = `${Math.max(8, Math.min(maxTop, Number(saved.top)))}px`;
             if(Number.isFinite(Number(saved.zIndex)) && Number(saved.zIndex) > 0) {
                 element.style.zIndex = String(saved.zIndex);
                 restoredMaxZIndex = Math.max(restoredMaxZIndex, Number(saved.zIndex));
@@ -8129,15 +8131,15 @@ void main(vs2ps input, out float4 result : SV_Target0)
         if(!element) return;
         event.preventDefault();
         bringToolWindowToFront(element);
+        // 悬浮窗 absolute 定位,包含块为 .ui-builder-app:坐标相对页面根计算
         const rect = element.getBoundingClientRect();
+        const hostRect = (element.offsetParent || root).getBoundingClientRect();
         const startX = event.clientX;
         const startY = event.clientY;
-        const originLeft = rect.left;
-        const originTop = rect.top;
+        const originLeft = rect.left - hostRect.left;
+        const originTop = rect.top - hostRect.top;
         root.classList.add('tool-window-dragging');
-        // 悬浮窗 fixed 定位原点在视口顶部(含标题栏),拖拽顶边不得低于标题栏高度
-        const appUiScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--app-ui-scale')) || 1;
-        const minToolWinTop = 32 / appUiScale + 8;
+        const minToolWinTop = 8;
         const move = (moveEvent) => {
             element.style.left = `${Math.max(8, originLeft + moveEvent.clientX - startX)}px`;
             element.style.top = `${Math.max(minToolWinTop, originTop + moveEvent.clientY - startY)}px`;

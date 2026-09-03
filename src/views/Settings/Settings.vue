@@ -27,6 +27,7 @@ import {
   Open,
   Refresh,
   FullScreen,
+  Sunny,
   View,
 } from '@element-plus/icons-vue';
 import type { OptionalPageId } from '../../store/AppSettings';
@@ -295,6 +296,25 @@ const openUsageDocs = async () => {
                       :label="item.label"
                       :value="item.value"
                     />
+                  </el-select>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><Sunny /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.personalization.theme') }}</div>
+                    <div class="setting-description">{{ t('settings.hints.theme') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control compact-control">
+                  <el-select
+                    v-model="appSettings.appTheme"
+                    :aria-label="t('settings.personalization.theme')"
+                  >
+                    <el-option value="light" :label="t('settings.personalization.themeLight')" />
+                    <el-option value="dark" :label="t('settings.personalization.themeDark')" />
                   </el-select>
                 </div>
               </div>

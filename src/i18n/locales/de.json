@@ -250,6 +250,11 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "Minimieren",
+      "maximize": "Maximieren",
+      "close": "Schließen"
+    },
     "switchToGameLibrary": "Zur Spielebibliothek wechseln",
     "settings": "Einstellungen",
     "enableCompactView": "Kompaktansicht aktivieren",
@@ -491,7 +496,7 @@
       "appearance": "Darstellung und Workflow",
       "appearanceDesc": "Sprache, Markierung und visueller Komfort",
       "pageVisibility": "Seitensichtbarkeit",
-      "pageVisibilityDesc": "Funktionsseiten auswählen, die in der oberen Navigationsleiste erscheinen",
+      "pageVisibilityDesc": "Funktionsseiten auswählen, die in der linken Navigationsleiste erscheinen",
       "about": "Über SSMT4",
       "resources": "Ressourcen",
       "community": "Community und Support"
@@ -503,6 +508,7 @@
       "aiAssistant": "Cheese Cat KI-Assistent"
     },
     "hints": {
+      "theme": "Minimaler weißer oder schwarzer Stil für die Navigations-Oberfläche.",
       "cacheFolder": "Wird für Arbeitsbereiche, erzeugte Dateien und lokale Cache-Daten verwendet.",
       "githubToken": "Optional. Ein persönliches Token erhöht das GitHub-API-Ratenlimit bei Update-Prüfungen.",
       "workspaceAccessProxyPort": "Wird nur von der öffentlichen Workspace-Bibliothek verwendet. Lokalen HTTP-Proxy-Port eingeben (z. B. 7890); 0 verwendet den System- bzw. Umgebungsproxy.",
@@ -535,6 +541,9 @@
       "selectCacheFolderTitle": "SSMT-Cache-Ordner auswählen"
     },
     "personalization": {
+      "theme": "Design",
+      "themeLight": "Weiß",
+      "themeDark": "Schwarz",
       "textureMarkStyle": "Textur-Markierungsstil",
       "uiScale": "Globale UI-Skalierung",
       "uiScaleHint": "Verkleinert UI-Komponenten, damit bei niedriger Auflösung oder hoher DPI-Skalierung mehr Inhalt angezeigt wird.",

@@ -252,6 +252,11 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "最小化",
+      "maximize": "最大化",
+      "close": "閉じる"
+    },
     "switchToGameLibrary": "ゲームライブラリに切り替え",
     "settings": "設定",
     "enableCompactView": "コンパクト表示を有効にする",
@@ -493,7 +498,7 @@
       "appearance": "外観とワークフロー",
       "appearanceDesc": "言語、マーキング方式、視認性",
       "pageVisibility": "ページ表示",
-      "pageVisibilityDesc": "上部ナビゲーションバーに表示する機能ページを選択します",
+      "pageVisibilityDesc": "左側のナビゲーションサイドバーに表示する機能ページを選択します",
       "about": "SSMT4 について",
       "resources": "リソース",
       "community": "コミュニティとサポート"
@@ -505,6 +510,7 @@
       "aiAssistant": "チーズ猫 AI アシスタント"
     },
     "hints": {
+      "theme": "ナビゲーションシェルのミニマルな白または黒のスタイルを選択します。",
       "cacheFolder": "ワークスペース、生成ファイル、ローカルキャッシュデータの保存に使用します。",
       "githubToken": "任意。個人トークンを設定すると、更新確認時の GitHub API レート制限を緩和できます。",
       "workspaceAccessProxyPort": "ワークスペース公開ライブラリでのみ使用します。ローカル HTTP プロキシのポート（例: 7890）を入力してください。0 の場合はシステムまたは環境プロキシを使用します。",
@@ -537,6 +543,9 @@
       "selectCacheFolderTitle": "SSMT キャッシュフォルダーを選択"
     },
     "personalization": {
+      "theme": "テーマ",
+      "themeLight": "白",
+      "themeDark": "黒",
       "textureMarkStyle": "テクスチャマーク方式",
       "uiScale": "グローバル UI スケール",
       "uiScaleHint": "低解像度または高 DPI スケーリング環境でより多くの内容を表示できるよう、UI コンポーネントを小さくします。",

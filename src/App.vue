@@ -4,6 +4,8 @@ import { useRoute } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
 import { normalizeAppUiScale, SSMT_LOCALE_OPTIONS, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
+import NavSidebar from "./components/NavSidebar.vue";
+import { applyAppThemeMode } from "./store/AppTheme";
 import { useI18n } from 'vue-i18n';
 import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
@@ -170,7 +172,6 @@ const retreatFirstRun = () => {
     firstRunStep.value -= 1;
   }
 };
-const isHomeRoute = computed(() => route.path === '/');
 const shouldShowGlobalDimLayer = computed(() => (
   route.path === '/games'
   || route.path === '/settings'
@@ -183,18 +184,6 @@ const shouldShowGlobalDimLayer = computed(() => (
   || route.path.startsWith('/gamebanana')
   || route.path.startsWith('/nexusmods')
 ));
-
-const mainContentStyle = computed(() => {
-  if (isHomeRoute.value) {
-    return {
-      '--content-bg-opacity': 0,
-    };
-  }
-
-  return {
-    '--content-bg-opacity': appSettings.contentOpacity,
-  };
-});
 
 const clamp = (value: number, min: number, max: number) => {
   if (Number.isNaN(value)) return min;
@@ -220,6 +209,9 @@ const normalizeStoredAppUiScale = (value: number) => {
 };
 
 watch(() => appSettings.uiScale, normalizeStoredAppUiScale, { immediate: true });
+
+// Apply the minimal WinUI3 shell theme (white / black) to <html data-app-theme>.
+watch(() => appSettings.appTheme, (mode) => applyAppThemeMode(mode), { immediate: true });
 
 
 // Disable default right-click context menu
@@ -262,8 +254,6 @@ onUnmounted(() => {
   </transition>
 
   <el-config-provider>
-    <TitleBar />
-
     <div v-if="AppStateManager.isFirstRunOnboardingOpen.value" class="first-run-overlay">
       <section ref="firstRunDialog" class="first-run-dialog" role="dialog" aria-modal="true"
         :aria-label="t('firstRun.title')">
@@ -426,11 +416,14 @@ onUnmounted(() => {
     </div>
 
     <div class="app-ui-scale" :style="{ '--app-ui-scale': appUiScale }">
-      <!-- Use a Flex Layout Container -->
-      <div class="app-layout">
-        <!-- 1. Main Content Area (Flex grow, takes remaining space) -->
-        <div class="app-content-area">
-          <main class="app-main" :style="mainContentStyle">
+      <!-- WinUI3 shell: full-width caption bar on top, nav pane + content below -->
+      <div class="app-shell">
+        <TitleBar />
+
+        <div class="app-shell-body">
+          <NavSidebar />
+
+          <main class="app-main">
             <div class="content-scroll-wrapper glass-scrollbar" :class="{ 'no-scroll': route.path === '/' }">
               <router-view v-slot="{ Component }">
                 <transition name="page-blur">
@@ -1057,18 +1050,23 @@ textarea {
   }
 }
 
-.app-layout {
+.app-shell {
   display: flex;
   flex-direction: column;
-  height: 100%;
   width: 100%;
+  height: 100%;
   overflow: hidden;
   position: relative;
   z-index: 1;
   /* Above bg */
-  padding-top: calc(32px / var(--app-ui-scale, 1));
-  /* Space for fixed TitleBar */
-  box-sizing: border-box;
+}
+
+.app-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  position: relative;
 }
 
 .app-ui-scale {
@@ -1081,25 +1079,18 @@ textarea {
   transform-origin: top left;
 }
 
-/* New wrapper for content area (flex item) */
-.app-content-area {
-  position: absolute;
-  inset: calc(32px / var(--app-ui-scale, 1)) 0 0;
-  min-height: 0;
-  overflow: hidden;
-  /* Clean cut */
-  display: flex;
-  flex-direction: column;
-}
-
-/* Main Content Styles */
+/* Main Content Styles — reserves only the collapsed pane width; the expanded
+   navigation pane floats above the content instead of pushing it.
+   No dark veil here: the game background stays bright behind sub-pages. */
 .app-main {
-  position: absolute;
-  inset: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin-left: var(--shell-pane-width-collapsed, 56px);
+  position: relative;
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
-  background-color: rgba(0, 0, 0, var(--content-bg-opacity, 0.4));
   color: #ffffff;
 }
 
