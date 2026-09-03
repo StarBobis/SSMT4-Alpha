@@ -1,6 +1,6 @@
 import { createApp } from "vue";
 import App from "./App.vue";
-import router from "./router";
+import router, { prefetchRouteComponents } from "./router";
 import { ArrowLeft, ArrowRight, Delete, Download, Edit, Folder, FolderAdd, FolderOpened, Picture, Plus, Refresh, RefreshRight, VideoPlay } from '@element-plus/icons-vue';
 import 'element-plus/dist/index.css';
 
@@ -58,6 +58,9 @@ AppStateManager.initAppState().then(() => {
   if (router.currentRoute.value.name === 'Home' && !AppStateManager.hasSelectedGame() && !AppStateManager.isFirstRunOnboardingOpen.value) {
     void router.replace({ name: 'GameLibrary' })
   }
+
+  // Warm sub-page chunks in the background so first-time page switches are fast
+  prefetchRouteComponents();
 
   const appWindow = tryGetCurrentWindow();
   if (!appWindow) {

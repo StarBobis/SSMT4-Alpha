@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch, onActivated, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -3643,7 +3643,7 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
   --el-color-primary-light-8: rgba(var(--theme-surface-tint-rgb), 0.20);
   --el-color-primary-light-9: rgba(var(--theme-surface-tint-rgb), 0.10);
   --el-color-primary-dark-2: #42BFF2;
-  padding: 28px;
+  padding: 28px 18px;
   /* padding-top: 60px; Safe Area Removed */
   height: 100%;
   box-sizing: border-box;
@@ -3987,15 +3987,19 @@ const handleDeleteWorkspace = async (targetWorkspaceName = workspaceName.value) 
 }
 
 .panel {
-  background: rgba(var(--theme-surface-tint-rgb), 0.018);
+  /* Subtle dark backing keeps the panel readable over bright game
+     backgrounds even when the global dim mask is turned down */
+  background:
+    linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.045), rgba(var(--theme-surface-tint-rgb), 0.018)),
+    rgba(8, 12, 19, 0.38);
   border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.09);
   border-radius: 8px;
   padding: 18px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   transition: all 0.25s ease;
   position: relative;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .panel::before {

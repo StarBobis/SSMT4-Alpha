@@ -768,14 +768,15 @@ onUnmounted(() => {
     pointer-events: none;
 }
 
-/* Right elevation shadow — same seamless top fade */
+/* Right elevation shadow — just a whisper (2px) so the pane reads as raised
+   without casting a visible smudge over the page, same seamless top fade */
 .nav-pane::after {
     content: '';
     position: absolute;
     top: 0;
     bottom: 0;
-    right: -9px;
-    width: 9px;
+    right: -2px;
+    width: 2px;
     background: linear-gradient(to right, var(--shell-pane-shadow-color), transparent);
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 44px);
     mask-image: linear-gradient(to bottom, transparent 0, #000 44px);

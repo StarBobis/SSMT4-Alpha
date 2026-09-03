@@ -516,7 +516,6 @@
       "aiAssistant": "芝士貓 AI 助手"
     },
     "hints": {
-      "theme": "為導航外殼選擇極簡的白色或黑色風格。",
       "cacheFolder": "用於儲存工作區、生成檔案和本地快取資料。",
       "githubToken": "可選。個人令牌可以提高更新檢查時的 GitHub API 請求限額。",
       "workspaceAccessProxyPort": "僅用於工作空間公共庫。填入本機 HTTP 代理端口（例如 7890）；填 0 時使用系統或環境代理。",
@@ -549,9 +548,6 @@
       "selectCacheFolderTitle": "選擇 SSMT 快取目錄"
     },
     "personalization": {
-      "theme": "主題",
-      "themeLight": "白色",
-      "themeDark": "黑色",
       "textureMarkStyle": "貼圖示記風格偏好",
       "uiScale": "全域組件尺寸",
       "uiScaleHint": "縮小介面組件以便在低分辨率或系統高縮放時顯示更多內容。",

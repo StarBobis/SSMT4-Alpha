@@ -1,14 +1,13 @@
 /* ═══════════════════════════════════════════════
    SSMT4 — WinUI3 Shell Tokens (NavigationView + Caption Bar)
 
-   Minimal monochrome chrome: black (dark) and white (light).
+   Minimal monochrome chrome — black (dark) only.
    These variables ONLY style the application shell (left
    navigation pane, caption bar, shell flyouts). Sub-pages keep
    their existing glass styling untouched.
    ═══════════════════════════════════════════════ */
 
-:root,
-[data-app-theme='dark'] {
+:root {
   /* Navigation pane — legacy home-rail style: gradient translucent + shadow.
      Top alpha is 0 so the pane melts seamlessly into the caption bar. */
   --shell-pane-width-collapsed: 56px;
@@ -70,62 +69,4 @@
   /* Scrollbar */
   --shell-scrollbar-thumb: rgba(255, 255, 255, 0.22);
   --shell-scrollbar-thumb-hover: rgba(255, 255, 255, 0.38);
-}
-
-[data-app-theme='light'] {
-  /* Navigation pane — light counterpart of the legacy gradient rail */
-  --shell-pane-overlay-bg: rgba(252, 252, 253, 0.55);
-  --shell-pane-bg: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.30) 46%,
-    rgba(255, 255, 255, 0.78) 100%
-  );
-  --shell-pane-border: rgba(0, 0, 0, 0.06);
-  --shell-pane-shadow-color: rgba(0, 0, 0, 0.06);
-
-  /* Text */
-  --shell-text: rgba(24, 24, 26, 0.90);
-  --shell-text-secondary: rgba(24, 24, 26, 0.56);
-  --shell-text-disabled: rgba(24, 24, 26, 0.36);
-
-  /* Interactive fills */
-  --shell-fill-hover: rgba(0, 0, 0, 0.048);
-  --shell-fill-pressed: rgba(0, 0, 0, 0.026);
-  --shell-fill-selected: rgba(0, 0, 0, 0.072);
-  --shell-fill-selected-hover: rgba(0, 0, 0, 0.092);
-
-  /* Selection pill — pure minimal black */
-  --shell-accent: #1b1b1d;
-  --shell-accent-soft: rgba(24, 24, 26, 0.55);
-
-  /* Hairlines */
-  --shell-divider: rgba(0, 0, 0, 0.075);
-
-  /* Caption bar */
-  --shell-caption-fg: rgba(24, 24, 26, 0.88);
-  --shell-caption-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
-  --shell-caption-btn-hover: rgba(0, 0, 0, 0.055);
-  --shell-caption-btn-pressed: rgba(0, 0, 0, 0.030);
-  --shell-caption-glyph-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
-  --shell-caption-close-hover: #c42b1c;
-  --shell-caption-close-pressed: #a02317;
-
-  /* Flyouts */
-  --shell-flyout-bg: rgba(252, 252, 253, 0.97);
-  --shell-flyout-border: rgba(0, 0, 0, 0.095);
-  --shell-flyout-text: rgba(24, 24, 26, 0.88);
-  --shell-flyout-text-muted: rgba(24, 24, 26, 0.46);
-  --shell-flyout-hover: rgba(0, 0, 0, 0.055);
-  --shell-flyout-shadow: 0 14px 36px rgba(0, 0, 0, 0.20), 0 2px 8px rgba(0, 0, 0, 0.10);
-
-  /* Game icons */
-  --shell-game-icon-bg: rgba(0, 0, 0, 0.10);
-  --shell-game-gap: rgba(255, 255, 255, 0.65);
-  --shell-game-ring: #1b1b1d;
-  --shell-game-ring-glow: rgba(24, 24, 26, 0.30);
-
-  /* Scrollbar */
-  --shell-scrollbar-thumb: rgba(0, 0, 0, 0.22);
-  --shell-scrollbar-thumb-hover: rgba(0, 0, 0, 0.38);
 }

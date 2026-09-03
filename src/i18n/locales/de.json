@@ -508,7 +508,6 @@
       "aiAssistant": "Cheese Cat KI-Assistent"
     },
     "hints": {
-      "theme": "Minimaler weißer oder schwarzer Stil für die Navigations-Oberfläche.",
       "cacheFolder": "Wird für Arbeitsbereiche, erzeugte Dateien und lokale Cache-Daten verwendet.",
       "githubToken": "Optional. Ein persönliches Token erhöht das GitHub-API-Ratenlimit bei Update-Prüfungen.",
       "workspaceAccessProxyPort": "Wird nur von der öffentlichen Workspace-Bibliothek verwendet. Lokalen HTTP-Proxy-Port eingeben (z. B. 7890); 0 verwendet den System- bzw. Umgebungsproxy.",
@@ -541,9 +540,6 @@
       "selectCacheFolderTitle": "SSMT-Cache-Ordner auswählen"
     },
     "personalization": {
-      "theme": "Design",
-      "themeLight": "Weiß",
-      "themeDark": "Schwarz",
       "textureMarkStyle": "Textur-Markierungsstil",
       "uiScale": "Globale UI-Skalierung",
       "uiScaleHint": "Verkleinert UI-Komponenten, damit bei niedriger Auflösung oder hoher DPI-Skalierung mehr Inhalt angezeigt wird.",

@@ -5276,7 +5276,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 8px 12px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.08);
 }
 
@@ -5665,7 +5665,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 6px calc(10px + var(--xz-chat-bottom-inset, 0px));
+  padding: 10px 12px calc(10px + var(--xz-chat-bottom-inset, 0px));
 }
 
 .xz-msg {

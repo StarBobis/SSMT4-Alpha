@@ -5,7 +5,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { currentMonitor, getCurrentWindow, LogicalSize, primaryMonitor } from '@tauri-apps/api/window'
 import { getVersion } from '@tauri-apps/api/app'
 import { AppSettings, BGType, DEFAULT_PAGE_VISIBILITY, SSMTLocale, type PageVisibilitySettings } from './AppSettings'
-import { applyAppThemeColors, applyAppThemeMode } from './AppTheme'
+import { applyAppThemeColors } from './AppTheme'
 import { GlobalConfig } from './GlobalConfig'
 import { AUTO_UPDATE_SUPPORTED_PRESET_SET } from './GamePreset'
 import { ResourceManager } from './ResourceManager'
@@ -190,7 +190,6 @@ export const useAppStateStore = defineStore('appState', () => {
       Object.assign(appSettings, loaded)
       appSettings.VersionNumber = AppSettings.getCurrentVersionNumber()
       applyAppThemeColors()
-      applyAppThemeMode(appSettings.appTheme)
       syncShowWindowShortcut()
       
       void registerWindowSizeListener()

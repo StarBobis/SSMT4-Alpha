@@ -508,7 +508,6 @@
       "aiAssistant": "Assistant IA Cheese Cat"
     },
     "hints": {
-      "theme": "Style minimaliste blanc ou noir pour la barre de navigation.",
       "cacheFolder": "Utilisé pour les espaces de travail, les fichiers générés et les données de cache locales.",
       "githubToken": "Facultatif. Un jeton personnel augmente la limite de requêtes de l’API GitHub lors de la recherche de mises à jour.",
       "workspaceAccessProxyPort": "Utilisé uniquement par la bibliothèque publique d’espaces de travail. Saisissez le port du proxy HTTP local (par exemple 7890) ; 0 utilise le proxy système ou d’environnement.",
@@ -541,9 +540,6 @@
       "selectCacheFolderTitle": "Sélectionner le dossier de cache SSMT"
     },
     "personalization": {
-      "theme": "Thème",
-      "themeLight": "Blanc",
-      "themeDark": "Noir",
       "textureMarkStyle": "Style de marquage des textures",
       "uiScale": "Échelle globale de l’interface",
       "uiScaleHint": "Réduit la taille des composants afin d’afficher davantage de contenu sur les écrans à faible résolution ou avec une mise à l’échelle DPI élevée.",

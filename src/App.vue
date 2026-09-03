@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { AppStateManager, BGType } from "./store/AppStateManager";
 import { normalizeAppUiScale, SSMT_LOCALE_OPTIONS, type PageVisibilitySettings } from "./store/AppSettings";
 import TitleBar from "./components/TitleBar.vue";
 import NavSidebar from "./components/NavSidebar.vue";
-import { applyAppThemeMode } from "./store/AppTheme";
 import { useI18n } from 'vue-i18n';
 import { GlobalConfig } from './store/GlobalConfig';
 import { ResourceManager } from './store/ResourceManager';
@@ -14,6 +13,7 @@ import CacheFolderPicker from './components/CacheFolderPicker.vue';
 import { getGamePresetDisplayName } from './store/GamePreset';
 
 const route = useRoute();
+const router = useRouter();
 const appSettings = AppStateManager.appSettings;
 const gameSwitchRevision = AppStateManager.gameSwitchRevision;
 const { t } = useI18n();
@@ -210,8 +210,32 @@ const normalizeStoredAppUiScale = (value: number) => {
 
 watch(() => appSettings.uiScale, normalizeStoredAppUiScale, { immediate: true });
 
-// Apply the minimal WinUI3 shell theme (white / black) to <html data-app-theme>.
-watch(() => appSettings.appTheme, (mode) => applyAppThemeMode(mode), { immediate: true });
+/* ─── Route-change progress feedback ───
+   Shown the instant a navigation starts and hidden two frames after it
+   resolves, so even heavy first-time page mounts give immediate feedback
+   instead of looking frozen. */
+const isNavigating = ref(false);
+let navigationToken = 0;
+const showRouteProgress = () => {
+  navigationToken += 1;
+  isNavigating.value = true;
+};
+const hideRouteProgressAfterPaint = () => {
+  const token = navigationToken;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (token === navigationToken) isNavigating.value = false;
+  }));
+};
+router.beforeEach((to, from) => {
+  if (to.fullPath !== from.fullPath) showRouteProgress();
+});
+router.afterEach(hideRouteProgressAfterPaint);
+// Switching the active game remounts the current page (see the router-view
+// key) — give the same immediate feedback for that potentially heavy remount.
+watch(gameSwitchRevision, () => {
+  showRouteProgress();
+  hideRouteProgressAfterPaint();
+});
 
 
 // Disable default right-click context menu
@@ -418,7 +442,9 @@ onUnmounted(() => {
     <div class="app-ui-scale" :style="{ '--app-ui-scale': appUiScale }">
       <!-- WinUI3 shell: full-width caption bar on top, nav pane + content below -->
       <div class="app-shell">
-        <TitleBar />
+        <!-- Reserves the caption bar's layout space; the bar itself is
+             teleported to <body> so no popup/card can ever cover it. -->
+        <div class="caption-bar-spacer" aria-hidden="true"></div>
 
         <div class="app-shell-body">
           <NavSidebar />
@@ -439,6 +465,17 @@ onUnmounted(() => {
       </div>
     </div>
   </el-config-provider>
+
+  <!-- Caption bar lives above every layer of the app (highest z-index), so
+       window dragging / minimize / maximize / close stay usable no matter
+       which card, dialog or overlay is open. It is scaled with the same
+       --app-ui-scale factor so it pixel-matches the in-flow layout. -->
+  <Teleport to="body">
+    <div class="caption-bar-host" :style="{ '--app-ui-scale': appUiScale }">
+      <TitleBar />
+      <div class="route-progress" :class="{ active: isNavigating }" aria-hidden="true"></div>
+    </div>
+  </Teleport>
 </template>
 
 <style>
@@ -1061,6 +1098,12 @@ textarea {
   /* Above bg */
 }
 
+/* Layout placeholder for the teleported caption bar (matches its 32px height) */
+.caption-bar-spacer {
+  flex: 0 0 auto;
+  height: 32px;
+}
+
 .app-shell-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1159,5 +1202,60 @@ textarea {
 .page-blur-leave-to {
   opacity: 0;
   transform: scale(1);
+}
+
+/* Teleported caption bar — always the topmost layer in the window.
+   Fullscreen overlays (.preview-zoom-overlay etc.) intentionally stop at
+   top:32px with near-max z-index, so the bar must take the absolute max. */
+.caption-bar-host {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: calc(100% / var(--app-ui-scale, 1));
+  transform: scale(var(--app-ui-scale, 1));
+  transform-origin: top left;
+  z-index: 2147483647;
+}
+
+/* Route-change progress hairline — a whisper of feedback while pages load */
+.route-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.route-progress.active {
+  opacity: 1;
+  transition: opacity 0.08s ease;
+}
+
+.route-progress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 38%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  transform: translateX(-100%);
+}
+
+.route-progress.active::before {
+  animation: route-progress-slide 1.1s cubic-bezier(0.4, 0, 0.4, 1) infinite;
+}
+
+/* Element width is 38% of the bar, so ~270% self-translation sweeps it
+   fully off the right edge regardless of window width or UI scale. */
+@keyframes route-progress-slide {
+  to {
+    transform: translateX(270%);
+  }
 }
 </style>

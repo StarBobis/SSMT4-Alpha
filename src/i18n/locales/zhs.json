@@ -504,7 +504,6 @@
       "aiAssistant": "芝士猫 AI 助手"
     },
     "hints": {
-      "theme": "为导航外壳选择极简的白色或黑色风格。",
       "cacheFolder": "用于保存工作区、生成文件和本地缓存数据。",
       "githubToken": "可选。个人令牌可以提高更新检查时的 GitHub API 请求限额。",
       "workspaceAccessProxyPort": "仅用于工作空间公共库。填入本机 HTTP 代理端口（例如 7890）；填 0 时使用系统或环境代理。",
@@ -546,9 +545,6 @@
       "selectCacheFolderTitle": "选择 SSMT 缓存目录"
     },
     "personalization": {
-      "theme": "主题",
-      "themeLight": "白色",
-      "themeDark": "黑色",
       "textureMarkStyle": "贴图标记风格偏好",
       "uiScale": "全局组件尺寸",
       "uiScaleHint": "缩小界面组件以便在低分辨率或系统高缩放时显示更多内容。",

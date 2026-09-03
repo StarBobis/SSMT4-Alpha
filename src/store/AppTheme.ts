@@ -1,22 +1,10 @@
-export type AppThemeMode = 'dark' | 'light'
-
-export const APP_THEME_MODES: readonly AppThemeMode[] = ['dark', 'light']
-
-export const normalizeAppThemeMode = (value: unknown): AppThemeMode =>
-  value === 'light' ? 'light' : 'dark'
+export type AppThemeMode = 'dark'
 
 /**
- * Applies the shell (navigation chrome) theme mode. Sub-pages keep their own
- * glass styling; this only drives the WinUI3-style sidebar + caption bar via
- * the `[data-app-theme]` CSS custom properties in styles/shell.css.
+ * The shell ships with the black (dark) theme only. Older config files may
+ * still carry `appTheme: 'light'`; normalizing here silently migrates them.
  */
-export const applyAppThemeMode = (mode: AppThemeMode) => {
-  if (typeof document === 'undefined') {
-    return
-  }
-
-  document.documentElement.dataset.appTheme = mode
-}
+export const normalizeAppThemeMode = (_value: unknown): AppThemeMode => 'dark'
 
 const APP_THEME_COLORS = {
   accent: '#FFFFFF',

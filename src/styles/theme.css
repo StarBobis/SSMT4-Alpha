@@ -79,10 +79,12 @@
   --t-border-accent: rgba(255, 255, 255, 0.20);
   --t-border-accent-strong: rgba(255, 255, 255, 0.34);
 
-  /* Dark card (MarkTexture style) */
+  /* Dark card (MarkTexture style) — the translucent dark base keeps content
+     readable over bright game backgrounds even when the global dim mask is
+     turned down, while the tint gradient + backdrop blur preserve the glass feel */
   --t-card-dark-bg:
     linear-gradient(145deg, rgba(var(--crystal-rgb), 0.07), rgba(var(--crystal-rgb), 0.025)),
-    rgba(255, 255, 255, 0.035);
+    rgba(8, 12, 19, 0.42);
   --t-card-dark-border: 1px solid rgba(var(--crystal-rgb), 0.12);
   --t-card-dark-shadow: 0 16px 38px rgba(0, 0, 0, 0.18);
 
@@ -94,7 +96,7 @@
   --t-page-section-radius: 8px;
   --t-page-panel-bg:
     linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)),
-    rgba(255, 255, 255, 0.035);
+    rgba(8, 12, 19, 0.42);
   --t-page-panel-border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
   --t-page-panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
   --t-page-panel-blur: blur(16px);

@@ -27,7 +27,6 @@ import {
   Open,
   Refresh,
   FullScreen,
-  Sunny,
   View,
 } from '@element-plus/icons-vue';
 import type { OptionalPageId } from '../../store/AppSettings';
@@ -302,25 +301,6 @@ const openUsageDocs = async () => {
 
               <div class="setting-row">
                 <div class="setting-identity">
-                  <span class="setting-icon"><el-icon><Sunny /></el-icon></span>
-                  <div>
-                    <div class="setting-label">{{ t('settings.personalization.theme') }}</div>
-                    <div class="setting-description">{{ t('settings.hints.theme') }}</div>
-                  </div>
-                </div>
-                <div class="setting-control compact-control">
-                  <el-select
-                    v-model="appSettings.appTheme"
-                    :aria-label="t('settings.personalization.theme')"
-                  >
-                    <el-option value="light" :label="t('settings.personalization.themeLight')" />
-                    <el-option value="dark" :label="t('settings.personalization.themeDark')" />
-                  </el-select>
-                </div>
-              </div>
-
-              <div class="setting-row">
-                <div class="setting-identity">
                   <span class="setting-icon"><el-icon><Brush /></el-icon></span>
                   <div>
                     <div class="setting-label">{{ t('settings.personalization.textureMarkStyle') }}</div>
@@ -492,7 +472,9 @@ const openUsageDocs = async () => {
 
 .settings-shell {
   width: min(1180px, 100%);
-  margin: 0 auto;
+  /* Left-aligned so the page stays visually anchored to the navigation pane
+     instead of drifting away from it on wide windows */
+  margin: 0;
 }
 
 .setting-icon {
