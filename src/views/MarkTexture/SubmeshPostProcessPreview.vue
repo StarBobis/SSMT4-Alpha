@@ -25,6 +25,16 @@ import {
 	type GIMITextureKind,
 } from './GIMIHighFidelityMaterial';
 import { applyFaceNeckObjectAlignment } from './FaceNeckObjectAlignment';
+import {
+	getValidatedPreviewGeometry,
+	getValidatedPreviewTexture,
+	readPreviewBufferFile,
+	releasePreviewResource,
+	storePreviewGeometry,
+	storePreviewTexture,
+	type PreviewFileStamp,
+	type PreviewGeometryStatusInfo,
+} from './previewResourceCache';
 
 type PreviewTextureOption = {
 	id: string;
@@ -637,7 +647,7 @@ const applyFaceNormalMap = (
 	targetId?: string,
 ): void => {
 	if (!isGIMIMaterial(targetMaterial)) {
-		texture?.dispose();
+		releasePreviewResource(texture);
 		return;
 	}
 	GIMITextureSet.apply(targetMaterial, 'faceSdf', texture);
@@ -1254,7 +1264,8 @@ const applyPreviewPosition = (values: number[], gamePreset?: string): [number, n
 const getBufferData = async (
 	dataType: DataTypeItem,
 	source: ElementSource,
-	cache: Map<string, Uint8Array>
+	cache: Map<string, Uint8Array>,
+	stamps?: Record<string, PreviewFileStamp>
 ): Promise<Uint8Array> => {
 	const fileName = source.buffer.FileName?.trim() || '';
 	if (!fileName) {
@@ -1265,9 +1276,26 @@ const getBufferData = async (
 		return cached;
 	}
 	const path = await join(dataType.folderPath, fileName);
-	const data = await readFile(path);
-	cache.set(fileName, data);
-	return data;
+	const read = await readPreviewBufferFile(path);
+	if (stamps) {
+		stamps[path] = read.stamp;
+	}
+	cache.set(fileName, read.data);
+	return read.data;
+};
+
+/** Index buffers ride the same module-level cache; stamps feed geometry-cache validation. */
+const readPreviewIndexBuffer = async (
+	dataType: DataTypeItem,
+	fileName: string,
+	stamps?: Record<string, PreviewFileStamp>
+): Promise<Uint8Array> => {
+	const path = await join(dataType.folderPath, fileName);
+	const read = await readPreviewBufferFile(path);
+	if (stamps) {
+		stamps[path] = read.stamp;
+	}
+	return read.data;
 };
 
 const shouldFlipNormalMap = (gamePreset?: string): boolean => {
@@ -1856,7 +1884,7 @@ const clearPreviewMesh = () => {
 		previewRoot.traverse(object => {
 			if (object instanceof THREE.Mesh && !disposedGeometries.has(object.geometry)) {
 				disposedGeometries.add(object.geometry);
-				object.geometry.dispose();
+				releasePreviewResource(object.geometry);
 			}
 		});
 	}
@@ -1869,12 +1897,12 @@ const clearPreviewMesh = () => {
 		const lightMap = isGIMIMaterial(passiveMaterial) ? GIMITextureSet.texture(passiveMaterial, 'lightMap') : null;
 		const rampMap = isGIMIMaterial(passiveMaterial) ? GIMITextureSet.texture(passiveMaterial, 'rampMap') : null;
 		const metalMap = isGIMIMaterial(passiveMaterial) ? GIMITextureSet.texture(passiveMaterial, 'metalMap') : null;
-		for (const diffuse of diffuseLayers) diffuse?.dispose();
-		normal?.dispose();
-		faceNormal?.dispose();
-		lightMap?.dispose();
-		rampMap?.dispose();
-		metalMap?.dispose();
+		for (const diffuse of diffuseLayers) releasePreviewResource(diffuse);
+		releasePreviewResource(normal);
+		releasePreviewResource(faceNormal);
+		releasePreviewResource(lightMap);
+		releasePreviewResource(rampMap);
+		releasePreviewResource(metalMap);
 		disposePreviewMaterial(passiveMaterial);
 	}
 	passiveMaterials = [];
@@ -2031,7 +2059,7 @@ const updateMaterialSettings = () => {
 
 const replaceTexture = (kind: GIMITextureKind, texture: THREE.Texture | undefined) => {
 	if (!material) {
-		texture?.dispose();
+		releasePreviewResource(texture);
 		return;
 	}
 	if (isGIMIBodyPipeline()) {
@@ -2046,7 +2074,7 @@ const replaceTexture = (kind: GIMITextureKind, texture: THREE.Texture | undefine
 					: kind === 'rampMap'
 						? rampMapTexture
 						: metalMapTexture;
-		previous?.dispose();
+		releasePreviewResource(previous);
 		if (kind === 'diffuse') diffuseTexture = texture;
 		if (kind === 'normal') normalTexture = texture;
 		if (kind === 'faceSdf') faceNormalTexture = texture;
@@ -2058,16 +2086,16 @@ const replaceTexture = (kind: GIMITextureKind, texture: THREE.Texture | undefine
 		return;
 	}
 	if (kind === 'faceSdf' || kind === 'lightMap' || kind === 'rampMap' || kind === 'metalMap') {
-		texture?.dispose();
+		releasePreviewResource(texture);
 		return;
 	}
 	if (kind === 'diffuse') {
-		diffuseTexture?.dispose();
+		releasePreviewResource(diffuseTexture);
 		diffuseTexture = texture;
 		material.uniforms.uDiffuseMap.value = texture ?? null;
 		material.uniforms.uHasDiffuseMap.value = texture ? 1 : 0;
 	} else {
-		normalTexture?.dispose();
+		releasePreviewResource(normalTexture);
 		normalTexture = texture;
 		material.uniforms.uNormalMap.value = texture ?? null;
 		material.uniforms.uHasNormalMap.value = texture ? 1 : 0;
@@ -2085,7 +2113,7 @@ const applyTextureToMaterial = (
 		return;
 	}
 	if (kind === 'faceSdf' || kind === 'lightMap' || kind === 'rampMap' || kind === 'metalMap') {
-		texture?.dispose();
+		releasePreviewResource(texture);
 		return;
 	}
 	if (kind === 'diffuse') {
@@ -2122,10 +2150,10 @@ const loadTexture = (url: string, colorTexture: boolean): Promise<THREE.Texture 
 
 const replaceDiffuseLayers = (textures: THREE.Texture[]): void => {
 	if (!material) {
-		for (const texture of textures) texture.dispose();
+		for (const texture of textures) releasePreviewResource(texture);
 		return;
 	}
-	for (const texture of diffuseLayerTextures) texture.dispose();
+	for (const texture of diffuseLayerTextures) releasePreviewResource(texture);
 	diffuseLayerTextures = textures;
 	GIMITextureSet.applyDiffuseLayers(material, textures);
 	renderPreview();
@@ -2297,6 +2325,27 @@ const loadDdsTexture = async (
 	maxDimension: number | undefined = DDS_3D_TEXTURE_MAX_DIMENSION
 ): Promise<THREE.Texture | undefined> => {
 	if (!ddsPath) return undefined;
+	// Decoding a large DDS (native resize + JS RGBA upload) is the dominant
+	// preview cost, so decoded textures are cached by path + sampling mode
+	// and only re-decoded when the file's mtime/size actually changes.
+	const cacheKey = `dds|${colorTexture ? 'color' : 'raw'}|${maxDimension ?? 'full'}|${ddsPath}`;
+	const cached = await getValidatedPreviewTexture(cacheKey, ddsPath);
+	if (cached) {
+		return cached;
+	}
+	const texture = await loadDdsTextureUncached(ddsPath, colorTexture, maxDimension);
+	if (texture) {
+		await storePreviewTexture(cacheKey, ddsPath, texture);
+	}
+	return texture;
+};
+
+const loadDdsTextureUncached = async (
+	ddsPath: string,
+	colorTexture: boolean,
+	maxDimension: number | undefined = DDS_3D_TEXTURE_MAX_DIMENSION
+): Promise<THREE.Texture | undefined> => {
+	if (!ddsPath) return undefined;
 	try {
 		const compressedTexture = await loadCompressedDdsTexture(ddsPath, colorTexture);
 		if (compressedTexture) return compressedTexture;
@@ -2347,7 +2396,7 @@ const restoreEmbeddedPreviewTextures = () => {
 		}
 	}
 	zoomTextureSnapshots = [];
-	for (const texture of zoomFullTextures) texture.dispose();
+	for (const texture of zoomFullTextures) releasePreviewResource(texture);
 	zoomFullTextures = [];
 	renderPreview();
 };
@@ -2380,12 +2429,12 @@ const applyFullSizeZoomTextures = async () => {
 	}));
 	if (!previewZoomOpen.value || activeToken !== zoomTextureToken) {
 		for (const item of loaded) {
-			for (const texture of item.diffuseLayers) texture?.dispose();
-			item.normal?.dispose();
-			item.faceNormal?.dispose();
-			item.lightMap?.dispose();
-			item.rampMap?.dispose();
-			item.metalMap?.dispose();
+			for (const texture of item.diffuseLayers) releasePreviewResource(texture);
+			releasePreviewResource(item.normal);
+			releasePreviewResource(item.faceNormal);
+			releasePreviewResource(item.lightMap);
+			releasePreviewResource(item.rampMap);
+			releasePreviewResource(item.metalMap);
 		}
 		return;
 	}
@@ -2528,16 +2577,16 @@ const updateMaterialTextures = async () => {
 	]);
 	const loadedDiffuseLayers = nextDiffuseLayers.filter((texture): texture is THREE.Texture => !!texture);
 	if (token !== textureLoadToken) {
-		for (const texture of loadedDiffuseLayers) texture.dispose();
-		nextNormal?.dispose();
-		nextFaceNormal?.dispose();
-		nextLightMap?.dispose();
-		nextRampMap?.dispose();
-		nextMetalMap?.dispose();
+		for (const texture of loadedDiffuseLayers) releasePreviewResource(texture);
+		releasePreviewResource(nextNormal);
+		releasePreviewResource(nextFaceNormal);
+		releasePreviewResource(nextLightMap);
+		releasePreviewResource(nextRampMap);
+		releasePreviewResource(nextMetalMap);
 		return;
 	}
 	if (isGIMIBodyPipeline()) {
-		diffuseTexture?.dispose();
+		releasePreviewResource(diffuseTexture);
 		diffuseTexture = undefined;
 		replaceDiffuseLayers(loadedDiffuseLayers);
 	} else {
@@ -2559,13 +2608,88 @@ const updateMaterialTextures = async () => {
 type PreviewGeometryBuildResult = {
 	geometry: THREE.BufferGeometry;
 	status: string;
+	statusInfo: PreviewGeometryStatusInfo;
 	needsReview?: boolean;
+};
+
+const formatPreviewGeometryStatus = (info: PreviewGeometryStatusInfo): string => {
+	if (info.kind === 'limited') {
+		return t('markTexture.preview.previewLimited', { count: info.count.toLocaleString() });
+	}
+	if (info.kind === 'skipped') {
+		return t('markTexture.preview.skippedInvalidTriangles', { count: info.count.toLocaleString() });
+	}
+	return t('markTexture.preview.vertexTriangleCount', {
+		vertices: info.vertices.toLocaleString(),
+		triangles: info.triangles.toLocaleString(),
+	});
+};
+
+/** Cache key covering every input that shapes the built geometry; file
+    content changes are caught separately by stamp validation. */
+const buildPreviewGeometryCacheKey = (dataType: DataTypeItem, uvLayer: UvLayer | undefined, permissive: boolean): string => {
+	const sourceKey = (semantic: string): string => {
+		const source = getElementSources(dataType, semantic)[0];
+		return source ? `${source.buffer.FileName}#${source.offset}/${source.stride}` : '-';
+	};
+	const indexBuffer = dataType.json.IndexBufferList?.[0];
+	const slice = getVertexSlice(dataType);
+	return [
+		dataType.folderPath,
+		permissive
+			? 'permissive'
+			: `strict:${uvLayer?.id ?? ''}:${uvLayer?.buffer.FileName ?? ''}#${uvLayer?.offset ?? 0}/${uvLayer?.stride ?? 0}`,
+		sourceKey('POSITION'),
+		sourceKey('NORMAL'),
+		sourceKey('TANGENT'),
+		sourceKey('COLOR'),
+		indexBuffer ? `${indexBuffer.FileName}#${indexBuffer.DXGI_FORMAT}` : '-',
+		`${slice.bufferOffset}:${slice.indexOffset}:${slice.vertexCount ?? ''}`,
+		normalizeSemantic(dataType.json.GamePreset),
+	].join('|');
+};
+
+/** Geometry through the module-level cache: unchanged source files return
+    the previously built BufferGeometry instead of re-reading and
+    re-parsing hundreds of thousands of triangles. */
+const getPreviewGeometryResult = async (
+	dataType: DataTypeItem,
+	uvLayer: UvLayer | undefined,
+	permissive: boolean,
+	buildToken: number
+): Promise<PreviewGeometryBuildResult | undefined> => {
+	const cacheKey = buildPreviewGeometryCacheKey(dataType, uvLayer, permissive);
+	const cached = await getValidatedPreviewGeometry(cacheKey);
+	if (cached) {
+		return {
+			geometry: cached.geometry,
+			status: formatPreviewGeometryStatus(cached.statusInfo),
+			statusInfo: cached.statusInfo,
+			needsReview: cached.needsReview,
+		};
+	}
+
+	const stamps: Record<string, PreviewFileStamp> = {};
+	const built = permissive
+		? await createPermissivePreviewGeometry(dataType, buildToken, stamps)
+		: await createPreviewGeometry(dataType, uvLayer as UvLayer, buildToken, stamps);
+	if (!built || buildToken !== previewBuildToken) {
+		return built;
+	}
+	storePreviewGeometry(cacheKey, {
+		geometry: built.geometry,
+		needsReview: built.needsReview,
+		statusInfo: built.statusInfo,
+		stamps,
+	});
+	return built;
 };
 
 const createPreviewGeometry = async (
 	dataType: DataTypeItem,
 	uvLayer: UvLayer,
-	buildToken: number
+	buildToken: number,
+	stamps?: Record<string, PreviewFileStamp>
 ): Promise<PreviewGeometryBuildResult | undefined> => {
 
 	const positionSource = getElementSources(dataType, 'POSITION')[0];
@@ -2579,12 +2703,12 @@ const createPreviewGeometry = async (
 
 	const sourceBufferCache = new Map<string, Uint8Array>();
 	const [positionData, normalData, tangentData, colorData, uvData, indexData] = await Promise.all([
-		getBufferData(dataType, positionSource, sourceBufferCache),
-		normalSource ? getBufferData(dataType, normalSource, sourceBufferCache) : Promise.resolve(undefined),
-		tangentSource ? getBufferData(dataType, tangentSource, sourceBufferCache) : Promise.resolve(undefined),
-		colorSource ? getBufferData(dataType, colorSource, sourceBufferCache) : Promise.resolve(undefined),
-		getBufferData(dataType, uvLayer, sourceBufferCache),
-		readFile(await join(dataType.folderPath, indexBuffer.FileName)),
+		getBufferData(dataType, positionSource, sourceBufferCache, stamps),
+		normalSource ? getBufferData(dataType, normalSource, sourceBufferCache, stamps) : Promise.resolve(undefined),
+		tangentSource ? getBufferData(dataType, tangentSource, sourceBufferCache, stamps) : Promise.resolve(undefined),
+		colorSource ? getBufferData(dataType, colorSource, sourceBufferCache, stamps) : Promise.resolve(undefined),
+		getBufferData(dataType, uvLayer, sourceBufferCache, stamps),
+		readPreviewIndexBuffer(dataType, indexBuffer.FileName, stamps),
 	]);
 	// The TYPE folder and the UV selector can both change while a previous
 	// buffer read is in flight.  Never let that older read replace the newer
@@ -2715,19 +2839,18 @@ const createPreviewGeometry = async (
 	geometry.computeBoundingSphere();
 
 	if (buildToken !== previewBuildToken) {
-		geometry.dispose();
+		releasePreviewResource(geometry);
 		return undefined;
 	}
+	const statusInfo: PreviewGeometryStatusInfo = sourceIndices.length > MAX_PREVIEW_INDEX_COUNT
+		? { kind: 'limited', count: MAX_PREVIEW_INDEX_COUNT }
+		: skippedTriangleCount > 0
+			? { kind: 'skipped', count: skippedTriangleCount }
+			: { kind: 'counts', vertices: remap.size, triangles: remappedIndices.length / 3 };
 	return {
 		geometry,
-		status: sourceIndices.length > MAX_PREVIEW_INDEX_COUNT
-			? t('markTexture.preview.previewLimited', { count: MAX_PREVIEW_INDEX_COUNT.toLocaleString() })
-			: skippedTriangleCount > 0
-				? t('markTexture.preview.skippedInvalidTriangles', { count: skippedTriangleCount })
-				: t('markTexture.preview.vertexTriangleCount', {
-					vertices: remap.size.toLocaleString(),
-					triangles: (remappedIndices.length / 3).toLocaleString(),
-				}),
+		status: formatPreviewGeometryStatus(statusInfo),
+		statusInfo,
 		needsReview: hasImplausibleCoordinates,
 	};
 };
@@ -2741,7 +2864,8 @@ const createPreviewGeometry = async (
  */
 const createPermissivePreviewGeometry = async (
 	dataType: DataTypeItem,
-	buildToken: number
+	buildToken: number,
+	stamps?: Record<string, PreviewFileStamp>
 ): Promise<PreviewGeometryBuildResult | undefined> => {
 	const positionSource = getElementSources(dataType, 'POSITION')[0];
 	const normalSource = getElementSources(dataType, 'NORMAL')[0];
@@ -2754,11 +2878,11 @@ const createPermissivePreviewGeometry = async (
 
 	const sourceBufferCache = new Map<string, Uint8Array>();
 	const [positionData, normalData, tangentData, colorData, indexData] = await Promise.all([
-		getBufferData(dataType, positionSource, sourceBufferCache),
-		normalSource ? getBufferData(dataType, normalSource, sourceBufferCache) : Promise.resolve(undefined),
-		tangentSource ? getBufferData(dataType, tangentSource, sourceBufferCache) : Promise.resolve(undefined),
-		colorSource ? getBufferData(dataType, colorSource, sourceBufferCache) : Promise.resolve(undefined),
-		readFile(await join(dataType.folderPath, indexBuffer.FileName)),
+		getBufferData(dataType, positionSource, sourceBufferCache, stamps),
+		normalSource ? getBufferData(dataType, normalSource, sourceBufferCache, stamps) : Promise.resolve(undefined),
+		tangentSource ? getBufferData(dataType, tangentSource, sourceBufferCache, stamps) : Promise.resolve(undefined),
+		colorSource ? getBufferData(dataType, colorSource, sourceBufferCache, stamps) : Promise.resolve(undefined),
+		readPreviewIndexBuffer(dataType, indexBuffer.FileName, stamps),
 	]);
 	if (buildToken !== previewBuildToken) {
 		return undefined;
@@ -2852,12 +2976,11 @@ const createPermissivePreviewGeometry = async (
 		geometry.computeVertexNormals();
 	}
 	geometry.computeBoundingSphere();
+	const statusInfo: PreviewGeometryStatusInfo = { kind: 'counts', vertices: remap.size, triangles: remappedIndices.length / 3 };
 	return {
 		geometry,
-		status: t('markTexture.preview.vertexTriangleCount', {
-			vertices: remap.size.toLocaleString(),
-			triangles: (remappedIndices.length / 3).toLocaleString(),
-		}),
+		status: formatPreviewGeometryStatus(statusInfo),
+		statusInfo,
 		needsReview: true,
 	};
 };
@@ -2912,11 +3035,9 @@ const buildPreviewGeometry = async (buildToken: number) => {
 	let activeGeometry: PreviewGeometryBuildResult | undefined;
 	if (activeTargetIsVisible && dataType) {
 		try {
-			activeGeometry = uvLayer
-				? await createPreviewGeometry(dataType, uvLayer, buildToken)
-				: await createPermissivePreviewGeometry(dataType, buildToken);
+			activeGeometry = await getPreviewGeometryResult(dataType, uvLayer, !uvLayer, buildToken);
 		} catch {
-			activeGeometry = await createPermissivePreviewGeometry(dataType, buildToken).catch(() => undefined);
+			activeGeometry = await getPreviewGeometryResult(dataType, undefined, true, buildToken).catch(() => undefined);
 		}
 	}
 	if (buildToken !== previewBuildToken) {
@@ -2932,12 +3053,10 @@ const buildPreviewGeometry = async (buildToken: number) => {
 			return undefined;
 		}
 		try {
-			const geometry = source.uvLayer
-				? await createPreviewGeometry(source.dataType, source.uvLayer, buildToken)
-				: await createPermissivePreviewGeometry(source.dataType, buildToken);
+			const geometry = await getPreviewGeometryResult(source.dataType, source.uvLayer, !source.uvLayer, buildToken);
 			return geometry ? { target, geometry, gamePreset: source.dataType.json.GamePreset } : undefined;
 		} catch {
-			const geometry = await createPermissivePreviewGeometry(source.dataType, buildToken).catch(() => undefined);
+			const geometry = await getPreviewGeometryResult(source.dataType, undefined, true, buildToken).catch(() => undefined);
 			return geometry ? { target, geometry, gamePreset: source.dataType.json.GamePreset } : undefined;
 		}
 	}, () => buildToken === previewBuildToken);
@@ -2965,15 +3084,15 @@ const buildPreviewGeometry = async (buildToken: number) => {
 		return { source, diffuseLayers: diffuseLayers.filter((texture): texture is THREE.Texture => !!texture), normal, faceNormal, lightMap, rampMap, metalMap };
 	}, () => buildToken === previewBuildToken);
 	if (buildToken !== previewBuildToken) {
-		activeGeometry?.geometry.dispose();
+		releasePreviewResource(activeGeometry?.geometry);
 		for (const renderable of passiveRenderables) {
-			renderable?.source.geometry.geometry.dispose();
-			for (const texture of renderable?.diffuseLayers ?? []) texture.dispose();
-			renderable?.normal?.dispose();
-			renderable?.faceNormal?.dispose();
-			renderable?.lightMap?.dispose();
-			renderable?.rampMap?.dispose();
-			renderable?.metalMap?.dispose();
+			releasePreviewResource(renderable?.source.geometry.geometry);
+			for (const texture of renderable?.diffuseLayers ?? []) releasePreviewResource(texture);
+			releasePreviewResource(renderable?.normal);
+			releasePreviewResource(renderable?.faceNormal);
+			releasePreviewResource(renderable?.lightMap);
+			releasePreviewResource(renderable?.rampMap);
+			releasePreviewResource(renderable?.metalMap);
 		}
 		return;
 	}
@@ -3045,7 +3164,7 @@ const buildPreviewGeometry = async (buildToken: number) => {
 			GIMITextureSet.applyDiffuseLayers(passiveMaterial, diffuseLayers);
 		} else {
 			applyTextureToMaterial(passiveMaterial, 'diffuse', diffuseLayers[0]);
-			for (const texture of diffuseLayers.slice(1)) texture.dispose();
+			for (const texture of diffuseLayers.slice(1)) releasePreviewResource(texture);
 		}
 		applyTextureToMaterial(passiveMaterial, 'normal', normal);
 		applyFaceNormalMap(passiveMaterial, faceNormal, source.target.faceNormalChannel, isFaceMeshTarget(source.target.id), source.target.id);
@@ -3264,13 +3383,13 @@ const disposeRenderer = () => {
 	controls?.dispose();
 	controls = undefined;
 	clearPreviewMesh();
-	diffuseTexture?.dispose();
-	for (const texture of diffuseLayerTextures) texture.dispose();
-	normalTexture?.dispose();
-	faceNormalTexture?.dispose();
-	lightMapTexture?.dispose();
-	rampMapTexture?.dispose();
-	metalMapTexture?.dispose();
+	releasePreviewResource(diffuseTexture);
+	for (const texture of diffuseLayerTextures) releasePreviewResource(texture);
+	releasePreviewResource(normalTexture);
+	releasePreviewResource(faceNormalTexture);
+	releasePreviewResource(lightMapTexture);
+	releasePreviewResource(rampMapTexture);
+	releasePreviewResource(metalMapTexture);
 	diffuseTexture = undefined;
 	diffuseLayerTextures = [];
 	normalTexture = undefined;

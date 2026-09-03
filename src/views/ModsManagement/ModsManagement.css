@@ -745,8 +745,9 @@
     position: relative;
     overflow: hidden;
     background: rgba(255,255,255,0.08);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：逐卡片元素必须无 backdrop-filter（与 ModsManagement.vue 内生效样式保持一致） */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid rgba(255,255,255,0.20);
     box-shadow:
         0 0 16px rgba(var(--theme-surface-tint-rgb), 0.14),
@@ -865,10 +866,11 @@
     opacity: 0.25;
 }
 
+/* 位移改用 translateX（合成器属性）：left 动画每帧触发布局+重绘。换算见 ModsManagement.vue 生效样式 */
 @keyframes subgroupSheen {
-    0%   { left: -160%; opacity: 0.3; }
-    42%  { left: 145%;  opacity: 0.7; }
-    100% { left: 145%;  opacity: 0.3; }
+    0%   { transform: translateX(0) skewX(-18deg);        opacity: 0.3; }
+    42%  { transform: translateX(190.625%) skewX(-18deg); opacity: 0.7; }
+    100% { transform: translateX(190.625%) skewX(-18deg); opacity: 0.3; }
 }
 
 .subgroup-card.is-disabled .subgroup-name,
@@ -1009,6 +1011,26 @@
 }
 
 .mod-card:not(.is-disabled) {
+    border-color: rgba(var(--theme-surface-tint-rgb), 0.24);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+        0 0 24px rgba(var(--theme-surface-tint-rgb), 0.18),
+        0 12px 26px rgba(0, 0, 0, 0.38);
+}
+
+/* 呼吸脉冲层：只动 opacity（与 ModsManagement.vue 生效样式保持一致） */
+.mod-card:not(.is-disabled)::before {
+    content: "";
+    position: absolute;
+    /* 不能用 inset:-1px：卡片 overflow:hidden 会把伪元素裁到 padding-box，边框环会被裁没 */
+    inset: 0;
+    border-radius: 12px;
+    border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.48);
+    box-shadow:
+        0 0 18px rgba(var(--theme-surface-tint-rgb), 0.20) inset,
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+    opacity: 0;
+    pointer-events: none;
     animation: modEnabledBreath var(--breath-duration) ease-in-out infinite;
     animation-delay: var(--phase-a);
 }

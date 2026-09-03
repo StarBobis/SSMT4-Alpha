@@ -250,7 +250,15 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "Свернуть",
+      "maximize": "Развернуть",
+      "close": "Закрыть"
+    },
     "switchToGameLibrary": "Перейти к библиотеке игр",
+    "selectGame": "Сменить игру",
+    "favoriteGames": "Избранные игры",
+    "otherGames": "Другие игры",
     "settings": "Настройки",
     "enableCompactView": "Включить компактный вид",
     "disableCompactView": "Отключить компактный вид",
@@ -259,7 +267,7 @@
     "nav": {
       "home": "Главная",
       "work": "Работа",
-      "markTexture": "Постобработка извлечения",
+      "markTexture": "Маркировка текстур",
       "gameType": "Тип данных",
       "mods": "Моды",
       "gameBanana": "GameBanana",
@@ -491,7 +499,9 @@
       "appearance": "Внешний вид и рабочий процесс",
       "appearanceDesc": "Язык, маркировка и визуальный комфорт",
       "pageVisibility": "Видимость страниц",
-      "pageVisibilityDesc": "Выберите страницы функций для верхней панели навигации",
+      "pageVisibilityDesc": "Выберите страницы функций для левой боковой панели навигации",
+      "games": "Игры",
+      "gamesDesc": "Управление конфигурациями игр, избранным и значками",
       "about": "О SSMT4",
       "resources": "Ресурсы",
       "community": "Сообщество и поддержка"
@@ -501,6 +511,14 @@
       "modManagement": "Управление модами",
       "modAcquisition": "Получение модов",
       "aiAssistant": "ИИ-помощник Чиз Кэт"
+    },
+    "games": {
+      "addGame": "Добавить игру",
+      "favorite": "В избранное",
+      "unfavorite": "Убрать из избранного",
+      "changeIcon": "Сменить значок",
+      "deleteConfig": "Удалить конфигурацию игры",
+      "current": "Текущая"
     },
     "hints": {
       "cacheFolder": "Используется для рабочих пространств, созданных файлов и локальных данных кэша.",

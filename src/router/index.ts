@@ -1,34 +1,83 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { defineAsyncComponent, type AsyncComponentLoader } from 'vue'
 import { ElMessage } from 'element-plus'
 import { exists } from '@tauri-apps/plugin-fs'
 import Home from '../views/Home/Home.vue'
-import GameLibrary from '../views/GameLibrary/GameLibrary.vue'
+import PageLoading from '../components/PageLoading.vue'
 import { PathHelper } from '../helper/PathHelper'
 import { i18n } from '../i18n'
-import { AppStateManager } from '../store/AppStateManager'
 
 const t = i18n.global.t
 
-const WorkPage = () => import('../views/WorkPage/WorkPage.vue')
-const ModsManagement = () => import('../views/ModsManagement/ModsManagement.vue')
-const GameBanana = () => import('../views/GameBanana/GameBanana.vue')
-const GameBananaAuthor = () => import('../views/GameBanana/GameBananaAuthor.vue')
-const NexusMods = () => import('../views/NexusMods/NexusMods.vue')
-const MarkTextureFull = () => import('../views/MarkTexture/MarkTextureFull.vue')
-const Settings = () => import('../views/Settings/Settings.vue')
-const XianZun = () => import('../views/XianZun/XianZun.vue')
-const UIBuilder = () => import('../views/UIBuilder/UIBuilder.vue')
-const TextureModMaker = () => import('../views/TextureModMaker/TextureModMaker.vue')
+/**
+ * Every sub-page is an async component with an immediate loading indicator:
+ * the route switches right away and shows a lightweight spinner while the
+ * chunk loads / the page mounts, instead of freezing on the old page.
+ */
+const asyncPage = (loader: AsyncComponentLoader) =>
+  defineAsyncComponent({
+    loader,
+    loadingComponent: PageLoading,
+    // Avoid flashing the spinner for chunks that resolve almost instantly
+    delay: 120,
+  })
+
+const loadWorkPage = () => import('../views/WorkPage/WorkPage.vue')
+const loadModsManagement = () => import('../views/ModsManagement/ModsManagement.vue')
+const loadGameBanana = () => import('../views/GameBanana/GameBanana.vue')
+const loadGameBananaAuthor = () => import('../views/GameBanana/GameBananaAuthor.vue')
+const loadNexusMods = () => import('../views/NexusMods/NexusMods.vue')
+const loadMarkTextureFull = () => import('../views/MarkTexture/MarkTextureFull.vue')
+const loadSettings = () => import('../views/Settings/Settings.vue')
+const loadXianZun = () => import('../views/XianZun/XianZun.vue')
+const loadUIBuilder = () => import('../views/UIBuilder/UIBuilder.vue')
+const loadTextureModMaker = () => import('../views/TextureModMaker/TextureModMaker.vue')
+
+const WorkPage = asyncPage(loadWorkPage)
+const ModsManagement = asyncPage(loadModsManagement)
+const GameBanana = asyncPage(loadGameBanana)
+const GameBananaAuthor = asyncPage(loadGameBananaAuthor)
+const NexusMods = asyncPage(loadNexusMods)
+const MarkTextureFull = asyncPage(loadMarkTextureFull)
+const Settings = asyncPage(loadSettings)
+const XianZun = asyncPage(loadXianZun)
+const UIBuilder = asyncPage(loadUIBuilder)
+const TextureModMaker = asyncPage(loadTextureModMaker)
+
+/**
+ * Warm the route chunks in the background once the app has started, so the
+ * first visit to a heavy page only pays the mount cost, never the load cost.
+ */
+export const prefetchRouteComponents = () => {
+  const loaders = [
+    loadSettings,
+    loadModsManagement,
+    loadWorkPage,
+    loadGameBanana,
+    loadNexusMods,
+    loadMarkTextureFull,
+    loadTextureModMaker,
+    loadXianZun,
+    loadGameBananaAuthor,
+    loadUIBuilder,
+  ]
+  loaders.forEach((load, index) => {
+    window.setTimeout(() => {
+      void load().catch(() => {
+        /* Prefetch is best-effort — a later real navigation retries. */
+      })
+    }, 600 + index * 320)
+  })
+}
 
 const routes = [
   { path: '/', name: 'Home', component: Home, meta: { title: 'Home', requiresGame: false } },
-  { path: '/games', name: 'GameLibrary', component: GameLibrary, meta: { title: 'Game Library', requiresGame: false } },
   { path: '/mods', name: 'ModsManagement', component: ModsManagement, meta: { title: 'Mods Management', requiresGame: true } },
   { path: '/gamebanana', name: 'GameBanana', component: GameBanana, meta: { title: 'GameBanana', requiresGame: false } },
   { path: '/gamebanana/author/:authorId', name: 'GameBananaAuthor', component: GameBananaAuthor, meta: { title: 'GameBanana Author', requiresGame: false } },
   { path: '/nexusmods', name: 'NexusMods', component: NexusMods, meta: { title: 'Nexus Mods', requiresGame: false } },
   { path: '/work', name: 'WorkPage', component: WorkPage, meta: { title: 'Work Page', requiresGame: true } },
-  { path: '/mark-texture-full', name: 'MarkTextureFull', component: MarkTextureFull, meta: { title: 'Extraction Postprocess', requiresGame: true } },
+  { path: '/mark-texture-full', name: 'MarkTextureFull', component: MarkTextureFull, meta: { title: 'Texture Marking', requiresGame: true } },
   { path: '/settings', name: 'Settings', component: Settings, meta: { title: 'Settings', requiresGame: false } },
   { path: '/xianzun', name: 'XianZun', component: XianZun, meta: { title: '芝士猫', requiresGame: false } },
   { path: '/ui-builder', name: 'UIBuilder', component: UIBuilder, meta: { title: 'UI Builder', requiresGame: false } },
@@ -41,10 +90,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.name === 'Home' && AppStateManager.hasLoadedInitialState() && !AppStateManager.hasSelectedGame()) {
-    return { name: 'GameLibrary' }
-  }
-
   const needMigotoPath = new Set(['WorkPage', 'MarkTextureFull', 'TextureModMaker'])
   if (!needMigotoPath.has(String(to.name ?? ''))) {
     return true

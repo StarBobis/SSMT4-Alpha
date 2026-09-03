@@ -3167,7 +3167,7 @@ onBeforeUnmount(() => {
 .gb-screenshots button.is-image-blurred.can-hover-reveal:hover img { filter: blur(0) saturate(1); transform: scale(1.04); }
 .gb-mod-thumb.is-image-blurred.can-hover-reveal:hover::after,
 .gb-screenshots button.is-image-blurred.can-hover-reveal:hover::after { opacity: 0; }
-.gb-img-toggle { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer; transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+.gb-img-toggle { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); /* 性能：mod 列表每个 NSFW 缩略图一个该按钮，逐项模糊层会在滚动时引发闪烁，背景已足够不透明 */ cursor: pointer; transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease; }
 .gb-img-toggle:hover { transform: scale(1.08); background: rgba(24,24,38,.78); border-color: rgba(255,255,255,.45); color: #fff; }
 .gb-img-toggle:active { transform: scale(.96); }
 .gb-eye { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
@@ -3175,7 +3175,7 @@ onBeforeUnmount(() => {
 .gb-mod-thumb.revealed .gb-eye-open { display: none; }
 .gb-mod-thumb.revealed .gb-eye-closed { display: block; }
 .gb-screenshots button.gb-blur-active { cursor: pointer; }
-.gb-screenshots button .gb-img-eye { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: none; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none; }
+.gb-screenshots button .gb-img-eye { position: absolute; right: 8px; bottom: 8px; z-index: 3; width: 30px; height: 30px; display: none; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.28); background: rgba(12,12,20,.62); color: rgba(255,255,255,.94); box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); /* 性能：逐截图元素不加 backdrop-filter */ pointer-events: none; }
 .gb-screenshots button.gb-blur-active .gb-img-eye { display: inline-flex; }
 .gb-screenshots button.revealed .gb-eye-open { display: none; }
 .gb-screenshots button.revealed .gb-eye-closed { display: block; }

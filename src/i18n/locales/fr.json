@@ -250,7 +250,15 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "Réduire",
+      "maximize": "Agrandir",
+      "close": "Fermer"
+    },
     "switchToGameLibrary": "Passer à la bibliothèque de jeux",
+    "selectGame": "Changer de jeu",
+    "favoriteGames": "Jeux favoris",
+    "otherGames": "Autres jeux",
     "settings": "Paramètres",
     "enableCompactView": "Activer l’affichage compact",
     "disableCompactView": "Désactiver l’affichage compact",
@@ -259,7 +267,7 @@
     "nav": {
       "home": "Accueil",
       "work": "Espace de travail",
-      "markTexture": "Post-traitement de l’extraction",
+      "markTexture": "Marquage de texture",
       "gameType": "Type de données",
       "mods": "Mods",
       "gameBanana": "GameBanana",
@@ -491,7 +499,9 @@
       "appearance": "Apparence et flux de travail",
       "appearanceDesc": "Langue, marquage et confort visuel",
       "pageVisibility": "Visibilité des pages",
-      "pageVisibilityDesc": "Choisissez les pages de fonctionnalités à afficher dans la barre de navigation supérieure",
+      "pageVisibilityDesc": "Choisissez les pages de fonctionnalités à afficher dans la barre de navigation latérale",
+      "games": "Jeux",
+      "gamesDesc": "Gérer les configs, favoris et icônes des jeux",
       "about": "À propos de SSMT4",
       "resources": "Ressources",
       "community": "Communauté et assistance"
@@ -501,6 +511,14 @@
       "modManagement": "Gestion des Mods",
       "modAcquisition": "Acquisition de Mods",
       "aiAssistant": "Assistant IA Cheese Cat"
+    },
+    "games": {
+      "addGame": "Ajouter un jeu",
+      "favorite": "Ajouter aux favoris",
+      "unfavorite": "Retirer des favoris",
+      "changeIcon": "Changer l'icône",
+      "deleteConfig": "Supprimer cette config de jeu",
+      "current": "Actuel"
     },
     "hints": {
       "cacheFolder": "Utilisé pour les espaces de travail, les fichiers générés et les données de cache locales.",

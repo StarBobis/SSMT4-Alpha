@@ -252,7 +252,15 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "최소화",
+      "maximize": "최대화",
+      "close": "닫기"
+    },
     "switchToGameLibrary": "게임 라이브러리로 전환",
+    "selectGame": "게임 전환",
+    "favoriteGames": "즐겨찾는 게임",
+    "otherGames": "기타 게임",
     "settings": "설정",
     "enableCompactView": "컴팩트 보기 사용",
     "disableCompactView": "컴팩트 보기 해제",
@@ -261,7 +269,7 @@
     "nav": {
       "home": "홈",
       "work": "작업 공간",
-      "markTexture": "추출 후처리",
+      "markTexture": "텍스처 마킹",
       "gameType": "데이터 유형",
       "mods": "Mod",
       "gameBanana": "GameBanana",
@@ -493,7 +501,9 @@
       "appearance": "외관 및 워크플로",
       "appearanceDesc": "언어, 마킹 방식 및 시각적 편의성",
       "pageVisibility": "페이지 표시",
-      "pageVisibilityDesc": "상단 탐색 표시줄에 표시할 기능 페이지를 선택합니다",
+      "pageVisibilityDesc": "왼쪽 탐색 사이드바에 표시할 기능 페이지를 선택합니다",
+      "games": "게임",
+      "gamesDesc": "게임 구성, 즐겨찾기, 아이콘 관리",
       "about": "SSMT4 정보",
       "resources": "리소스",
       "community": "커뮤니티 및 지원"
@@ -503,6 +513,14 @@
       "modManagement": "Mod 관리",
       "modAcquisition": "Mod 획득",
       "aiAssistant": "치즈 캣 AI 도우미"
+    },
+    "games": {
+      "addGame": "게임 추가",
+      "favorite": "즐겨찾기에 추가",
+      "unfavorite": "즐겨찾기 해제",
+      "changeIcon": "아이콘 변경",
+      "deleteConfig": "이 게임 구성 삭제",
+      "current": "현재 게임"
     },
     "hints": {
       "cacheFolder": "작업 공간, 생성 파일 및 로컬 캐시 데이터를 저장하는 데 사용됩니다.",

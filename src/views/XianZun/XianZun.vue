@@ -692,7 +692,6 @@ const resolveInstalledGamebananaModPath = async (
 
 const PAGE_MAP: Record<string, string> = {
   home: '/',
-  games: '/games',
   mods: '/mods',
   gamebanana: '/gamebanana',
   nexusmods: '/nexusmods',
@@ -5276,7 +5275,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 8px 12px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(var(--theme-surface-tint-rgb), 0.08);
 }
 
@@ -5665,7 +5664,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 6px calc(10px + var(--xz-chat-bottom-inset, 0px));
+  padding: 10px 12px calc(10px + var(--xz-chat-bottom-inset, 0px));
 }
 
 .xz-msg {
@@ -7551,8 +7550,7 @@ onUnmounted(() => {
   background: rgba(12, 12, 20, 0.62);
   color: rgba(255, 255, 255, 0.94);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* 性能：聊天中每张图片一个该按钮，随消息累积模糊层会引发滚动闪烁，背景 rgba(12,12,20,0.62) 已足够 */
   cursor: pointer;
   transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }

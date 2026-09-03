@@ -1,0 +1,56 @@
+/* ═══════════════════════════════════════════════
+   SSMT4 — WinUI3 Shell Tokens (Caption Bar + Tabs)
+
+   Minimal monochrome chrome — black (dark) only.
+   These variables ONLY style the application shell (caption
+   bar with navigation tabs, shell flyouts). Sub-pages keep
+   their existing glass styling untouched.
+   ═══════════════════════════════════════════════ */
+
+:root {
+  /* Text */
+  --shell-text: rgba(255, 255, 255, 0.88);
+  --shell-text-secondary: rgba(255, 255, 255, 0.56);
+  --shell-text-disabled: rgba(255, 255, 255, 0.36);
+
+  /* Interactive fills (WinUI3 subtle rest/hover/press/selected) */
+  --shell-fill-hover: rgba(255, 255, 255, 0.060);
+  --shell-fill-pressed: rgba(255, 255, 255, 0.032);
+  --shell-fill-selected: rgba(255, 255, 255, 0.092);
+  --shell-fill-selected-hover: rgba(255, 255, 255, 0.115);
+
+  /* Selection pill — pure minimal white */
+  --shell-accent: #ffffff;
+  --shell-accent-soft: rgba(255, 255, 255, 0.55);
+
+  /* Hairlines */
+  --shell-divider: rgba(255, 255, 255, 0.075);
+
+  /* Caption bar */
+  --shell-caption-fg: rgba(255, 255, 255, 0.88);
+  --shell-caption-scrim: linear-gradient(to bottom, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.22));
+  --shell-caption-blur: blur(20px) saturate(1.25);
+  --shell-caption-btn-hover: rgba(255, 255, 255, 0.085);
+  --shell-caption-btn-pressed: rgba(255, 255, 255, 0.045);
+  --shell-caption-glyph-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  --shell-caption-close-hover: #c42b1c;
+  --shell-caption-close-pressed: #a02317;
+
+  /* Flyouts (context menus) */
+  --shell-flyout-bg: rgba(36, 36, 38, 0.96);
+  --shell-flyout-border: rgba(255, 255, 255, 0.10);
+  --shell-flyout-text: rgba(255, 255, 255, 0.86);
+  --shell-flyout-text-muted: rgba(255, 255, 255, 0.45);
+  --shell-flyout-hover: rgba(255, 255, 255, 0.075);
+  --shell-flyout-shadow: 0 14px 36px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.32);
+
+  /* Game icons */
+  --shell-game-icon-bg: rgba(0, 0, 0, 0.38);
+  --shell-game-gap: rgba(0, 0, 0, 0.55);
+  --shell-game-ring: #ffffff;
+  --shell-game-ring-glow: rgba(255, 255, 255, 0.42);
+
+  /* Scrollbar */
+  --shell-scrollbar-thumb: rgba(255, 255, 255, 0.22);
+  --shell-scrollbar-thumb-hover: rgba(255, 255, 255, 0.38);
+}

@@ -1,8 +1,8 @@
 <script setup lang="ts" >
-import { computed, reactive, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { AppStateManager, type GameInfo } from '../../store/AppStateManager'
+import { AppStateManager } from '../../store/AppStateManager'
 
 import { openPath, openUrl } from '@tauri-apps/plugin-opener'
 import { exists, mkdir } from '@tauri-apps/plugin-fs'
@@ -20,19 +20,15 @@ import ReleaseNotesMarkdown from '../../components/ReleaseNotesMarkdown.vue'
 import { MigotoManager } from '../../store/MigotoManager'
 import { LaunchGame } from '../../common/LaunchGame';
 import { pickNewerUpdate, UPDATE_CHECK_TIMEOUT_MS } from '../../common/UpdateCheckUtils';
-import { calculateContextMenuPosition } from '../../utils/ContextMenuPosition';
 
 import { GameConfig, GameConfigManager, type D3d11Mode } from '../../store/GameConfig';
-import { getGamePresetDisplayName, getGithubRepoByGamePreset } from '../../store/GamePreset';
+import { getGithubRepoByGamePreset } from '../../store/GamePreset';
 import {
   checkAndInstallAppUpdate,
   isInstallingAppUpdate,
 } from '../../common/AppSelfUpdate'
 
-const gamesList = AppStateManager.gamesList;
 const appSettings = AppStateManager.appSettings;
-const selectGame = AppStateManager.selectGame.bind(AppStateManager)
-const loadGames = AppStateManager.loadGames.bind(AppStateManager)
 const { t } = useI18n()
 const router = useRouter()
 let unlistenNativeDrop: UnlistenFn | null = null;
@@ -181,235 +177,6 @@ const handleCheckAndInstallAppUpdate = async () => {
 }
 
 const hasVersionInfo = computed(() => Boolean(packageVersionText.value || coreVersionText.value || appVersionText.value || currentDllModeText.value))
-
-const getSidebarGameTooltip = (gameName: string) => `${getGamePresetDisplayName(gameName, t)} · ${t('home.tooltips.sidebarGame')}`
-
-
-// Computed property to get sidebar games (filtered and reverse order)
-const sidebarGames = computed(() => {
-  const orderIndex = new Map(appSettings.sidebarGameOrder.map((name, index) => [name, index]));
-
-  return [...gamesList]
-    .filter(g => g.showSidebar)
-    .sort((left, right) => {
-      const leftIndex = orderIndex.get(left.name) ?? Number.MAX_SAFE_INTEGER;
-      const rightIndex = orderIndex.get(right.name) ?? Number.MAX_SAFE_INTEGER;
-      return leftIndex - rightIndex;
-    });
-});
-
-const SIDEBAR_DRAG_START_THRESHOLD = 6;
-const draggedSidebarGameName = ref('');
-const dragOverSidebarGameName = ref('');
-const pendingSidebarDragGameName = ref('');
-const sidebarDragState = reactive({
-  active: false,
-  startX: 0,
-  startY: 0,
-  hasMoved: false,
-});
-const suppressSidebarClick = ref(false);
-
-const isGameActive = (gameName: string) => {
-  return appSettings.CurrentGameName === gameName;
-};
-
-const clearSidebarDragState = () => {
-  draggedSidebarGameName.value = '';
-  dragOverSidebarGameName.value = '';
-  pendingSidebarDragGameName.value = '';
-  sidebarDragState.active = false;
-  sidebarDragState.startX = 0;
-  sidebarDragState.startY = 0;
-  sidebarDragState.hasMoved = false;
-  document.body.style.userSelect = '';
-};
-
-const persistSidebarVisibleOrder = (orderedVisibleNames: string[]) => {
-  const visibleNames = new Set(sidebarGames.value.map(game => game.name));
-  const pendingVisibleNames = [...orderedVisibleNames];
-  const mergedOrder: string[] = [];
-
-  for (const gameName of appSettings.sidebarGameOrder) {
-    if (!visibleNames.has(gameName)) {
-      mergedOrder.push(gameName);
-      continue;
-    }
-
-    const replacement = pendingVisibleNames.shift();
-    if (replacement) {
-      mergedOrder.push(replacement);
-    }
-  }
-
-  if (pendingVisibleNames.length > 0) {
-    mergedOrder.push(...pendingVisibleNames);
-  }
-
-  AppStateManager.setSidebarGameOrder(mergedOrder);
-};
-
-const reorderSidebarGames = (draggedGameName: string, targetGameName: string) => {
-  if (!draggedGameName || !targetGameName || draggedGameName === targetGameName) {
-    return;
-  }
-
-  const orderedVisibleNames = sidebarGames.value.map(game => game.name);
-  const draggedIndex = orderedVisibleNames.indexOf(draggedGameName);
-  const targetIndex = orderedVisibleNames.indexOf(targetGameName);
-
-  if (draggedIndex < 0 || targetIndex < 0) {
-    return;
-  }
-
-  const nextVisibleOrder = [...orderedVisibleNames];
-  nextVisibleOrder.splice(draggedIndex, 1);
-  nextVisibleOrder.splice(targetIndex, 0, draggedGameName);
-
-  persistSidebarVisibleOrder(nextVisibleOrder);
-};
-
-const updateSidebarDragTargetFromPoint = (clientX: number, clientY: number) => {
-  if (!draggedSidebarGameName.value) {
-    dragOverSidebarGameName.value = '';
-    return;
-  }
-
-  const hoveredElement = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
-  const hoveredIcon = hoveredElement?.closest<HTMLElement>('.sidebar-icon[data-game-name]');
-  const targetGameName = hoveredIcon?.dataset.gameName || '';
-
-  dragOverSidebarGameName.value = targetGameName && targetGameName !== draggedSidebarGameName.value
-    ? targetGameName
-    : '';
-};
-
-const handleSidebarMouseDown = (gameName: string, event: MouseEvent) => {
-  if (event.button !== 0) {
-    return;
-  }
-
-  pendingSidebarDragGameName.value = gameName;
-  sidebarDragState.active = true;
-  sidebarDragState.startX = event.clientX;
-  sidebarDragState.startY = event.clientY;
-  sidebarDragState.hasMoved = false;
-  suppressSidebarClick.value = false;
-  document.addEventListener('mousemove', handleWindowMouseMove);
-  document.addEventListener('mouseup', finishSidebarMouseInteraction);
-};
-
-const handleWindowMouseMove = (event: MouseEvent) => {
-  if (!sidebarDragState.active || !pendingSidebarDragGameName.value) {
-    return;
-  }
-
-  if (!draggedSidebarGameName.value) {
-    const deltaX = event.clientX - sidebarDragState.startX;
-    const deltaY = event.clientY - sidebarDragState.startY;
-    const distance = Math.hypot(deltaX, deltaY);
-
-    if (distance < SIDEBAR_DRAG_START_THRESHOLD) {
-      return;
-    }
-
-    draggedSidebarGameName.value = pendingSidebarDragGameName.value;
-    sidebarDragState.hasMoved = true;
-    suppressSidebarClick.value = true;
-    document.body.style.userSelect = 'none';
-  }
-
-  updateSidebarDragTargetFromPoint(event.clientX, event.clientY);
-};
-
-const finishSidebarMouseInteraction = (event: MouseEvent) => {
-  document.removeEventListener('mousemove', handleWindowMouseMove);
-  document.removeEventListener('mouseup', finishSidebarMouseInteraction);
-
-  if (!sidebarDragState.active || !pendingSidebarDragGameName.value) {
-    clearSidebarDragState();
-    return;
-  }
-
-  if (draggedSidebarGameName.value) {
-    updateSidebarDragTargetFromPoint(event.clientX, event.clientY);
-    reorderSidebarGames(draggedSidebarGameName.value, dragOverSidebarGameName.value);
-    window.setTimeout(() => {
-      suppressSidebarClick.value = false;
-    }, 0);
-  }
-
-  clearSidebarDragState();
-};
-
-const handleGameClick = async (game: GameInfo) => {
-  if (suppressSidebarClick.value) {
-    return;
-  }
-
-  try {
-    await selectGame(game)
-  } catch (error) {
-    console.error('Failed to switch game:', error)
-    ElMessage.error(t('appState.messages.loadSettingsFailed', { error: String(error) }))
-  }
-}
-
-// Context Menu State
-const showMenu = ref(false);
-const menuX = ref(0);
-const menuY = ref(0);
-const targetGame = ref<any>(null);
-const contextMenuRef = ref<HTMLElement | null>(null);
-
-const handleContextMenu = (e: MouseEvent, game: GameInfo) => {
-  e.preventDefault();
-  targetGame.value = game;
-  menuX.value = e.clientX;
-  menuY.value = e.clientY;
-  showMenu.value = true;
-
-  nextTick(() => {
-    const menuEl = contextMenuRef.value;
-    if (!menuEl) return;
-
-    const rect = menuEl.getBoundingClientRect();
-    const pos = calculateContextMenuPosition({
-      clientX: e.clientX,
-      clientY: e.clientY,
-      menuWidth: rect.width,
-      menuHeight: rect.height,
-    });
-
-    menuX.value = pos.x;
-    menuY.value = pos.y;
-  });
-};
-
-const closeMenu = () => {
-  showMenu.value = false;
-};
-
-const hideGame = async () => {
-  if (!targetGame.value) return;
-
-  const gameName = targetGame.value.name;
-  const wasActive = isGameActive(gameName);
-
-  try {
-    await ResourceManager.setGameVisibility(gameName, false);
-    await loadGames();
-
-    // If the hidden game was active, switch to the first available game
-    if (wasActive && sidebarGames.value.length > 0) {
-      await selectGame(sidebarGames.value[0]);
-    }
-  } catch (err) {
-    console.error('Failed to hide game:', err);
-  }
-
-  closeMenu();
-};
 
 const open3dmigotoFolder = async () => {
   const gameName = appSettings.CurrentGameName;
@@ -637,7 +404,6 @@ const launchGame = async (event?: MouseEvent) => {
 }
 
 onMounted(() => {
-  document.addEventListener('click', closeMenu);
   void getVersion()
     .then(version => {
       appVersion.value = version
@@ -665,10 +431,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeMenu);
-  document.removeEventListener('mousemove', handleWindowMouseMove);
-  document.removeEventListener('mouseup', finishSidebarMouseInteraction);
-  clearSidebarDragState();
   unlistenNativeDrop?.();
   unlistenNativeDrop = null;
 });
@@ -684,47 +446,6 @@ watch(
 
 <template>
   <div class="home-container">
-    <div class="sidebar-wrapper">
-      <div class="sidebar-track">
-        <!-- Games Loop -->
-        <el-tooltip v-for="game in sidebarGames" :key="game.name" :content="getSidebarGameTooltip(game.name)" placement="right" effect="dark"
-          popper-class="game-tooltip">
-          <div
-            class="sidebar-icon"
-            :class="{
-              active: isGameActive(game.name),
-              dragging: draggedSidebarGameName === game.name,
-              'drag-over': dragOverSidebarGameName === game.name,
-            }"
-            :data-game-name="game.name"
-            @click.stop="handleGameClick(game)"
-            @contextmenu.prevent="handleContextMenu($event, game)"
-            @mousedown.prevent="handleSidebarMouseDown(game.name, $event)"
-          >
-            <img :src="game.iconPath" :alt="getGamePresetDisplayName(game.name, t)" loading="lazy" draggable="false"
-              @load="(e) => (e.target as HTMLImageElement).style.opacity = '1'"
-              @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'" />
-          </div>
-        </el-tooltip>
-      </div>
-    </div>
-
-    <!-- Custom Context Menu -->
-    <div
-      v-if="showMenu"
-      ref="contextMenuRef"
-      class="context-menu glass-context-menu"
-      :style="{ top: menuY + 'px', left: menuX + 'px' }"
-      @click.stop
-    >
-      <div class="menu-hint">
-        {{ t('home.tooltips.sidebarGame') }}
-      </div>
-      <div class="menu-item" @click="hideGame">
-        {{ t('home.actions.hideGame') }}
-      </div>
-    </div>
-
     <div class="content-area">
 
 
@@ -839,98 +560,9 @@ watch(
   height: 100%;
   display: flex;
   flex-direction: row;
-  /* Changed to row for Sidebar + Content */
   padding: 0;
-  /* Remove padding from container, move to children */
   box-sizing: border-box;
   position: relative;
-}
-
-.sidebar-wrapper {
-  width: 80px;
-  height: 100%;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.24) 46%,
-    rgba(0, 0, 0, 0.7) 100%
-  );
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 16px;
-  padding-top: 8px;
-  box-sizing: border-box;
-  z-index: 10;
-
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
-
-  border-right: 1px solid rgba(255, 255, 255, 0.055);
-  box-shadow: 1px 0 8px rgba(0, 0, 0, 0.28);
-}
-
-/* Chrome/Safari: hide scrollbar */
-.sidebar-wrapper::-webkit-scrollbar {
-  display: none;
-}
-
-.sidebar-track {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 16px;
-  align-items: center;
-  width: 100%;
-  margin-top: auto;
-}
-
-.sidebar-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: grab;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  background-color: rgba(0, 0, 0, 0.3);
-  /* Placeholder bg */
-}
-
-.sidebar-icon.dragging {
-  opacity: 0.42;
-  transform: scale(0.94);
-  cursor: grabbing;
-}
-
-.sidebar-icon.drag-over {
-  box-shadow:
-    0 0 0 2px rgba(0, 0, 0, 0.55),
-    0 0 0 4px rgba(var(--theme-surface-tint-rgb), 0.92),
-    0 0 18px rgba(var(--theme-surface-tint-rgb), 0.45);
-  transform: scale(1.08);
-}
-
-.sidebar-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.sidebar-icon:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
-}
-
-/* Crystal/Amber selection effect */
-.sidebar-icon.active {
-  box-shadow:
-    0 0 0 2px rgba(0, 0, 0, 0.6),
-    0 0 0 4px #ffffff,
-    0 0 20px rgba(255, 255, 255, 0.5),
-    inset 0 0 20px rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
-  z-index: 2;
-  /* Ensure shadow overlaps neighbors if needed */
 }
 
 .content-area {
@@ -946,7 +578,7 @@ watch(
 
 .version-info-panel {
   position: absolute;
-  left: calc(80px + var(--version-panel-gap));
+  left: var(--version-panel-gap);
   bottom: var(--bottom-ui-gap);
   display: flex;
   align-items: center;
@@ -959,7 +591,7 @@ watch(
   letter-spacing: 0.02em;
   z-index: 2;
   flex-wrap: wrap;
-  max-width: calc(100% - 80px - var(--action-bar-width) - (var(--version-panel-gap) * 3));
+  max-width: calc(100% - var(--action-bar-width) - (var(--version-panel-gap) * 3));
 }
 
 .version-info-chip {
@@ -1229,43 +861,6 @@ watch(
 
 /* Settings button styles are now in SettingsMenu.vue */
 
-/* Context Menu — visual styles handled by .glass-context-menu global */
-.context-menu {
-  position: fixed;
-  z-index: 10000;
-  background: var(--t-material-bg);
-  border: var(--t-material-border);
-  border-radius: 14px;
-  box-shadow: var(--t-material-shadow);
-  padding: 4px;
-  min-width: 152px;
-}
-
-.menu-hint {
-  padding: 8px 10px 6px;
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-  cursor: default;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  margin-bottom: 4px;
-}
-
-.menu-item {
-  padding: 8px 12px;
-  cursor: pointer;
-  color: #eee;
-  font-size: 13px;
-  border-radius: 4px;
-  transition: background-color 0.1s;
-}
-
-.menu-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #fff;
-}
-
 @media (max-width: 980px) {
   .home-container {
     --bottom-ui-gap: 28px;
@@ -1274,7 +869,7 @@ watch(
 
   .version-info-panel {
     bottom: calc(var(--bottom-ui-gap) + 72px);
-    max-width: calc(100% - 80px - (var(--version-panel-gap) * 2));
+    max-width: calc(100% - (var(--version-panel-gap) * 2));
   }
 
   .action-bar {

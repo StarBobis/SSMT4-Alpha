@@ -1,3 +1,11 @@
+export type AppThemeMode = 'dark'
+
+/**
+ * The shell ships with the black (dark) theme only. Older config files may
+ * still carry `appTheme: 'light'`; normalizing here silently migrates them.
+ */
+export const normalizeAppThemeMode = (_value: unknown): AppThemeMode => 'dark'
+
 const APP_THEME_COLORS = {
   accent: '#FFFFFF',
   accentHover: '#FFFFFF',

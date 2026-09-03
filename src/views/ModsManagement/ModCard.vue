@@ -238,6 +238,28 @@ const onModCardMouseLeave = (e: MouseEvent) => {
 }
 
 .mod-card:not(.is-disabled) {
+  /* 呼吸基态（原 keyframes 0%/100% 的值，动画不再覆盖 border/box-shadow，hover 阴影恢复生效） */
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.24);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 0 24px rgba(var(--theme-surface-tint-rgb), 0.18),
+    0 12px 26px rgba(0, 0, 0, 0.38);
+}
+
+/* 呼吸脉冲层：只动 opacity，合成器混合完成，每张卡片每帧零重绘。
+   原实现直接动画 box-shadow/border-color，所有可见卡片每帧都在主线程重绘。 */
+.mod-card:not(.is-disabled)::before {
+  content: "";
+  position: absolute;
+  /* 不能用 inset:-1px：卡片 overflow:hidden 会把伪元素裁到 padding-box，边框环会被裁没 */
+  inset: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.48);
+  box-shadow:
+    0 0 18px rgba(var(--theme-surface-tint-rgb), 0.20) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  opacity: 0;
+  pointer-events: none;
   animation: modEnabledBreath var(--breath-duration) ease-in-out infinite;
   animation-delay: var(--phase-a);
 }
@@ -385,8 +407,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 999px;
   background: rgba(255,255,255,0.06);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* 性能：逐卡片元素不加 backdrop-filter（每个 mod 卡片都会创建一个模糊合成层，滚动时引发闪烁/文字消失），半透明背景已足够 */
   box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.04) inset;
   display: inline-flex;
   align-items: center;
@@ -451,8 +472,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 999px;
   background: rgba(255,255,255,0.06);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* 性能：逐卡片元素不加 backdrop-filter（每个 mod 卡片都会创建一个模糊合成层，滚动时引发闪烁/文字消失），半透明背景已足够 */
   box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.04) inset;
   display: inline-flex;
   align-items: center;
@@ -625,18 +645,10 @@ const onModCardMouseLeave = (e: MouseEvent) => {
 @keyframes modEnabledBreath {
   0%,
   100% {
-    border-color: rgba(var(--theme-surface-tint-rgb), 0.24);
-    box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-      0 0 24px rgba(var(--theme-surface-tint-rgb), 0.18),
-      0 12px 26px rgba(0, 0, 0, 0.38);
+    opacity: 0;
   }
   50% {
-    border-color: rgba(var(--theme-surface-tint-rgb), 0.48);
-    box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-      0 0 26px rgba(var(--theme-surface-tint-rgb), 0.26),
-      0 12px 28px rgba(0, 0, 0, 0.4);
+    opacity: 1;
   }
 }
 
@@ -682,8 +694,7 @@ const onModCardMouseLeave = (e: MouseEvent) => {
 	min-width: 0;
   padding: 12px 14px 14px;
   background: rgba(255,255,255,0.03);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* 性能：逐卡片元素不加 backdrop-filter（每个 mod 卡片都会创建一个模糊合成层，滚动时引发闪烁/文字消失），半透明背景已足够 */
   border-top: 1px solid rgba(255,255,255,0.06);
   display: flex;
   flex-direction: column;

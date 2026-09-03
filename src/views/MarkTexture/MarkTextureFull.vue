@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
@@ -3645,7 +3645,7 @@ watch(activeChannelPreviewItem, (item) => {
 <style scoped>
 .mark-texture-page {
 	height: 100%;
-	padding: 28px;
+	padding: 28px 18px;
 	box-sizing: border-box;
 	overflow: hidden;
 	color: #e8ecf5;
@@ -3668,12 +3668,10 @@ watch(activeChannelPreviewItem, (item) => {
 	box-sizing: border-box;
 	height: 100%;
 	align-self: stretch;
-	background:
-		linear-gradient(145deg, rgba(var(--theme-surface-tint-rgb), 0.07), rgba(var(--theme-surface-tint-rgb), 0.025)),
-		rgba(255, 255, 255, 0.035);
-	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.12);
+	background: var(--t-card-dark-bg);
+	border: var(--t-card-dark-border);
 	border-radius: 14px;
-	box-shadow: 0 16px 38px rgba(0, 0, 0, 0.18);
+	box-shadow: var(--t-card-dark-shadow);
 }
 
 .left-card {
@@ -4104,8 +4102,7 @@ watch(activeChannelPreviewItem, (item) => {
 	border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.16);
 	border-radius: 7px;
 	box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-	backdrop-filter: blur(10px) saturate(1.2);
-	-webkit-backdrop-filter: blur(10px) saturate(1.2);
+	/* 性能：该按钮逐个出现在纹理列表项中，不加 backdrop-filter（背景已是不透明 rgba(8,11,18,0.78)，模糊无视觉收益） */
 	cursor: pointer;
 	transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }

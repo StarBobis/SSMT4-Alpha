@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { AppStateManager } from '../../store/AppStateManager'
+import { AppStateManager, type GameInfo } from '../../store/AppStateManager'
+import { ResourceManager } from '../../store/ResourceManager'
+import { getGamePresetDisplayName, getGamePresetOptions } from '../../store/GamePreset'
+import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   APP_UI_SCALE_MAX,
   APP_UI_SCALE_MIN,
@@ -10,7 +13,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { mkdir } from '@tauri-apps/plugin-fs';
 import { getVersion } from '@tauri-apps/api/app';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { ref, onMounted, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -18,15 +21,20 @@ import {
   Brush,
   ChatDotRound,
   Coffee,
+  Delete,
   Document,
+  Edit,
   FolderOpened,
   Key,
   Link,
   Lock,
   Monitor,
-  Open,
+  Picture,
+  Plus,
   Refresh,
   FullScreen,
+  Star,
+  StarFilled,
   View,
 } from '@element-plus/icons-vue';
 import type { OptionalPageId } from '../../store/AppSettings';
@@ -141,6 +149,121 @@ const handleCheckAndInstallAppUpdate = async () => {
 const openUsageDocs = async () => {
   await openUrl('https://starbobis.github.io/SSMT4-Documents/');
 };
+
+/* ═══════════════════════ Games management ═══════════════════════ */
+
+const gamesList = AppStateManager.gamesList;
+const gamePresetOptions = computed(() => getGamePresetOptions(t));
+const gameIconPickerFilters = [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'ico', 'avif'] }];
+
+const toggleGameFavorite = async (game: GameInfo) => {
+  try {
+    await ResourceManager.setGameVisibility(game.name, !game.showSidebar);
+    await AppStateManager.loadGames();
+  } catch (error) {
+    console.error('Failed to toggle favorite game:', error);
+    ElMessage.error(t('gameLibrary.messages.addToFavoritesFailed'));
+  }
+};
+
+const changeGameIcon = async (game: GameInfo) => {
+  try {
+    const file = await openDialog({ multiple: false, filters: gameIconPickerFilters });
+    if (typeof file === 'string') {
+      await ResourceManager.setGameIcon(game.name, file);
+      await AppStateManager.loadGames();
+    }
+  } catch (error) {
+    console.error('Set icon failed:', error);
+    ElMessage.error(t('gameLibrary.messages.setIconFailed'));
+  }
+};
+
+const deleteGameConfig = async (game: GameInfo) => {
+  try {
+    await ElMessageBox.confirm(
+      t('gameLibrary.messages.deleteConfirmContent', { gameName: game.name }),
+      t('gameLibrary.messages.deleteConfirmTitle'),
+      {
+        confirmButtonText: t('gameLibrary.dialog.delete'),
+        cancelButtonText: t('gameLibrary.dialog.cancel'),
+        type: 'warning',
+      }
+    );
+  } catch {
+    return;
+  }
+
+  try {
+    await ResourceManager.deleteGameConfigFolder(game.name);
+    await AppStateManager.loadGames();
+
+    // If the deleted game was active, switch to the first available one
+    if (appSettings.CurrentGameName === game.name && gamesList.length > 0) {
+      await AppStateManager.selectGame(gamesList[0]);
+    }
+  } catch (error) {
+    console.error('Failed to delete game config:', error);
+    ElMessage.error(t('gameLibrary.messages.deleteConfigFailed'));
+  }
+};
+
+/* ─────── Create game dialog ─────── */
+
+const showCreateGameDialog = ref(false);
+const newGameName = ref('');
+const newGamePreset = ref('');
+const newGameIconPath = ref('');
+const newGameIconPreview = ref('');
+
+const openCreateGameDialog = () => {
+  newGameName.value = '';
+  newGamePreset.value = gamePresetOptions.value[0]?.value || '';
+  newGameIconPath.value = '';
+  newGameIconPreview.value = '';
+  showCreateGameDialog.value = true;
+};
+
+const pickNewGameIcon = async () => {
+  try {
+    const file = await openDialog({ multiple: false, filters: gameIconPickerFilters });
+    if (typeof file === 'string') {
+      newGameIconPath.value = file;
+      newGameIconPreview.value = convertFileSrc(file);
+    }
+  } catch (error) {
+    console.error('Pick icon failed:', error);
+  }
+};
+
+const confirmCreateGame = async () => {
+  const gameName = newGameName.value.trim();
+  if (!gameName) {
+    ElMessage.warning(t('gameLibrary.messages.enterConfigName'));
+    return;
+  }
+
+  try {
+    await ResourceManager.createNewConfig(gameName, {
+      gamePreset: newGamePreset.value,
+      backgroundType: 'Image',
+    });
+
+    if (newGameIconPath.value) {
+      await ResourceManager.setGameIcon(gameName, newGameIconPath.value);
+    }
+
+    await AppStateManager.loadGames();
+    const created = gamesList.find(g => g.name === gameName);
+    if (created) {
+      await AppStateManager.selectGame(created);
+    }
+    showCreateGameDialog.value = false;
+  } catch (error) {
+    console.error('Create config failed:', error);
+    ElMessage.error(t('gameLibrary.messages.createConfigFailed'));
+  }
+};
 </script>
 
 <template>
@@ -154,6 +277,29 @@ const openUsageDocs = async () => {
               <p>{{ t('settings.sections.generalDesc') }}</p>
             </div>
             <div class="settings-group">
+              <div class="setting-row">
+                <div class="setting-identity">
+                  <span class="setting-icon"><el-icon><Monitor /></el-icon></span>
+                  <div>
+                    <div class="setting-label">{{ t('settings.personalization.language') }}</div>
+                    <div class="setting-description">{{ t('settings.hints.language') }}</div>
+                  </div>
+                </div>
+                <div class="setting-control compact-control">
+                  <el-select
+                    v-model="appSettings.locale"
+                    :aria-label="t('settings.personalization.language')"
+                  >
+                    <el-option
+                      v-for="item in languageOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </div>
+              </div>
+
               <div class="setting-row setting-row-wide">
                 <div class="setting-identity">
                   <span class="setting-icon"><el-icon><FolderOpened /></el-icon></span>
@@ -169,14 +315,24 @@ const openUsageDocs = async () => {
                     :placeholder="t('settings.general.cacheFolderPlaceholder')"
                     readonly
                   />
-                  <el-button @click="openCacheDir">
-                    <el-icon><Open /></el-icon>
-                    <span>{{ t('settings.general.openFolder') }}</span>
-                  </el-button>
-                  <el-button @click="selectCacheDir">
-                    <el-icon><FolderOpened /></el-icon>
-                    <span>{{ t('settings.general.changeFolder') }}</span>
-                  </el-button>
+                  <el-tooltip :content="t('settings.general.changeFolder')" placement="top" :show-after="250">
+                    <el-button
+                      class="path-icon-btn"
+                      :aria-label="t('settings.general.changeFolder')"
+                      @click="selectCacheDir"
+                    >
+                      <el-icon><Edit /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('settings.general.openFolder')" placement="top" :show-after="250">
+                    <el-button
+                      class="path-icon-btn"
+                      :aria-label="t('settings.general.openFolder')"
+                      @click="openCacheDir"
+                    >
+                      <el-icon><FolderOpened /></el-icon>
+                    </el-button>
+                  </el-tooltip>
                 </div>
               </div>
 
@@ -276,29 +432,6 @@ const openUsageDocs = async () => {
               <p>{{ t('settings.sections.appearanceDesc') }}</p>
             </div>
             <div class="settings-group">
-              <div class="setting-row">
-                <div class="setting-identity">
-                  <span class="setting-icon"><el-icon><Monitor /></el-icon></span>
-                  <div>
-                    <div class="setting-label">{{ t('settings.personalization.language') }}</div>
-                    <div class="setting-description">{{ t('settings.hints.language') }}</div>
-                  </div>
-                </div>
-                <div class="setting-control compact-control">
-                  <el-select
-                    v-model="appSettings.locale"
-                    :aria-label="t('settings.personalization.language')"
-                  >
-                    <el-option
-                      v-for="item in languageOptions"
-                      :key="item.value"
-                      :label="item.label"
-                      :value="item.value"
-                    />
-                  </el-select>
-                </div>
-              </div>
-
               <div class="setting-row">
                 <div class="setting-identity">
                   <span class="setting-icon"><el-icon><Brush /></el-icon></span>
@@ -401,6 +534,83 @@ const openUsageDocs = async () => {
             </div>
           </section>
 
+          <section class="settings-section">
+            <div class="section-heading games-heading">
+              <div class="games-heading-text">
+                <h2>{{ t('settings.sections.games') }}</h2>
+                <p>{{ t('settings.sections.gamesDesc') }}</p>
+              </div>
+              <el-button class="add-game-btn" :aria-label="t('settings.games.addGame')" @click="openCreateGameDialog">
+                <el-icon><Plus /></el-icon>
+                <span>{{ t('settings.games.addGame') }}</span>
+              </el-button>
+            </div>
+            <div v-if="gamesList.length > 0" class="settings-group games-panel">
+              <div
+                v-for="game in gamesList"
+                :key="game.name"
+                class="game-row"
+                :class="{ current: appSettings.CurrentGameName === game.name }"
+              >
+                <span class="game-row-icon-wrap">
+                  <img
+                    v-if="game.iconPath"
+                    class="game-row-icon"
+                    :src="game.iconPath"
+                    :alt="getGamePresetDisplayName(game.name, t)"
+                    loading="lazy"
+                    draggable="false"
+                    @error="(e) => ((e.target as HTMLImageElement).style.opacity = '0')"
+                  />
+                </span>
+                <span class="game-row-name" :title="getGamePresetDisplayName(game.name, t)">
+                  {{ getGamePresetDisplayName(game.name, t) }}
+                </span>
+                <span v-if="appSettings.CurrentGameName === game.name" class="game-current-badge">
+                  {{ t('settings.games.current') }}
+                </span>
+                <div class="game-row-actions">
+                  <el-tooltip
+                    :content="game.showSidebar ? t('settings.games.unfavorite') : t('settings.games.favorite')"
+                    placement="top"
+                    :show-after="250"
+                  >
+                    <button
+                      type="button"
+                      class="game-action-btn"
+                      :class="{ active: game.showSidebar }"
+                      :aria-label="game.showSidebar ? t('settings.games.unfavorite') : t('settings.games.favorite')"
+                      :aria-pressed="game.showSidebar"
+                      @click="toggleGameFavorite(game)"
+                    >
+                      <el-icon><StarFilled v-if="game.showSidebar" /><Star v-else /></el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('settings.games.changeIcon')" placement="top" :show-after="250">
+                    <button
+                      type="button"
+                      class="game-action-btn"
+                      :aria-label="t('settings.games.changeIcon')"
+                      @click="changeGameIcon(game)"
+                    >
+                      <el-icon><Picture /></el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('settings.games.deleteConfig')" placement="top" :show-after="250">
+                    <button
+                      type="button"
+                      class="game-action-btn danger"
+                      :aria-label="t('settings.games.deleteConfig')"
+                      @click="deleteGameConfig(game)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </button>
+                  </el-tooltip>
+                </div>
+              </div>
+            </div>
+          </section>
+
         </main>
 
         <aside class="settings-sidebar" :aria-label="t('settings.sections.about')">
@@ -458,6 +668,54 @@ const openUsageDocs = async () => {
         </aside>
       </div>
     </div>
+
+    <!-- Create game config dialog -->
+    <el-dialog
+      v-model="showCreateGameDialog"
+      class="settings-game-dialog"
+      :title="t('gameLibrary.dialog.createTitle')"
+      width="min(440px, calc(100vw - 32px))"
+    >
+      <div class="create-game-body">
+        <div class="create-game-icon-preview">
+          <img v-if="newGameIconPreview" :src="newGameIconPreview" :alt="newGameName || t('gameLibrary.dialog.noIcon')" />
+          <div v-else class="create-game-icon-placeholder">{{ t('gameLibrary.dialog.noIcon') }}</div>
+          <el-button size="small" @click="pickNewGameIcon">{{ t('gameLibrary.actions.chooseIcon') }}</el-button>
+        </div>
+
+        <div class="create-game-fields">
+          <div class="create-game-row">
+            <label class="create-game-label" for="settings-new-game-name">{{ t('gameLibrary.dialog.configName') }}</label>
+            <el-input id="settings-new-game-name" v-model="newGameName" :placeholder="t('gameLibrary.dialog.enterConfigName')" />
+          </div>
+          <div class="create-game-row">
+            <label class="create-game-label" for="settings-new-game-preset">{{ t('gameLibrary.dialog.gamePreset') }}</label>
+            <el-select
+              id="settings-new-game-preset"
+              class="game-preset-select"
+              v-model="newGamePreset"
+              popper-class="settings-game-select-popper"
+              :placeholder="t('gameLibrary.dialog.selectPreset')"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="opt in gamePresetOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <span class="create-game-footer">
+          <el-button @click="showCreateGameDialog = false">{{ t('gameLibrary.dialog.cancel') }}</el-button>
+          <el-button type="primary" @click="confirmCreateGame">{{ t('gameLibrary.dialog.confirm') }}</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -472,7 +730,9 @@ const openUsageDocs = async () => {
 
 .settings-shell {
   width: min(1180px, 100%);
-  margin: 0 auto;
+  /* Left-aligned so the page stays visually anchored to the navigation pane
+     instead of drifting away from it on wide windows */
+  margin: 0;
 }
 
 .setting-icon {
@@ -674,6 +934,24 @@ const openUsageDocs = async () => {
 
 .path-control :deep(.el-button) {
   flex: 0 0 auto;
+}
+
+/* The flex gap already spaces the controls, so drop Element Plus' default
+   sibling margin; otherwise the second button sits 12px further away. */
+.path-control :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+/* Icon-only buttons in the cache folder row: square, same height as the input.
+   The .settings-page prefix outranks the generic .settings-page .el-button
+   padding rule below (equal specificity previously let that rule win and
+   crushed the button content box to 6px, clipping the icon). */
+.settings-page .path-control :deep(.path-icon-btn) {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  font-size: 15px;
 }
 
 .action-control {
@@ -883,6 +1161,220 @@ const openUsageDocs = async () => {
 
 .link-arrow {
   color: rgba(var(--theme-text-secondary-rgb), 0.62);
+}
+
+/* ═══════════ Games management section ═══════════ */
+.games-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.games-heading-text {
+  min-width: 0;
+}
+
+.add-game-btn {
+  flex: 0 0 auto;
+  margin-bottom: 2px;
+}
+
+.games-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  box-sizing: border-box;
+  transition: background-color 160ms ease;
+}
+
+.game-row + .game-row {
+  border-top: 1px solid rgba(var(--theme-surface-tint-rgb), 0.08);
+}
+
+.game-row:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.06);
+}
+
+.game-row.current {
+  background: rgba(var(--theme-surface-tint-rgb), 0.08);
+}
+
+.game-row-icon-wrap {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(var(--theme-surface-tint-rgb), 0.10);
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
+}
+
+.game-row-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.game-row-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: rgba(var(--theme-text-primary-rgb), 0.94);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.game-current-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.16);
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.26);
+  color: rgba(var(--theme-text-primary-rgb), 0.9);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.game-row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.14);
+  border-radius: 7px;
+  background: rgba(var(--theme-surface-tint-rgb), 0.06);
+  color: rgba(var(--theme-text-primary-rgb), 0.78);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.game-action-btn:hover {
+  background: rgba(var(--theme-surface-tint-rgb), 0.14);
+  border-color: rgba(var(--theme-surface-tint-rgb), 0.30);
+  color: rgba(var(--theme-text-primary-rgb), 1);
+}
+
+.game-action-btn.active {
+  color: #ffd666;
+  background: rgba(255, 214, 102, 0.12);
+  border-color: rgba(255, 214, 102, 0.38);
+}
+
+.game-action-btn.danger:hover {
+  color: #ff8a8a;
+  background: rgba(255, 100, 100, 0.12);
+  border-color: rgba(255, 100, 100, 0.42);
+}
+
+/* ═══════════ Create game dialog ═══════════ */
+.create-game-body {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.create-game-icon-preview {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.create-game-icon-preview img,
+.create-game-icon-placeholder {
+  width: 84px;
+  height: 84px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.18);
+  object-fit: cover;
+}
+
+.create-game-icon-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--theme-surface-tint-rgb), 0.07);
+  color: rgba(var(--theme-text-secondary-rgb), 0.66);
+  font-size: 12px;
+}
+
+.create-game-fields {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.create-game-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.create-game-label {
+  color: rgba(var(--theme-text-secondary-rgb), 0.82);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.create-game-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+:global(.settings-game-dialog) {
+  background: var(--t-page-panel-bg);
+  border: var(--t-page-panel-border);
+  box-shadow: var(--t-page-panel-shadow);
+  backdrop-filter: var(--t-page-panel-blur);
+}
+
+:global(.settings-game-select-popper.el-popper) {
+  background: transparent;
+}
+
+/* 游戏预设名较长：选中值进入正常文档流并换行，输入框随内容自动变高，完整显示预设名 */
+.game-preset-select :deep(.el-select__placeholder) {
+  position: relative;
+  top: auto;
+  transform: none;
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  overflow: visible;
+  line-height: 1.3;
+}
+
+.game-preset-select :deep(.el-select__wrapper) {
+  height: auto;
 }
 
 @media (max-width: 960px) {

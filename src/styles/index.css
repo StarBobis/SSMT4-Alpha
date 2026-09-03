@@ -5,6 +5,7 @@
 
 @import './theme.css';
 @import './tokens.css';
+@import './shell.css';
 @import './glass-base.css';
 @import './glass-table.css';
 @import './glass-form.css';

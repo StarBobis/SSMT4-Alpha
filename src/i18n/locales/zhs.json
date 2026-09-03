@@ -258,8 +258,15 @@
     }
   },
   "titlebar": {
+    "windowControls": {
+      "minimize": "最小化",
+      "maximize": "最大化",
+      "close": "关闭"
+    },
     "selectGame": "快捷切换游戏",
     "switchToGameLibrary": "切换到游戏库",
+    "favoriteGames": "常用游戏",
+    "otherGames": "其它游戏",
     "settings": "设置",
     "hidePage": "隐藏此页面",
     "enableCompactView": "启用紧凑视图",
@@ -269,7 +276,7 @@
     "nav": {
       "home": "主页",
       "work": "工作台",
-      "markTexture": "提取后处理",
+      "markTexture": "贴图标记",
       "textureModMaker": "贴图Mod制作",
       "gameType": "数据类型",
       "mods": "模组",
@@ -487,7 +494,9 @@
       "appearance": "外观与工作流",
       "appearanceDesc": "语言、标记方式与视觉舒适度",
       "pageVisibility": "页面显隐",
-      "pageVisibilityDesc": "选择要在顶部导航栏中显示的功能页面",
+      "pageVisibilityDesc": "选择要在左侧导航栏中显示的功能页面",
+      "games": "游戏",
+      "gamesDesc": "管理游戏配置、常用游戏与图标",
       "about": "关于 SSMT4",
       "resources": "资源",
       "community": "社区与支持"
@@ -497,6 +506,14 @@
       "modManagement": "Mod 管理",
       "modAcquisition": "Mod 获取",
       "aiAssistant": "芝士猫 AI 助手"
+    },
+    "games": {
+      "addGame": "新增游戏",
+      "favorite": "设为常用游戏",
+      "unfavorite": "取消常用游戏",
+      "changeIcon": "修改图标",
+      "deleteConfig": "删除此游戏配置",
+      "current": "当前游戏"
     },
     "hints": {
       "cacheFolder": "用于保存工作区、生成文件和本地缓存数据。",
