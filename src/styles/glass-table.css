@@ -10,10 +10,10 @@
   --el-table-border-color: rgba(255, 255, 255, 0.08);
   --el-table-row-hover-bg-color: rgba(var(--crystal-rgb), 0.08);
 
-  /* Glass effect */
+  /* Glass effect —— 只保留半透明底色，不加 backdrop-filter：
+     表格高度随行数增长，模糊层会在滚动时引发 Chromium 合成器闪烁/文字消失。
+     玻璃模糊由外层面板容器统一提供。 */
   background: rgba(var(--crystal-rgb), 0.035);
-  backdrop-filter: var(--glass-blur-strong);
-  -webkit-backdrop-filter: var(--glass-blur-strong);
   border: none;
   border-radius: 8px;
   overflow: hidden;
@@ -64,8 +64,6 @@
 /* ── Header cells background ── */
 .glass-table .el-table__header th {
   background: rgba(var(--crystal-rgb), 0.06);
-  backdrop-filter: var(--glass-blur-medium);
-  -webkit-backdrop-filter: var(--glass-blur-medium);
 }
 
 /* ── Body cells background ── */

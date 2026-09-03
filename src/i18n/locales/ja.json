@@ -269,7 +269,7 @@
     "nav": {
       "home": "ホーム",
       "work": "ワークスペース",
-      "markTexture": "抽出後処理",
+      "markTexture": "テクスチャマーキング",
       "gameType": "データ型",
       "mods": "Mod",
       "gameBanana": "GameBanana",

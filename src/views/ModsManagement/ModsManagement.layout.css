@@ -197,8 +197,7 @@
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 999px;
     background: rgba(255,255,255,0.06);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：逐卡片元素不加 backdrop-filter（与生效样式保持一致） */
     box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.04) inset;
     display: inline-flex;
     align-items: center;
@@ -453,8 +452,7 @@
 .card-info {
     padding: 12px 14px 14px;
     background: rgba(255,255,255,0.03);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：逐卡片元素不加 backdrop-filter（与生效样式保持一致） */
     border-top: 1px solid rgba(255,255,255,0.06);
     display: flex;
     flex-direction: column;

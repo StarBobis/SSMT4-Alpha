@@ -15,6 +15,7 @@ const router = useRouter();
 const { t } = useI18n();
 const isMaximized = ref(false);
 const isPinned = ref(false);
+const captionBarRef = ref<HTMLElement | null>(null);
 
 const appSettings = AppStateManager.appSettings;
 const gamesList = AppStateManager.gamesList;
@@ -47,13 +48,16 @@ const closeGameSwitcher = () => {
     isGameSwitcherOpen.value = false;
 };
 
-/** Light-dismiss: any press outside the switcher button/card closes it. */
-const handleGameSwitcherDismiss = (event: PointerEvent) => {
-    if (!isGameSwitcherOpen.value) return;
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    if (target.closest('.game-switcher-root')) return;
-    closeGameSwitcher();
+/** Light-dismiss: presses outside the switcher close it; any outside press
+    also closes the tab context menu (its own pointerdown is stopped). */
+const handleCaptionPointerDown = (event: PointerEvent) => {
+    if (isGameSwitcherOpen.value) {
+        const target = event.target as HTMLElement | null;
+        if (target && !target.closest('.game-switcher-root')) {
+            closeGameSwitcher();
+        }
+    }
+    closeNavContextMenu();
 };
 
 const handleSwitchGame = async (game: GameInfo) => {
@@ -154,9 +158,141 @@ const isNavItemActive = (item: NavItem) => {
 };
 
 const navTo = (path: string) => {
+    if (suppressNavClick.value) return;
     if (route.path !== path) {
         router.push(path);
     }
+};
+
+/* ─────── Tab drag-to-reorder (manual, Tauri-safe) ─────── */
+
+const navHoverId = ref<string | null>(null);
+const navDraggingId = ref<string | null>(null);
+const suppressNavClick = ref(false);
+const navDragState = reactive({
+    active: false,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    itemId: null as string | null,
+});
+
+const resetNavDrag = () => {
+    navDragState.active = false;
+    navDragState.hasMoved = false;
+    navDragState.itemId = null;
+    navHoverId.value = null;
+    navDraggingId.value = null;
+    document.body.style.userSelect = '';
+};
+
+const saveOrder = () => {
+    localStorage.setItem(STORAGE_KEY_NAV_ORDER, JSON.stringify(navOrder.value));
+};
+
+const applyNavReorder = (sourceId: string, targetId: string) => {
+    const oldIndex = navOrder.value.indexOf(sourceId);
+    const newIndex = navOrder.value.indexOf(targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const newOrder = [...navOrder.value];
+    newOrder.splice(oldIndex, 1);
+    newOrder.splice(newIndex, 0, sourceId);
+    navOrder.value = newOrder;
+    saveOrder();
+};
+
+const onNavMouseDown = (e: MouseEvent, item: NavItem) => {
+    if (e.button !== 0) return;
+    navDragState.active = true;
+    navDragState.startX = e.clientX;
+    navDragState.startY = e.clientY;
+    navDragState.hasMoved = false;
+    navDragState.itemId = item.id;
+    navDraggingId.value = item.id;
+    suppressNavClick.value = false;
+    document.addEventListener('mousemove', onNavMouseMove);
+    document.addEventListener('mouseup', onNavMouseUp);
+};
+
+const onNavMouseMove = (e: MouseEvent) => {
+    if (!navDragState.active || !navDragState.itemId) return;
+    const dx = e.clientX - navDragState.startX;
+    const dy = e.clientY - navDragState.startY;
+    if (!navDragState.hasMoved && Math.hypot(dx, dy) > 4) {
+        navDragState.hasMoved = true;
+        suppressNavClick.value = true;
+        document.body.style.userSelect = 'none';
+    }
+
+    if (navDragState.hasMoved) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const btn = el?.closest?.('.caption-tab[data-nav-id]') as HTMLElement | null;
+        const targetId = btn?.dataset.navId || null;
+        navHoverId.value = targetId && targetId !== navDragState.itemId ? targetId : null;
+    }
+};
+
+const onNavMouseUp = (_e: MouseEvent) => {
+    document.removeEventListener('mousemove', onNavMouseMove);
+    document.removeEventListener('mouseup', onNavMouseUp);
+
+    if (navDragState.active && navDragState.hasMoved && navDragState.itemId && navHoverId.value && navHoverId.value !== navDragState.itemId) {
+        applyNavReorder(navDragState.itemId, navHoverId.value);
+    }
+
+    resetNavDrag();
+    window.setTimeout(() => {
+        suppressNavClick.value = false;
+    }, 0);
+};
+
+/* ─────── Tab context menu (hide page) ─────── */
+
+const navContextMenu = reactive({ visible: false, x: 0, y: 0, item: null as NavItem | null });
+const navContextMenuRef = ref<HTMLElement | null>(null);
+
+const closeNavContextMenu = () => {
+    navContextMenu.visible = false;
+    navContextMenu.item = null;
+};
+
+const openNavContextMenu = (event: MouseEvent, item: NavItem) => {
+    // Only pages with a visibility key can be hidden — home always stays.
+    if (!visibilityKeyByNavId[item.id]) return;
+
+    navContextMenu.item = item;
+    navContextMenu.x = event.clientX;
+    navContextMenu.y = event.clientY;
+    navContextMenu.visible = true;
+
+    nextTick(() => {
+        const menuEl = navContextMenuRef.value;
+        if (!menuEl) return;
+        const rect = menuEl.getBoundingClientRect();
+        const pos = calculateContextMenuPosition({
+            clientX: event.clientX,
+            clientY: event.clientY,
+            menuWidth: rect.width,
+            menuHeight: rect.height,
+        });
+
+        // The caption bar host sits at the maximum z-index, so a menu that
+        // overlaps the bar would be covered by it — push the menu fully
+        // below the bar's bottom edge instead.
+        const captionBottom = captionBarRef.value?.getBoundingClientRect().bottom ?? 0;
+        const minY = captionBottom + 4;
+
+        navContextMenu.x = pos.x;
+        navContextMenu.y = Math.max(pos.y, minY);
+    });
+};
+
+const hideNavItem = async (item: NavItem) => {
+    const key = visibilityKeyByNavId[item.id];
+    if (!key) return;
+    appSettings.pageVisibility[key] = false;
+    closeNavContextMenu();
+    await AppStateManager.saveSettingsNow();
 };
 
 /** Tab strip: vertical wheel scrolls horizontally when tabs overflow. */
@@ -180,7 +316,7 @@ let unlistenResize: (() => void) | null = null;
 onMounted(async () => {
     checkMaximized();
     loadOrder();
-    document.addEventListener('pointerdown', handleGameSwitcherDismiss);
+    document.addEventListener('pointerdown', handleCaptionPointerDown);
     // Listen to resize event to update maximized state icon
     unlistenResize = await appWindow.onResized(() => {
         checkMaximized();
@@ -198,7 +334,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-    document.removeEventListener('pointerdown', handleGameSwitcherDismiss);
+    document.removeEventListener('pointerdown', handleCaptionPointerDown);
+    document.removeEventListener('mousemove', onNavMouseMove);
+    document.removeEventListener('mouseup', onNavMouseUp);
+    resetNavDrag();
     if (unlistenResize) {
         unlistenResize();
     }
@@ -238,7 +377,7 @@ const toggleSettingsPage = () => {
 </script>
 
 <template>
-    <div class="caption-bar">
+    <div ref="captionBarRef" class="caption-bar">
         <!-- Drag region (window move; double-click toggles maximize) -->
         <div class="caption-drag-region" data-tauri-drag-region @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
@@ -338,9 +477,12 @@ const toggleSettingsPage = () => {
                     <button
                         type="button"
                         class="caption-tab"
-                        :class="{ active: isNavItemActive(item) }"
+                        :class="{ active: isNavItemActive(item), 'drag-hover': navHoverId === item.id, dragging: navDraggingId === item.id }"
+                        :data-nav-id="item.id"
                         :aria-label="item.label"
                         @click="navTo(item.path)"
+                        @mousedown.prevent="onNavMouseDown($event, item)"
+                        @contextmenu.prevent.stop="openNavContextMenu($event, item)"
                     >
                         <span class="caption-tab-icon" aria-hidden="true">
                             <svg v-if="item.id === 'home'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
@@ -414,6 +556,22 @@ const toggleSettingsPage = () => {
                 </svg>
             </button>
         </div>
+
+        <!-- Tab context menu (hide page) — teleported to body, positioned at cursor -->
+        <Teleport to="body">
+            <div
+                v-if="navContextMenu.visible && navContextMenu.item"
+                ref="navContextMenuRef"
+                class="shell-flyout"
+                :style="{ left: `${navContextMenu.x}px`, top: `${navContextMenu.y}px` }"
+                @pointerdown.stop
+                @contextmenu.prevent
+            >
+                <button type="button" class="shell-flyout-item" @click="hideNavItem(navContextMenu.item)">
+                    {{ t('titlebar.hidePage') }}
+                </button>
+            </div>
+        </Teleport>
     </div>
 </template>
 
@@ -657,6 +815,67 @@ const toggleSettingsPage = () => {
     overflow: hidden;
     text-overflow: ellipsis;
     text-shadow: var(--shell-caption-glyph-shadow);
+}
+
+/* Drag-to-reorder affordances */
+.caption-tab.drag-hover {
+    background: var(--shell-caption-btn-hover);
+    outline: 1px dashed var(--shell-accent-soft);
+    outline-offset: -1px;
+    opacity: 1;
+}
+
+.caption-tab.dragging {
+    opacity: 0.55;
+}
+
+/* ═══════════ Flyouts (tab context menu) ═══════════ */
+.shell-flyout {
+    position: fixed;
+    z-index: 30000;
+    min-width: 172px;
+    padding: 5px;
+    box-sizing: border-box;
+    border: 1px solid var(--shell-flyout-border);
+    border-radius: 8px;
+    background: var(--shell-flyout-bg);
+    backdrop-filter: blur(20px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
+    box-shadow: var(--shell-flyout-shadow);
+    animation: shell-flyout-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes shell-flyout-in {
+    from {
+        opacity: 0;
+        transform: translateY(-3px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.shell-flyout-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 32px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--shell-flyout-text);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 83ms ease;
+}
+
+.shell-flyout-item:hover {
+    background: var(--shell-flyout-hover);
 }
 
 /* ═══════════ Window controls ═══════════ */

@@ -745,8 +745,9 @@
     position: relative;
     overflow: hidden;
     background: rgba(255,255,255,0.08);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：逐卡片元素必须无 backdrop-filter（与 ModsManagement.vue 内生效样式保持一致） */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid rgba(255,255,255,0.20);
     box-shadow:
         0 0 16px rgba(var(--theme-surface-tint-rgb), 0.14),

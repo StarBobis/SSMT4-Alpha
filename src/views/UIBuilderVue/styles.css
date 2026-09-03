@@ -1414,8 +1414,7 @@
   letter-spacing: 0.04em;
   box-shadow: var(--uib-shadow);
   white-space: nowrap;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  /* 性能：逐节点元素不加 backdrop-filter（节点逐个创建模糊层，拖动/平移时合成器过载） */
 }
 
 .ui-builder-app .group-node-badge strong {
@@ -1657,7 +1656,7 @@
 .ui-builder-app .mod-node.text-mode {
   overflow: hidden;
   justify-content: flex-start;
-  backdrop-filter: blur(6px);
+  /* 性能：逐节点元素不加 backdrop-filter */
 }
 
 .ui-builder-app .char-item {
@@ -1695,7 +1694,7 @@
   pointer-events: none;
   font-weight: bold;
   z-index: 4;
-  backdrop-filter: blur(8px);
+  /* 性能：逐节点元素不加 backdrop-filter */
 }
 
 .ui-builder-app.light-mode .vis-label {
@@ -1923,8 +1922,7 @@
   background-image:
     radial-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1.4px);
   background-size: 24px 24px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  /* 性能：画布会平移/缩放，整面模糊层每帧都需重算，节点上的逐节点模糊层也已一并移除 */
 }
 
 .ui-builder-app.light-mode .blueprint-workspace {
@@ -1993,8 +1991,7 @@
   border-radius: 12px;
   background: var(--uib-glass-strong);
   box-shadow: var(--uib-shadow);
-  backdrop-filter: var(--uib-blur);
-  -webkit-backdrop-filter: var(--uib-blur);
+  /* 性能：节点会拖动且数量不定，逐节点 backdrop-filter 是合成器性能炸弹，禁用 */
   z-index: 2;
 }
 

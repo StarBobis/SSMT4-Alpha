@@ -202,3 +202,27 @@ This avoids the divider line bleeding into the card's `border-radius` corners.
 ```
 
 相关文件：`SwitchKeyList.vue`、`EditSwitchKeyList.vue`、`Home.vue`（参考）
+
+## ⚠️ 性能铁律：backdrop-filter 的使用边界
+
+`backdrop-filter` 是 Chromium（WebView2）中代价最高的合成效果：每个实例都要
+"截取背景 → GPU 模糊 → 合成"，滚动时还需对可见区域重新光栅化。当模糊层数量随
+列表规模增长时，会触发合成器 bug —— **滚动时背景闪烁、文字消失**（本仓库
+WorkPage / ModsManagement 均实际出现过，已修复）。
+
+**只允许**在以下元素上使用 `backdrop-filter`：
+
+- 数量固定、尺寸有界的容器：页面级 `.panel` / `.glass-panel`、侧边栏、工具栏
+- 瞬时浮层：dialog / overlay / popover / tooltip / dropdown / context-menu / lightbox
+
+**禁止**在以下元素上使用 `backdrop-filter`：
+
+- `v-for` 列表项及其内部任何子元素（卡片、徽章、按钮、输入框、标签）
+- 表格（`el-table`）整体、行、单元格
+- 画布/蓝图节点等数量不定、可拖动、可平移的元素
+- 高度随内容增长的可滚动容器内部的嵌套模糊层（模糊由外层固定面板统一提供）
+
+列表项需要"玻璃感"时，只用半透明 `rgba(...)` 背景 + 边框即可 —— 它们的背景
+通常已经是被外层面板模糊过的内容，再叠一层模糊视觉上几乎无差别，但每层都在
+烧合成器预算。
+

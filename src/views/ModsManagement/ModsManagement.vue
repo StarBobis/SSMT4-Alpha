@@ -2272,7 +2272,11 @@ const rescanAfterReactivation = async () => {
 
 onDeactivated(() => {
     isModsPageActive.value = false;
-    needsReactivationRescan = true;
+    // Do NOT mark needsReactivationRescan here: the file-change listener and
+    // the game watcher already set it when something actually changed while
+    // this page was hidden. Flagging it unconditionally forced a full
+    // structure rescan on every tab switch, which made the kept-alive page
+    // feel like it reloaded from scratch each time.
     dismissFloating3DPreview();
 });
 
@@ -5469,8 +5473,9 @@ const {
     position: relative;
     overflow: hidden;
     background: rgba(255,255,255,0.08);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：子组卡片逐个出现在网格中，必须无 backdrop-filter（覆盖 .glass-panel 的模糊），否则滚动时合成层爆炸 */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid rgba(255,255,255,0.20);
     box-shadow:
         0 0 16px rgba(var(--theme-surface-tint-rgb), 0.14),
@@ -5595,10 +5600,12 @@ const {
     opacity: 0.25;
 }
 
+/* 位移改用 translateX（合成器属性）：left 动画每帧触发布局+重绘。
+   换算：left -160%→145% = 305% 父宽；元素宽 160% 父宽 → 305/160 = 190.625% 自身宽 */
 @keyframes subgroupSheen {
-    0%   { left: -160%; opacity: 0.3; }
-    42%  { left: 145%;  opacity: 0.7; }
-    100% { left: 145%;  opacity: 0.3; }
+    0%   { transform: translateX(0) skewX(-18deg);        opacity: 0.3; }
+    42%  { transform: translateX(190.625%) skewX(-18deg); opacity: 0.7; }
+    100% { transform: translateX(190.625%) skewX(-18deg); opacity: 0.3; }
 }
 
 .subgroup-card.is-disabled .subgroup-name,
@@ -5739,6 +5746,27 @@ const {
 }
 
 .mod-card:not(.is-disabled) {
+    /* 呼吸基态（原 keyframes 0%/100% 的值，动画不再覆盖 border/box-shadow，hover 阴影恢复生效） */
+    border-color: rgba(var(--theme-surface-tint-rgb), 0.24);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+        0 0 24px rgba(var(--theme-surface-tint-rgb), 0.18),
+        0 12px 26px rgba(0, 0, 0, 0.38);
+}
+
+/* 呼吸脉冲层：只动 opacity，合成器混合完成，每张卡片每帧零重绘。
+   原实现直接动画 box-shadow/border-color，所有可见卡片每帧都在主线程重绘。 */
+.mod-card:not(.is-disabled)::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 13px;
+    border: 1px solid rgba(var(--theme-surface-tint-rgb), 0.48);
+    box-shadow:
+        0 0 18px rgba(var(--theme-surface-tint-rgb), 0.20) inset,
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+    opacity: 0;
+    pointer-events: none;
     animation: modEnabledBreath var(--breath-duration) ease-in-out infinite;
     animation-delay: var(--phase-a);
 }
@@ -5977,8 +6005,7 @@ const {
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 999px;
     background: rgba(255,255,255,0.06);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：逐卡片元素不加 backdrop-filter */
     box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.04) inset;
     display: inline-flex;
     align-items: center;
@@ -6145,18 +6172,10 @@ const {
 @keyframes modEnabledBreath {
     0%,
     100% {
-        border-color: rgba(var(--theme-surface-tint-rgb), 0.24);
-        box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-            0 0 24px rgba(var(--theme-surface-tint-rgb), 0.18),
-            0 12px 26px rgba(0, 0, 0, 0.38);
+        opacity: 0;
     }
     50% {
-        border-color: rgba(var(--theme-surface-tint-rgb), 0.48);
-        box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-            0 0 26px rgba(var(--theme-surface-tint-rgb), 0.26),
-            0 12px 28px rgba(0, 0, 0, 0.4);
+        opacity: 1;
     }
 }
 
@@ -6233,8 +6252,7 @@ const {
 .card-info {
     padding: 12px 14px 14px;
     background: rgba(255,255,255,0.03);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* 性能：逐卡片元素不加 backdrop-filter */
     border-top: 1px solid rgba(255,255,255,0.06);
     display: flex;
     flex-direction: column;

@@ -77,7 +77,7 @@ const routes = [
   { path: '/gamebanana/author/:authorId', name: 'GameBananaAuthor', component: GameBananaAuthor, meta: { title: 'GameBanana Author', requiresGame: false } },
   { path: '/nexusmods', name: 'NexusMods', component: NexusMods, meta: { title: 'Nexus Mods', requiresGame: false } },
   { path: '/work', name: 'WorkPage', component: WorkPage, meta: { title: 'Work Page', requiresGame: true } },
-  { path: '/mark-texture-full', name: 'MarkTextureFull', component: MarkTextureFull, meta: { title: 'Extraction Postprocess', requiresGame: true } },
+  { path: '/mark-texture-full', name: 'MarkTextureFull', component: MarkTextureFull, meta: { title: 'Texture Marking', requiresGame: true } },
   { path: '/settings', name: 'Settings', component: Settings, meta: { title: 'Settings', requiresGame: false } },
   { path: '/xianzun', name: 'XianZun', component: XianZun, meta: { title: '芝士猫', requiresGame: false } },
   { path: '/ui-builder', name: 'UIBuilder', component: UIBuilder, meta: { title: 'UI Builder', requiresGame: false } },

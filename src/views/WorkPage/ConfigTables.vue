@@ -256,8 +256,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   transition: all 0.25s ease;
   position: relative;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  /* 不加 backdrop-filter：inner-panel 高度随表格行数增长，滚动时模糊层会引发合成器闪烁/文字消失 */
 }
 
 .inner-panel::before {
